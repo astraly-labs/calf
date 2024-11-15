@@ -1,0 +1,59 @@
+{
+  "validators": [
+    {
+      "pubkey": "0x123",
+      "workers_addresses": [
+        "test",
+        "test",
+        "test",
+        "test",
+        "test"
+      ],
+      "primary_address": "testt"
+    },
+    {
+      "pubkey": "0x123",
+      "workers_addresses": [
+        "test",
+        "test",
+        "test",
+        "test",
+        "test"
+      ],
+      "primary_address": "testt"
+    },
+    {
+      "pubkey": "0x123",
+      "workers_addresses": [
+        "test",
+        "test",
+        "test",
+        "test",
+        "test"
+      ],
+      "primary_address": "testt"
+    },
+    {
+      "pubkey": "0x123",
+      "workers_addresses": [
+        "test",
+        "test",
+        "test",
+        "test",
+        "test"
+      ],
+      "primary_address": "testt"
+    },
+    {
+      "pubkey": "0x123",
+      "workers_addresses": [
+        "test",
+        "test",
+        "test",
+        "test",
+        "test"
+      ],
+      "primary_address": "testt"
+    }
+  ]
+}

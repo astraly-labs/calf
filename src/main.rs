@@ -7,9 +7,13 @@ pub mod primary;
 pub mod types;
 pub mod worker;
 pub mod cli;
+pub mod config;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), anyhow::Error> {
+
+    config.load_from_file("network.json".to_string()).unwrap();
+
     let args = cli::Args::parse();
 
     let (transactions_tx, transactions_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(200);
