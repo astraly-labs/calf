@@ -1,0 +1,16 @@
+{
+  "Worker": {
+    "validator_pubkey": "0xValidatorPubkey",
+    "id": 0,
+    "keypair": "0xKeypair",
+    "pubkey": "0xPubkey",
+    "address": "127.0.0.1:327",
+    "primary": {
+      "id": 0,
+      "pubkey": "0xPrimaryPubkey",
+      "address": "0.0.0.0:1986"
+    },
+    "timeout": 1000,
+    "batch_size": 1000
+  }
+}

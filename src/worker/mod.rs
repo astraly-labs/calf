@@ -1,84 +1,124 @@
-use std::{os::unix::net::SocketAddr, time::Duration};
 use blake3::{self, Hash};
-use tokio::task::JoinHandle;
+use std::time::Duration;
 
-use crate::types::{Digest, Transaction};
-
-pub struct WorkerConfig {
-    pub id: u32,
-}
+use crate::{
+    config::{NetworkInfos, WorkerConfig, WorkerInfo},
+    types::{Transaction, TxBatch},
+};
 
 pub struct Worker {
-    id: u16,
-    channel_from_dispatcher: tokio::sync::mpsc::Receiver<Transaction>,
-    channel_to_primary: tokio::sync::mpsc::Sender<Digest>,
-    current_batch : Vec<Transaction>,
-    //TODO: maybe add worker adress
-    other_workers: Vec<SocketAddr>
+    pub config: WorkerConfig,
+    pub current_batch: Vec<Transaction>,
+    pub other_workers: Vec<WorkerInfo>,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum WorkerIntialisationError {
+    #[error("No peers in configuration")]
+    NoPeers,
 }
 
 impl Worker {
-    pub fn spawn(worker_cfg: WorkerConfig, batch_maker_cfg: BatchMakerConfig) -> JoinHandle<()>{
-        tokio::spawn(async move {tracing::info!("Worker {:?} Created", worker_cfg.id);
-            let (batches_tx, mut batches_rx) = tokio::sync::mpsc::channel(20);
-            tracing::info!("spawning batcher");
-            tokio::spawn(async move {batch_maker_task(worker_cfg.id, batch_maker_cfg, batches_tx).await;});
-            tracing::info!("Batcher Created");
-            
-            loop {
-                match batches_rx.recv().await {
-                    Some(txs) => {
-                        let batch = txs.iter().flat_map(|txs| txs).copied().collect::<Vec<u8>>();
-                        let digest = blake3::hash(batch.as_slice());
-                        // send digest to primary
-                        tracing::info!("Worker {:?} : Digest {:?}", worker_cfg.id, digest);
-                        // Worker::send_digest(digest);
-                        // broadcast batches
-                        tracing::info!("Worker {:?} :Batch {:?}", worker_cfg.id, batch);
-                        // Worker::broadcast_batch(batch);
-                    },
-                    None => todo!(),
-                }
-            }
+    // établis la connexion avec ses pairs (les workers de même id d'autres validateurs) et le primary pour lequel il travaille (TODO)
+    // récupère des txs ->
+    // les agrège en un batch ->
+    // l'envoie à ses pairs ->
+    // le stocke dans la db ->
+    // attend le quorum (un nombre suffisant de pairs qui confirment la reception du batch) (TODO) ->
+    // calcule envoie le digest du batch au primary (TODO)
+    // reçoit des batches d'autres workers et confirme leur reception (renvoie leur hash signé)
+    pub fn new(
+        config: WorkerConfig,
+        network: NetworkInfos,
+        starting_batch: Option<TxBatch>,
+    ) -> Result<Self, WorkerIntialisationError> {
+        let peers: Vec<WorkerInfo> = network
+            .validators
+            .iter()
+            .filter(|v| v.pubkey != config.validator_pubkey)
+            .flat_map(|v| v.workers.iter())
+            .cloned()
+            .collect();
+        if peers.is_empty() {
+            return Err(WorkerIntialisationError::NoPeers);
+        }
+        Ok(Self {
+            config: config,
+            current_batch: starting_batch.unwrap_or(vec![]),
+            other_workers: peers,
         })
     }
+    pub async fn spawn(&self) -> Result<(), anyhow::Error> {
+        let (_transactions_tx, transactions_rx) = tokio::sync::mpsc::channel(20);
+        tracing::info!("Worker {:?} Created", self.config.id);
+        let (batches_tx, mut _batches_rx) = tokio::sync::mpsc::channel(20);
+        tracing::info!("Spawning batch generator");
 
-    pub fn send_digest(hash : Hash) {
+        let timeout = self.config.timeout;
+        let batches_size = self.config.batch_size;
+
+        tracing::info!("Worker {} | {} started", self.config.id, self.config.pubkey);
+        let handle = tokio::spawn(async move {
+            batch_maker_task(timeout, batches_size, batches_tx, transactions_rx).await
+        });
+
+        let _ = handle.await?;
+        Ok(())
+    }
+
+    pub fn send_digest(_hash: Hash) {
         todo!()
     }
 
-    pub fn broadcast_batch(batch : Vec<u8>) {
+    pub fn broadcast_batch(_batch: TxBatch) {
         todo!()
     }
 }
 
-pub struct BatchMakerConfig {
-    pub batch_size: usize,
-    pub batch_timeout: std::time::Duration,
-    pub transactions_rx: tokio::sync::mpsc::Receiver<Vec<u8>>
-}
-
-async fn batch_maker_task(id: u32, mut config: BatchMakerConfig, batches_tx: tokio::sync::mpsc::Sender<Vec<Vec<u8>>>) {
-    let mut current_batch: Vec<Vec<u8>> = vec![];
-    let timer = tokio::time::sleep(config.batch_timeout);
-    tokio::pin!(timer);
+// TODO: gérer les erreurs de serialisation
+async fn batch_maker_task(
+    timeout: u64, /* in ms */
+    batches_size: usize,
+    batches_tx: tokio::sync::mpsc::Sender<TxBatch>,
+    mut transactions_rx: tokio::sync::mpsc::Receiver<Transaction>,
+) -> Result<(), anyhow::Error> {
+    let mut current_batch: Vec<Transaction> = vec![];
+    let mut batch_size = 0;
+    let timer = tokio::time::sleep(Duration::from_millis(timeout));
+    tokio::pin!(timer); // magie
     loop {
         tokio::select! {
-            Some(transaction) = config.transactions_rx.recv() => {
-                println!("Batch Maker {:?} received : {:?}", id, transaction);
+            Some(transaction) = transactions_rx.recv() => {
+                let serialized_tx = match bincode::serialize(&transaction) {
+                    Ok(serialized) => serialized,
+                    Err(e) => {
+                        tracing::error!("Failed to serialize transaction: {}", e);
+                        // skipping this transactions if it can't be serialized: invalid
+                        continue;
+                    }
+                };
+                tracing::debug!("Worker received a transaction: {}", blake3::hash(&serialized_tx).to_hex());
+                let tx_size = bincode::serialize(&transaction).unwrap().len();
                 current_batch.push(transaction);
-                let batch_size = current_batch.iter().flat_map(|tx| tx).count();
-                if batch_size >= config.batch_size {
-                    println!("SENDING BCOZ 2 BIG");
+                batch_size += tx_size;
+                if batch_size >= batches_size {
+                    tracing::info!("batch size reached: worker sending batch of size {}", batch_size);
                     batches_tx.send(std::mem::take(&mut current_batch)).await.unwrap();
-                    timer.as_mut().reset(tokio::time::Instant::now() + config.batch_timeout);
+                    batch_size = 0;
+                    timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout));
                 }
             },
             () = &mut timer => {
                 if !current_batch.is_empty() {
-                    println!("SENDING BCOZ 2 LONG");
-                    batches_tx.send(std::mem::take(&mut current_batch)).await.unwrap();
-                    timer.as_mut().reset(tokio::time::Instant::now() + config.batch_timeout);
+                    tracing::info!("batch timeout reached: worker sending batch of size {}", batch_size);
+                    match batches_tx.send(std::mem::take(&mut current_batch)).await {
+                        Ok(_) => (),
+                        Err(e) => {
+                            tracing::error!("channel error: failed to send batch: {}", e);
+                            return Err(e.into());
+                        }
+                    }
+                    timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout));
                 }
             }
         }
@@ -89,27 +129,27 @@ async fn batch_maker_task(id: u32, mut config: BatchMakerConfig, batches_tx: tok
 mod test {
 
     #[test]
-    fn test_digest(){
+    fn test_digest() {
         todo!()
     }
 
     #[test]
-    fn test_batch(){
+    fn test_batch() {
         todo!()
     }
 
     #[test]
-    fn test_send_batch(){
+    fn test_send_batch() {
         todo!()
     }
 
     #[test]
-    fn test_broadcast(){
+    fn test_broadcast() {
         todo!()
     }
 
     #[test]
-    fn test_batch_maker(){
+    fn test_batch_maker() {
         todo!()
     }
 }

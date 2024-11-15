@@ -1,18 +1,16 @@
-pub struct Digest {
+use serde::{Deserialize, Serialize};
 
-}
-
-#[derive(Clone, Copy)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Transaction {
-
+    data: Vec<u8>,
 }
+
+pub type TxBatch = Vec<Transaction>;
 
 impl Transaction {
-    pub fn as_bytes(&self) -> Vec<u8>{
+    pub fn as_bytes(&self) -> Vec<u8> {
         todo!()
     }
-
-
 }
 
 pub struct BlockHeader {
@@ -20,5 +18,5 @@ pub struct BlockHeader {
 }
 
 pub struct Block {
-    header: BlockHeader,
+    _header: BlockHeader,
 }
