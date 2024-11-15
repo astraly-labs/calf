@@ -1,4 +1,5 @@
 use clap::Parser;
+use config::{InstanceConfig, NetworkInfos};
 use dispatcher::Dispatcher;
 use worker::{BatchMakerConfig, Worker, WorkerConfig};
 
@@ -11,8 +12,24 @@ pub mod config;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    let network_infos_path = "network.json".into();
+    let instance_config_path = "config.json".into();
 
-    config.load_from_file("network.json".to_string()).unwrap();
+    let network = match NetworkInfos::load_from_file(network_infos_path) {
+        Ok(infos) => infos,
+        Err(e) => {
+            tracing::error!("failed to parse network infos from {}: {}", network_infos_path, e.to_string());
+            return Err(e);
+        }
+    };
+
+    let config = match InstanceConfig::load_from_file(instance_config_path_path) {
+        Ok(infos) => infos,
+        Err(e) => {
+            tracing::error!("failed to parse instance config from {}: {}", instance_config_path, e.to_string());
+            return Err(e);
+        }
+    };
 
     let args = cli::Args::parse();
 
@@ -38,7 +55,7 @@ async fn main() -> Result<(), anyhow::Error> {
         dispatcher,
         worker1,
         worker2,
-    ).unwrap();
+    )
 
 }
 

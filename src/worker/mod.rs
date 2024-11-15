@@ -19,11 +19,11 @@ pub struct Worker {
 
 impl Worker {
     pub fn spawn(worker_cfg: WorkerConfig, batch_maker_cfg: BatchMakerConfig) -> JoinHandle<()>{
-        tokio::spawn(async move {println!("Worker {:?} Created !", worker_cfg.id);
+        tokio::spawn(async move {tracing::info!("Worker {:?} Created", worker_cfg.id);
             let (batches_tx, mut batches_rx) = tokio::sync::mpsc::channel(20);
-            println!("spawning batcher !");
+            tracing::info!("spawning batcher");
             tokio::spawn(async move {batch_maker_task(worker_cfg.id, batch_maker_cfg, batches_tx).await;});
-            println!("Batcher Created !");
+            tracing::info!("Batcher Created");
             
             loop {
                 match batches_rx.recv().await {
@@ -31,10 +31,10 @@ impl Worker {
                         let batch = txs.iter().flat_map(|txs| txs).copied().collect::<Vec<u8>>();
                         let digest = blake3::hash(batch.as_slice());
                         // send digest to primary
-                        println!("Worker {:?} : Digest {:?}", worker_cfg.id, digest);
+                        tracing::info!("Worker {:?} : Digest {:?}", worker_cfg.id, digest);
                         // Worker::send_digest(digest);
                         // broadcast batches
-                        println!("Worker {:?} :Batch {:?}", worker_cfg.id, batch);
+                        tracing::info!("Worker {:?} :Batch {:?}", worker_cfg.id, batch);
                         // Worker::broadcast_batch(batch);
                     },
                     None => todo!(),
