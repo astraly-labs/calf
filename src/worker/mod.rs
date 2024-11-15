@@ -1,10 +1,11 @@
 use std::{os::unix::net::SocketAddr, time::Duration};
 use blake3::{self, Hash};
+use tokio::task::JoinHandle;
 
 use crate::types::{Digest, Transaction};
 
 pub struct WorkerConfig {
-    
+    pub id: u32,
 }
 
 pub struct Worker {
@@ -17,63 +18,66 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub async fn spawn(_worker_cfg: WorkerConfig, batch_maker_cfg: BatchMakerConfig) {
-        let (batches_tx, mut batches_rx) = tokio::sync::mpsc::channel(20);
-        tokio::spawn(async move {batch_maker_task(batch_maker_cfg, batches_tx).await;});
-        
-        loop {
-            match batches_rx.recv().await {
-                Some(txs) => {
-                    let digest = blake3::hash(txs.iter().flat_map(|txs| txs.as_bytes()).collect::<Vec<u8>>().as_slice());
-                    // send digest to primary
-                    // broadcast batches
-                },
-                None => todo!(),
+    pub fn spawn(worker_cfg: WorkerConfig, batch_maker_cfg: BatchMakerConfig) -> JoinHandle<()>{
+        tokio::spawn(async move {println!("Worker {:?} Created !", worker_cfg.id);
+            let (batches_tx, mut batches_rx) = tokio::sync::mpsc::channel(20);
+            println!("spawning batcher !");
+            tokio::spawn(async move {batch_maker_task(worker_cfg.id, batch_maker_cfg, batches_tx).await;});
+            println!("Batcher Created !");
+            
+            loop {
+                match batches_rx.recv().await {
+                    Some(txs) => {
+                        let batch = txs.iter().flat_map(|txs| txs).copied().collect::<Vec<u8>>();
+                        let digest = blake3::hash(batch.as_slice());
+                        // send digest to primary
+                        println!("Worker {:?} : Digest {:?}", worker_cfg.id, digest);
+                        // Worker::send_digest(digest);
+                        // broadcast batches
+                        println!("Worker {:?} :Batch {:?}", worker_cfg.id, batch);
+                        // Worker::broadcast_batch(batch);
+                    },
+                    None => todo!(),
+                }
             }
-        }
+        })
     }
 
-    pub fn make_batches() {
+    pub fn send_digest(hash : Hash) {
         todo!()
     }
 
-    pub fn produce_digest() {
-        
-        hash = blake3::hash(input);
-    }
-
-    pub fn send_digest() {
-        todo!()
-    }
-
-    pub fn broadcast() {
+    pub fn broadcast_batch(batch : Vec<u8>) {
         todo!()
     }
 }
 
-struct BatchMakerConfig {
-    batch_size: usize,
-    batch_timeout: std::time::Duration,
-    transactions_rx: tokio::sync::mpsc::Receiver<Transaction>
+pub struct BatchMakerConfig {
+    pub batch_size: usize,
+    pub batch_timeout: std::time::Duration,
+    pub transactions_rx: tokio::sync::mpsc::Receiver<Vec<u8>>
 }
 
-async fn batch_maker_task(mut config: BatchMakerConfig, batches_tx: tokio::sync::mpsc::Sender<Vec<Transaction>>) {
-    let mut current_batch: Vec<Transaction> = vec![];
+async fn batch_maker_task(id: u32, mut config: BatchMakerConfig, batches_tx: tokio::sync::mpsc::Sender<Vec<Vec<u8>>>) {
+    let mut current_batch: Vec<Vec<u8>> = vec![];
     let timer = tokio::time::sleep(config.batch_timeout);
     tokio::pin!(timer);
     loop {
         tokio::select! {
             Some(transaction) = config.transactions_rx.recv() => {
+                println!("Batch Maker {:?} received : {:?}", id, transaction);
                 current_batch.push(transaction);
-                let batch_size = current_batch.iter().flat_map(|tx| tx.as_bytes()).count();
+                let batch_size = current_batch.iter().flat_map(|tx| tx).count();
                 if batch_size >= config.batch_size {
-                    batches_tx.send(std::mem::take(&mut current_batch)).await;
+                    println!("SENDING BCOZ 2 BIG");
+                    batches_tx.send(std::mem::take(&mut current_batch)).await.unwrap();
                     timer.as_mut().reset(tokio::time::Instant::now() + config.batch_timeout);
                 }
             },
             () = &mut timer => {
                 if !current_batch.is_empty() {
-                    batches_tx.send(std::mem::take(&mut current_batch)).await;
+                    println!("SENDING BCOZ 2 LONG");
+                    batches_tx.send(std::mem::take(&mut current_batch)).await.unwrap();
                     timer.as_mut().reset(tokio::time::Instant::now() + config.batch_timeout);
                 }
             }

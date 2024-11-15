@@ -16,7 +16,7 @@ impl Transaction {
 }
 
 pub struct BlockHeader {
-    parents_hash: Vec<Hash>,
+    // parents_hash: Vec<Hash>,
 }
 
 pub struct Block {
