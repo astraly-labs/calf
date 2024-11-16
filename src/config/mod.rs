@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -51,14 +53,14 @@ pub struct PrimaryConfig {
 }
 
 impl NetworkInfos {
-    pub fn load_from_file(path: &str) -> Result<Self, anyhow::Error> {
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, anyhow::Error> {
         let file = std::fs::File::open(path)?;
         let reader = std::io::BufReader::new(file);
         let config = serde_json::from_reader(reader)?;
         Ok(config)
     }
 
-    pub fn write_to_file(&self, path: &str) -> Result<(), anyhow::Error> {
+    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), anyhow::Error> {
         let file = std::fs::File::create(path)?;
         let writer = std::io::BufWriter::new(file);
         serde_json::to_writer_pretty(writer, self)?;
@@ -67,17 +69,19 @@ impl NetworkInfos {
 }
 
 impl InstanceConfig {
-    pub fn load_from_file(path: &str) -> Result<Self, anyhow::Error> {
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, anyhow::Error> {
         let file = std::fs::File::open(path)?;
         let reader = std::io::BufReader::new(file);
         let config = serde_json::from_reader(reader)?;
         Ok(config)
     }
 
-    pub fn write_to_file(&self, path: &str) -> Result<(), anyhow::Error> {
+    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), anyhow::Error> {
         let file = std::fs::File::create(path)?;
         let writer = std::io::BufWriter::new(file);
         serde_json::to_writer_pretty(writer, self)?;
         Ok(())
     }
 }
+
+// Remplacer les String par un type keypair serialisable (celui de la libp2p ne l'est pas)

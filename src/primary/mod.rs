@@ -1,5 +1,4 @@
-pub struct Primary {
-}
+pub struct Primary {}
 
 impl Primary {}
 

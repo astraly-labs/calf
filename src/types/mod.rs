@@ -1,8 +1,16 @@
+pub mod services;
+
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     data: Vec<u8>,
+}
+
+impl Transaction {
+    pub fn new(data: Vec<u8>) -> Self {
+        Self { data }
+    }
 }
 
 pub type TxBatch = Vec<Transaction>;
