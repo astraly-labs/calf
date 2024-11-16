@@ -113,172 +113,164 @@ async fn send_batch(batches_tx: Sender<TxBatch>, batch: Vec<Transaction>) -> any
     Ok(())
 }
 
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-//     use async_channel::{bounded, Sender};
-//     use rstest::*;
-//     use tokio::time;
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rstest::*;
+    use tokio::{sync::mpsc, time};
 
-//     const MAX_BATCH_SIZE: usize = 200; // Size in bytes
-//     const TIMEOUT: u64 = 100; // 100ms
-//     const CHANNEL_CAPACITY: usize = 20;
+    const MAX_BATCH_SIZE: usize = 200; // Size in bytes
+    const TIMEOUT: u64 = 100; // 100ms
+    const CHANNEL_CAPACITY: usize = 1000;
 
-//     // Helper to create a transaction of a specific size
-//     fn create_test_tx(size: usize) -> Transaction {
-//         Transaction::new(vec![1u8; size])
-//     }
+    // Helper to create a transaction of a specific size
+    fn create_test_tx(size: usize) -> Transaction {
+        Transaction::new(vec![1u8; size])
+    }
 
-//     type BatchMakerFixture = (
-//         Sender<Transaction>,
-//         Receiver<TxBatch>,
-//         JoinSet<anyhow::Result<()>>,
-//     );
+    type BatchMakerFixture = (Sender<Transaction>, Receiver<TxBatch>, JoinHandle<()>);
 
-//     #[fixture]
-//     async fn launch_batch_maker() -> BatchMakerFixture {
-//         let (tx, rx) = bounded(CHANNEL_CAPACITY);
-//         let (batches_tx, batches_rx) = bounded(CHANNEL_CAPACITY);
-//         let mut join_set = JoinSet::new();
+    #[fixture]
+    fn launch_batch_maker() -> BatchMakerFixture {
+        let (tx, rx) = mpsc::channel(CHANNEL_CAPACITY);
+        let (batches_tx, batches_rx) = mpsc::channel(CHANNEL_CAPACITY);
 
-//         let mut batch_maker = BatchMaker {
-//             current_batch: vec![],
-//             current_batch_size: 0,
-//             batches_tx,
-//             transactions_rx: rx,
-//             timeout: TIMEOUT,
-//             max_batch_size: MAX_BATCH_SIZE,
-//         };
+        let batch_maker = BatchMaker {
+            batches_tx,
+            transactions_rx: rx,
+            timeout: TIMEOUT,
+            max_batch_size: MAX_BATCH_SIZE,
+        };
 
-//         batch_maker.run_forever(&mut join_set).await.unwrap();
+        let handle = batch_maker.spawn();
 
-//         (tx, batches_rx, join_set)
-//     }
+        (tx, batches_rx, handle)
+    }
 
-//     /// Test that the batch maker tasks does not send any batch if no transactions are received
-//     #[rstest]
-//     #[tokio::test(start_paused = true)]
-//     async fn test_batch_maker_no_txs(#[future] launch_batch_maker: BatchMakerFixture) {
-//         let (_tx, batches_rx, _join_set) = launch_batch_maker.await;
+    /// Test that the batch maker tasks does not send any batch if no transactions are received
+    #[rstest]
+    #[tokio::test(start_paused = true)]
+    async fn test_batch_maker_no_txs(launch_batch_maker: BatchMakerFixture) {
+        let (_tx, mut batches_rx, _) = launch_batch_maker;
 
-//         // Advance time past the timeout
-//         time::sleep(Duration::from_millis(TIMEOUT + 10)).await;
+        // Advance time past the timeout
+        time::sleep(Duration::from_millis(TIMEOUT + 10)).await;
 
-//         // Try to receive a batch with a small timeout
-//         let receive_timeout =
-//             tokio::time::timeout(Duration::from_millis(10), batches_rx.recv()).await;
+        // Try to receive a batch with a small timeout
+        let receive_timeout =
+            tokio::time::timeout(Duration::from_millis(10), batches_rx.recv()).await;
 
-//         // Verify no batch was received
-//         assert!(receive_timeout.is_err() || receive_timeout.unwrap().is_err());
-//     }
+        // Verify no batch was received
+        assert!(receive_timeout.is_err());
+    }
 
-//     #[rstest]
-//     #[tokio::test(start_paused = true)]
-//     async fn test_batch_maker_timeout_trigger(#[future] launch_batch_maker: BatchMakerFixture) {
-//         let (tx, batches_rx, _join_set) = launch_batch_maker.await;
+    #[rstest]
+    #[tokio::test(start_paused = true)]
+    async fn test_batch_maker_timeout_trigger(launch_batch_maker: BatchMakerFixture) {
+        let (tx, mut batches_rx, _) = launch_batch_maker;
 
-//         // Send one small transaction (not enough to trigger size-based batch)
-//         let test_tx = create_test_tx(50); // 50 bytes
-//         tx.send(test_tx).await.unwrap();
+        // Send one small transaction (not enough to trigger size-based batch)
+        let test_tx = create_test_tx(50); // 50 bytes
+        tx.send(test_tx).await.unwrap();
 
-//         // Advance time past the timeout
-//         time::sleep(Duration::from_millis(TIMEOUT + 10)).await;
+        // Advance time past the timeout
+        time::sleep(Duration::from_millis(TIMEOUT + 10)).await;
 
-//         // Should receive a batch with one transaction
-//         let batch = time::timeout(Duration::from_millis(10), batches_rx.recv())
-//             .await
-//             .unwrap()
-//             .unwrap();
+        // Should receive a batch with one transaction
+        let batch = time::timeout(Duration::from_millis(10), batches_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
 
-//         assert_eq!(batch.len(), 1);
-//     }
+        assert_eq!(batch.len(), 1);
+    }
 
-//     #[rstest]
-//     #[tokio::test(start_paused = true)]
-//     async fn test_batch_maker_size_trigger(#[future] launch_batch_maker: BatchMakerFixture) {
-//         let (tx, batches_rx, _join_set) = launch_batch_maker.await;
+    #[rstest]
+    #[tokio::test(start_paused = true)]
+    async fn test_batch_maker_size_trigger(launch_batch_maker: BatchMakerFixture) {
+        let (tx, mut batches_rx, _) = launch_batch_maker;
 
-//         // Send transactions that will exceed MAX_BATCH_SIZE
-//         let tx_size = MAX_BATCH_SIZE / 2 + 1; // Two transactions will exceed batch size
+        // Send transactions that will exceed MAX_BATCH_SIZE
+        let tx_size = MAX_BATCH_SIZE / 2 + 1; // Two transactions will exceed batch size
 
-//         // Send first transaction
-//         tx.send(create_test_tx(tx_size)).await.unwrap();
+        // Send first transaction
+        tx.send(create_test_tx(tx_size)).await.unwrap();
 
-//         // Small delay to ensure ordering
-//         time::sleep(Duration::from_millis(1)).await;
+        // Small delay to ensure ordering
+        time::sleep(Duration::from_millis(1)).await;
 
-//         // Send second transaction - this should trigger the batch
-//         tx.send(create_test_tx(tx_size)).await.unwrap();
+        // Send second transaction - this should trigger the batch
+        tx.send(create_test_tx(tx_size)).await.unwrap();
 
-//         // Should receive a batch without needing to advance time much
-//         let batch = tokio::time::timeout(Duration::from_millis(10), batches_rx.recv())
-//             .await
-//             .unwrap()
-//             .unwrap();
+        // Should receive a batch without needing to advance time much
+        let batch = tokio::time::timeout(Duration::from_millis(10), batches_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
 
-//         assert_eq!(batch.len(), 2);
-//     }
+        assert_eq!(batch.len(), 2);
+    }
 
-//     #[rstest]
-//     #[tokio::test(start_paused = true)]
-//     async fn test_batch_maker_mixed_triggers(#[future] launch_batch_maker: BatchMakerFixture) {
-//         let (tx, batches_rx, _join_set) = launch_batch_maker.await;
+    #[rstest]
+    #[tokio::test(start_paused = true)]
+    async fn test_batch_maker_mixed_triggers(launch_batch_maker: BatchMakerFixture) {
+        let (tx, mut batches_rx, _) = launch_batch_maker;
 
-//         // First batch: timeout trigger
-//         tx.send(create_test_tx(50)).await.unwrap();
-//         time::sleep(Duration::from_millis(TIMEOUT + 10)).await;
+        // First batch: timeout trigger
+        tx.send(create_test_tx(50)).await.unwrap();
+        time::sleep(Duration::from_millis(TIMEOUT + 10)).await;
 
-//         let first_batch = tokio::time::timeout(Duration::from_millis(10), batches_rx.recv())
-//             .await
-//             .unwrap()
-//             .unwrap();
-//         assert_eq!(first_batch.len(), 1);
+        let first_batch = tokio::time::timeout(Duration::from_millis(10), batches_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(first_batch.len(), 1);
 
-//         // Second batch: size trigger
-//         let tx_size = MAX_BATCH_SIZE / 2 + 1;
-//         tx.send(create_test_tx(tx_size)).await.unwrap();
-//         tx.send(create_test_tx(tx_size)).await.unwrap();
+        // Second batch: size trigger
+        let tx_size = MAX_BATCH_SIZE / 2 + 1;
+        tx.send(create_test_tx(tx_size)).await.unwrap();
+        tx.send(create_test_tx(tx_size)).await.unwrap();
 
-//         let second_batch = tokio::time::timeout(Duration::from_millis(10), batches_rx.recv())
-//             .await
-//             .unwrap()
-//             .unwrap();
-//         assert_eq!(second_batch.len(), 2);
-//     }
+        let second_batch = tokio::time::timeout(Duration::from_millis(10), batches_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(second_batch.len(), 2);
+    }
 
-//     #[rstest]
-//     #[tokio::test(start_paused = true)]
-//     async fn test_batch_maker_rapid_transactions(#[future] launch_batch_maker: BatchMakerFixture) {
-//         let (tx, batches_rx, _join_set) = launch_batch_maker.await;
+    #[rstest]
+    #[tokio::test(start_paused = true)]
+    async fn test_batch_maker_rapid_transactions(launch_batch_maker: BatchMakerFixture) {
+        let (tx, mut batches_rx, _) = launch_batch_maker;
 
-//         // Send many small transactions rapidly
-//         let small_tx_size = 10;
-//         let num_txs = 10;
+        // Send many small transactions rapidly
+        let small_tx_size = 10;
+        let num_txs = 10;
 
-//         for _ in 0..num_txs {
-//             tx.send(create_test_tx(small_tx_size)).await.unwrap();
-//         }
+        for _ in 0..num_txs {
+            tx.send(create_test_tx(small_tx_size)).await.unwrap();
+        }
 
-//         // Advance time to ensure processing
-//         time::advance(Duration::from_millis(10)).await;
+        // Advance time to ensure processing
+        time::advance(Duration::from_millis(10)).await;
 
-//         // Should still be accumulating since size not reached
-//         let timeout_result =
-//             tokio::time::timeout(Duration::from_millis(5), batches_rx.recv()).await;
-//         assert!(
-//             timeout_result.is_err(),
-//             "No batch should be sent before timeout"
-//         );
+        // Should still be accumulating since size not reached
+        let timeout_result =
+            tokio::time::timeout(Duration::from_millis(5), batches_rx.recv()).await;
+        assert!(
+            timeout_result.is_err(),
+            "No batch should be sent before timeout"
+        );
 
-//         // Advance to timeout
-//         time::sleep(Duration::from_millis(TIMEOUT)).await;
+        // Advance to timeout
+        time::sleep(Duration::from_millis(TIMEOUT)).await;
 
-//         // Now should receive all transactions in one batch
-//         let batch = tokio::time::timeout(Duration::from_millis(10), batches_rx.recv())
-//             .await
-//             .unwrap()
-//             .unwrap();
+        // Now should receive all transactions in one batch
+        let batch = tokio::time::timeout(Duration::from_millis(10), batches_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
 
-//         assert_eq!(batch.len(), num_txs);
-//     }
-// }
+        assert_eq!(batch.len(), num_txs);
+    }
+}
