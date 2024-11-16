@@ -2,19 +2,25 @@ use config::{InstanceConfig, NetworkInfos};
 
 pub mod cli;
 pub mod config;
-//pub mod db;
+pub mod db;
 pub mod dispatcher;
 pub mod primary;
 pub mod types;
 pub mod worker;
+
+const DB_PATH: &str = "./db";
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
+
+    // TODO: passer les chemins en arguments
     let network_infos_path = "network.json";
     let instance_config_path = "config.json";
+
+    let db = db::Db::new(DB_PATH)?;
 
     let _network = match NetworkInfos::load_from_file(network_infos_path) {
         Ok(infos) => infos,
