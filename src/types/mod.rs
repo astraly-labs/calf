@@ -1,4 +1,4 @@
-pub mod services;
+pub mod agents;
 
 use serde::{Deserialize, Serialize};
 

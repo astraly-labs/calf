@@ -9,6 +9,7 @@ async-trait = "0.1.81"
 tokio = {version = "1.41.1", features = ["full", "test-util"]}
 blake3 = "1.5.4"
 clap = {version = "4.5.21", features = ["derive"]}
+futures-util = "0.3"
 tracing = "0.1.40"
 sled = "0.34.7"
 json = "0.12.4"
