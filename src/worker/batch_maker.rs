@@ -1,13 +1,15 @@
-use async_channel::{Receiver, Sender};
+use futures_util::future::try_join_all;
 use std::time::Duration;
-use tokio::task::JoinSet;
+use tokio::{
+    sync::mpsc::{Receiver, Sender},
+    task::JoinHandle,
+};
+use tracing::Instrument;
 
 use crate::types::{Transaction, TxBatch};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct BatchMaker {
-    current_batch: Vec<Transaction>,
-    current_batch_size: usize,
     batches_tx: Sender<TxBatch>,
     transactions_rx: Receiver<Transaction>,
     timeout: u64,
@@ -22,8 +24,6 @@ impl BatchMaker {
         max_batch_size: usize,
     ) -> Self {
         Self {
-            current_batch: Vec::new(),
-            current_batch_size: 0,
             batches_tx,
             transactions_rx,
             timeout,
@@ -31,56 +31,86 @@ impl BatchMaker {
         }
     }
 
-    pub async fn run_forever(&mut self) -> anyhow::Result<()> {
-        loop {
-            let timer = tokio::time::sleep(Duration::from_millis(self.timeout));
-            tokio::pin!(timer);
-            loop {
-                tokio::select! {
-                    Ok(tx) = self.transactions_rx.recv() => {
-                        tracing::info!("received transaction: {:?}", tx);
-                        let serialized_tx = match bincode::serialize(&tx) {
-                            Ok(serialized) => serialized,
-                            Err(e) => {
-                                tracing::error!("Failed to serialize transaction: {}", e);
-                                continue;
-                            }
-                        };
+    pub fn spawn(self) -> JoinHandle<()> {
+        tokio::spawn(self.run().instrument(tracing::info_span!("batch_maker")))
+    }
 
-                        let tx_size = serialized_tx.len();
-                        self.current_batch.push(tx);
-                        self.current_batch_size += tx_size;
+    pub async fn run(self) {
+        let Self {
+            batches_tx,
+            transactions_rx,
+            timeout,
+            max_batch_size,
+        } = self;
 
-                        if self.current_batch_size >= self.max_batch_size {
-                            tracing::info!("batch size reached: worker sending batch of size {}", self.current_batch_size);
-                            self.send_batch().await?;
-                            break;
-                        }
-                    },
-                    _ = &mut timer => {
-                        if !self.current_batch.is_empty() {
-                            tracing::info!("batch timeout reached: worker sending batch of size {}", self.current_batch_size);
-                            self.send_batch().await?;
-                        }
-                        tracing::info!("batch timeout reached... doing nothing");
-                        break;
+        let tasks = vec![tokio::spawn(receive_task(
+            batches_tx,
+            transactions_rx,
+            max_batch_size,
+            timeout,
+        ))];
+
+        if let Err(e) = try_join_all(tasks).await {
+            tracing::error!("Error in BatchMaker: {:?}", e);
+        }
+    }
+}
+
+#[tracing::instrument(skip_all, fields(%max_batch_size, %timeout))]
+async fn receive_task(
+    batches_tx: Sender<TxBatch>,
+    mut rx: Receiver<Transaction>,
+    max_batch_size: usize,
+    timeout: u64,
+) {
+    let mut current_batch: Vec<Transaction> = vec![];
+    let mut current_batch_size = 0;
+    let timer = tokio::time::sleep(Duration::from_millis(timeout));
+    tokio::pin!(timer);
+    loop {
+        let sender = batches_tx.clone();
+        tokio::select! {
+            Some(tx) = rx.recv() => {
+                tracing::info!("received transaction: {:?}", tx);
+                let serialized_tx = match bincode::serialize(&tx) {
+                    Ok(serialized) => serialized,
+                    Err(e) => {
+                        tracing::error!("Failed to serialize transaction: {}", e);
+                        continue;
                     }
+                };
+
+                let tx_size = serialized_tx.len();
+                current_batch.push(tx);
+                current_batch_size += tx_size;
+
+                if current_batch_size >= max_batch_size {
+                    tracing::info!("batch size reached: worker sending batch of size {}", current_batch_size);
+                    send_batch(sender, std::mem::take(&mut current_batch)).await.expect("Failed to send batch");
+                    current_batch_size = 0;
+                    timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout));
                 }
+            },
+            _ = &mut timer => {
+                if !current_batch.is_empty() {
+                    tracing::info!("batch timeout reached: worker sending batch of size {}", current_batch_size);
+                    send_batch(sender, std::mem::take(&mut current_batch)).await.expect("Failed to send batch");
+
+                }
+                tracing::info!("batch timeout reached... doing nothing");
+                timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout));
             }
         }
     }
+}
 
-    async fn send_batch(&mut self) -> anyhow::Result<()> {
-        let batch = std::mem::take(&mut self.current_batch);
-        self.current_batch_size = 0;
+async fn send_batch(batches_tx: Sender<TxBatch>, batch: Vec<Transaction>) -> anyhow::Result<()> {
+    batches_tx.send(batch).await.map_err(|e| {
+        tracing::error!("channel error: failed to send batch: {}", e);
+        anyhow::anyhow!("Failed to send batch: {}", e)
+    })?;
 
-        self.batches_tx.send(batch).await.map_err(|e| {
-            tracing::error!("channel error: failed to send batch: {}", e);
-            anyhow::anyhow!("Failed to send batch: {}", e)
-        })?;
-
-        Ok(())
-    }
+    Ok(())
 }
 
 // #[cfg(test)]
