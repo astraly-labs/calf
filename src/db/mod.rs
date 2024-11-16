@@ -1,5 +1,6 @@
 use sled::{transaction, Db as SledDb};
 
+#[derive(Debug)]
 pub struct Db {
     #[allow(dead_code)]
     db: SledDb,

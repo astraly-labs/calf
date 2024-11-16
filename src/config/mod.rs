@@ -2,26 +2,26 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct NetworkInfos {
     pub validators: Vec<ValidatorInfos>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ValidatorInfos {
     pub pubkey: String,
     pub workers: Vec<WorkerInfo>,
     pub primary: PrimaryInfo,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct WorkerInfo {
     pub id: u32,
     pub pubkey: String,
     pub address: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct PrimaryInfo {
     pub id: u32,
     pub pubkey: String,

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
-    data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 impl Transaction {
