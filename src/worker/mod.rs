@@ -1,7 +1,6 @@
 pub mod batch_broadcaster;
 pub mod batch_maker;
-
-use std::time::Duration;
+pub mod network;
 
 use batch_broadcaster::BatchBroadcaster;
 use batch_maker::BatchMaker;
@@ -9,6 +8,8 @@ use crossterm::event::{Event, EventStream, KeyCode};
 use futures::{FutureExt as _, StreamExt as _};
 use futures_timer::Delay;
 use futures_util::future::try_join_all;
+use network::Network as WorkerNetwork;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -65,42 +66,48 @@ impl BaseAgent for Worker {
                 tasks.push(tokio::spawn(async move { batch_broadcaster.spawn().await }));
 
                 tasks.push(tokio::spawn(async move {
-                    let transaction = Transaction { data: vec![1; 100] };
-
-                    let mut reader = EventStream::new();
-
-                    loop {
-                        let delay = Delay::new(Duration::from_millis(1_000)).fuse();
-                        let event = reader.next().fuse();
-
-                        tokio::select! {
-                            _ = delay => { },
-                            maybe_event = event => {
-                                match maybe_event {
-                                    Some(Ok(event)) => {
-                                        if event == Event::Key(KeyCode::Char('t').into()) {
-                                            transactions_tx.send(transaction.clone()).await.unwrap();
-                                            tracing::info!("transaction sent");
-                                        }
-
-                                        if event == Event::Key(KeyCode::Esc.into()) {
-                                            break;
-                                        }
-                                    }
-                                    Some(Err(e)) => tracing::error!("Transaction Sender Error: {:?}\r", e),
-                                    None => break,
-                                }
-                            }
-                        };
-                    }
-                    #[allow(unreachable_code)]
-                    Ok(())
+                    tokio::spawn(transaction_event_listener_task(transactions_tx)).await
                 }));
+
+                let worker_network = WorkerNetwork::new();
+                tasks.push(tokio::spawn(async move { worker_network.spawn().await }));
             }
             _ => unreachable!("Worker agent can only be run as a worker"),
         }
         if let Err(e) = try_join_all(tasks).await {
             tracing::error!("Error in Worker: {:?}", e);
         }
+    }
+}
+
+#[tracing::instrument(skip_all)]
+async fn transaction_event_listener_task(tx: mpsc::Sender<Transaction>) {
+    let transaction = Transaction { data: vec![1; 100] };
+
+    let mut reader = EventStream::new();
+
+    loop {
+        let delay = Delay::new(Duration::from_millis(1_000)).fuse();
+        let event = reader.next().fuse();
+
+        tokio::select! {
+            _ = delay => { },
+            maybe_event = event => {
+                match maybe_event {
+                    Some(Ok(event)) => {
+                        if event == Event::Key(KeyCode::Char('t').into()) {
+                            tx.send(transaction.clone()).await.unwrap();
+                            tracing::info!("transaction sent");
+                        }
+
+                        if event == Event::Key(KeyCode::Esc.into()) {
+                            break;
+                        }
+                    }
+                    Some(Err(e)) => tracing::error!("Transaction Sender Error: {:?}\r", e),
+                    None => break,
+                }
+            }
+        };
     }
 }
