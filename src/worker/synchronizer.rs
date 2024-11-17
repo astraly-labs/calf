@@ -2,9 +2,7 @@ use futures_util::future::try_join_all;
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 
-pub(crate) struct Synchronizer {
-    
-}
+pub(crate) struct Synchronizer {}
 
 impl Synchronizer {
     #[must_use]

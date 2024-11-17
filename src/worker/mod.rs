@@ -20,7 +20,8 @@ use crate::{
     db,
     settings::parser::{InstanceConfig, NetworkInfos, WorkerConfig},
     types::{
-        agents::{BaseAgent, LoadableFromSettings, Settings}, NetworkRequest, ReceivedAcknoledgement, ReceivedBatch, RequestPayload, Transaction
+        agents::{BaseAgent, LoadableFromSettings, Settings},
+        NetworkRequest, ReceivedAcknoledgement, ReceivedBatch, RequestPayload, Transaction,
     },
     utils,
 };
@@ -118,7 +119,7 @@ impl BaseAgent for Worker {
         tasks.push(tokio::spawn(async move { batch_maker.spawn().await }));
 
         // Spawn BatchBroadcaster
-        let batch_broadcaster = BatchBroadcaster::new(batches_rx, network_tx);
+        let batch_broadcaster = BatchBroadcaster::new(batches_rx, network_tx.clone());
         tasks.push(tokio::spawn(async move { batch_broadcaster.spawn().await }));
 
         tasks.push(tokio::spawn(async move {
@@ -126,22 +127,28 @@ impl BaseAgent for Worker {
         }));
 
         tasks.push(tokio::spawn(async move {
-            WorkerNetwork::spawn(network_rx, received_ack_tx, received_batches_tx, self.keypair).await
-        }));
-
-        tasks.push(tokio::spawn(async move {
-            quorum_waiter_task(
-                quorum_waiter_batches_rx,
-                received_ack_rx,
-                QUORUM_TRESHOLD,
-                digest_tx,
-                Arc::clone(&self.db),
+            WorkerNetwork::spawn(
+                network_rx,
+                received_ack_tx,
+                received_batches_tx,
+                self.keypair,
             )
             .await
         }));
 
         tasks.push(tokio::spawn(async move {
-            batch_acknoledgement_task(received_batches_rx, resquests_tx).await
+            tokio::spawn(quorum_waiter_task(
+                quorum_waiter_batches_rx,
+                received_ack_rx,
+                QUORUM_TRESHOLD,
+                digest_tx,
+                Arc::clone(&self.db),
+            ))
+            .await
+        }));
+
+        tasks.push(tokio::spawn(async move {
+            tokio::spawn(batch_acknoledgement_task(received_batches_rx, network_tx)).await
         }));
 
         if let Err(e) = try_join_all(tasks).await {
@@ -151,11 +158,20 @@ impl BaseAgent for Worker {
 }
 
 #[tracing::instrument(skip_all)]
-async fn batch_acknoledgement_task(mut batches_rx: mpsc::Receiver<ReceivedBatch>, resquests_tx: mpsc::Sender<NetworkRequest>) {
+async fn batch_acknoledgement_task(
+    mut batches_rx: mpsc::Receiver<ReceivedBatch>,
+    resquests_tx: mpsc::Sender<NetworkRequest>,
+) {
     while let Some(batch) = batches_rx.recv().await {
         tracing::info!("Received batch from {}", batch.sender);
         let digest = blake3::hash(&bincode::serialize(&batch.batch).expect("TODO: erreur"));
-        resquests_tx.send(NetworkRequest::SendTo(batch.sender, RequestPayload::Acknoledgment(digest.as_bytes().to_vec()))).await.unwrap();
+        resquests_tx
+            .send(NetworkRequest::SendTo(
+                batch.sender,
+                RequestPayload::Acknoledgment(digest.as_bytes().to_vec()),
+            ))
+            .await
+            .unwrap();
     }
 }
 

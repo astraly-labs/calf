@@ -92,7 +92,7 @@ pub async fn quorum_waiter_task(
     quorum_threshold: u32,
     digest_tx: tokio::sync::mpsc::Sender<blake3::Hash>,
     db: Arc<Db>,
-) -> Result<(), tokio::task::JoinError> {
+) {
     let mut batches = vec![];
     loop {
         tokio::select! {

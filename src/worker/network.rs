@@ -126,10 +126,10 @@ impl Network {
                 Some(message) = self.network_rx.recv() => {
                     match message {
                         NetworkRequest::Broadcast(message) => {
-                            self.broadcast(vec![], message);
+                            self.broadcast(vec![], message).unwrap();
                         },
                         NetworkRequest::SendTo(peer_id, message) => {
-                            self.send(peer_id, message);
+                            self.send(peer_id, message).unwrap();
                         }
                     }
                 }
