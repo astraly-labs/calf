@@ -11,7 +11,7 @@ use futures::{FutureExt as _, StreamExt as _};
 use futures_timer::Delay;
 use futures_util::future::try_join_all;
 use network::Network as WorkerNetwork;
-use std::{path::PathBuf, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -59,8 +59,9 @@ impl LoadableFromSettings for WorkerSettings {
 #[derive(Debug)]
 pub(crate) struct Worker {
     config: InstanceConfig,
+    keypair: libp2p::identity::Keypair,
     network: NetworkInfos,
-    db: db::Db,
+    db: Arc<db::Db>,
 }
 
 #[async_trait::async_trait]
@@ -69,14 +70,28 @@ impl BaseAgent for Worker {
     type Settings = WorkerSettings;
 
     async fn from_settings(settings: Self::Settings) -> anyhow::Result<Self> {
-        let db = db::Db::new(settings.db)?;
+        let db = Arc::new(db::Db::new(settings.db)?);
         let network = NetworkInfos::default();
         let config = InstanceConfig::load_from_file("config.json")?;
+        let keypair = match &config {
+            InstanceConfig::Worker(worker_config) => {
+                let bytes= hex::decode(&worker_config.keypair)?;
+                match libp2p::identity::Keypair::ed25519_from_bytes(bytes) {
+                    Ok(keypair) => Ok(keypair),
+                    Err(e) => {
+                        tracing::error!("failed to decode keypair from worker configuration file");
+                        Err(e)
+                    }
+                }
+            },
+            _ => unreachable!("Worker agent can only be run as a worker"),
+        }?;
 
         Ok(Self {
             config,
             network,
             db,
+            keypair,
         })
     }
 
@@ -107,7 +122,7 @@ impl BaseAgent for Worker {
                 }));
 
                 tasks.push(tokio::spawn(async move {
-                    WorkerNetwork::spawn(network_rx, network_resp_tx).await
+                    WorkerNetwork::spawn(network_rx, network_resp_tx, self.keypair).await
                 }));
             }
             _ => unreachable!("Worker agent can only be run as a worker"),

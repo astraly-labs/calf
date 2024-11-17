@@ -7,7 +7,7 @@ use futures::StreamExt as _;
 use libp2p::{
     core::{multiaddr::Multiaddr, ConnectedPoint},
     identify::{self},
-    identity, mdns,
+    identity::{self, Keypair}, mdns,
     request_response::{self, ProtocolSupport},
     swarm::{
         dial_opts::{DialOpts, PeerCondition},
@@ -52,8 +52,8 @@ impl Network {
     pub fn spawn(
         network_rx: mpsc::Receiver<Vec<u8>>,
         network_resp_tx: oneshot::Sender<Vec<u8>>,
+        local_key: Keypair
     ) -> JoinHandle<()> {
-        let local_key = identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
         println!("local peer id: {local_peer_id}");
 

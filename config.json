@@ -2,7 +2,7 @@
   "Worker": {
     "validator_pubkey": "0xValidatorPubkey",
     "id": 0,
-    "keypair": "0xKeypair",
+    "keypair": "0x3c93528a5e077be01043374dfb2f9e827f30d331d833f025c47222c19acf70ac",
     "pubkey": "0xPubkey",
     "address": "127.0.0.1:327",
     "primary": {
