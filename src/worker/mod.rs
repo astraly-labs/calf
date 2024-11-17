@@ -1,6 +1,7 @@
 pub mod batch_broadcaster;
 pub mod batch_maker;
 pub mod network;
+pub mod synchronizer;
 
 use anyhow::Context;
 use batch_broadcaster::{quorum_waiter_task, BatchBroadcaster};
