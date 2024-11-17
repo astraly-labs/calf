@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use futures_util::future::try_join_all;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
@@ -5,7 +7,10 @@ use tokio::{
 };
 use tracing::Instrument;
 
-use crate::types::{NetworkRequest, TxBatch};
+use crate::{
+    db::Db,
+    types::{BatchAcknowledgement, NetworkRequest, TxBatch},
+};
 
 pub(crate) struct BatchBroadcaster {
     batches_rx: Receiver<TxBatch>,
@@ -50,6 +55,74 @@ async fn broadcast_task(mut rx: Receiver<TxBatch>, network_tx: Sender<NetworkReq
             .send(NetworkRequest::Broadcast(encoded_batch))
             .await
             .expect("Failed to broadcast batch");
+    }
+}
+
+struct WaitingBatch {
+    ack_number: u32,
+    batch: TxBatch,
+    digest: blake3::Hash,
+}
+
+impl WaitingBatch {
+    fn new(batch: TxBatch) -> Self {
+        let digest = blake3::hash(&bincode::serialize(&batch).expect("batch hash failed"));
+        Self {
+            ack_number: 0,
+            batch,
+            digest,
+        }
+    }
+}
+
+#[tracing::instrument(skip_all)]
+async fn chorum_waiter_task(
+    mut batches_rx: tokio::sync::mpsc::Receiver<TxBatch>,
+    mut acknolwedgements_rx: tokio::sync::mpsc::Receiver<BatchAcknowledgement>,
+    quorum_threshold: u32,
+    digest_tx: tokio::sync::mpsc::Sender<blake3::Hash>,
+    db: Arc<Db>,
+) {
+    let mut batches = vec![];
+    loop {
+        tokio::select! {
+            Some(batch) = batches_rx.recv() => {
+                let waiting_batch = WaitingBatch::new(batch);
+                if batches.iter().any(|elm: &WaitingBatch| {
+                    elm.digest.as_bytes() == waiting_batch.digest.as_bytes()
+                }) {
+                    tracing::warn!("Received duplicate batch");
+                }
+                else {
+                    batches.push(waiting_batch);
+                    tracing::info!("Received new batch");
+                }
+            },
+            Some(ack) = acknolwedgements_rx.recv() => {
+                match batches.iter().position(|b| b.digest.as_bytes() == ack.hash.as_slice()) {
+                    Some(batch_index) => {
+                        let batch = &mut batches[batch_index];
+                        batch.ack_number += 1;
+                        if batch.ack_number >= quorum_threshold {
+                            tracing::info!("Batch is now confirmed: {:?}", batch.digest);
+                            digest_tx.send(batch.digest).await.expect("Failed to send digest");
+                            match db.insert(crate::db::Column::Batches, &batch.digest.to_string(), &batch.batch) {
+                                Ok(_) => {
+                                    tracing::info!("Batch inserted in DB");
+                                },
+                                Err(e) => {
+                                    tracing::error!("Failed to insert batch in DB: {:?}", e);
+                                }
+                            }
+                            batches.remove(batch_index);
+                        }
+                    },
+                    None => {
+                        tracing::warn!("Received ack for unknown batch");
+                    }
+                };
+            }
+        }
     }
 }
 

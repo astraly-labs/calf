@@ -34,3 +34,7 @@ pub enum NetworkRequest {
     Broadcast(Vec<u8>),
     SendTo(PeerId, Vec<u8>),
 }
+
+pub struct BatchAcknowledgement {
+    pub hash: Vec<u8>,
+}
