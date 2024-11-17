@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.81"
+derive_more = {version = "1.0.0", features = ["full"]}
 tokio = {version = "1.41.1", features = ["full", "test-util"]}
 tokio-metrics = "0.3.1"
 blake3 = "1.5.4"

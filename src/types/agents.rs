@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct Settings {}
 
 /// Settings of an agent defined from configuration

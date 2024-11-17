@@ -4,22 +4,57 @@ pub mod network;
 
 use batch_broadcaster::BatchBroadcaster;
 use batch_maker::BatchMaker;
+use clap::{command, Parser};
 use crossterm::event::{Event, EventStream, KeyCode};
+use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use futures::{FutureExt as _, StreamExt as _};
 use futures_timer::Delay;
 use futures_util::future::try_join_all;
 use network::Network as WorkerNetwork;
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 use tokio::sync::mpsc;
 
 use crate::{
-    config::{InstanceConfig, NetworkInfos},
     db,
+    settings::parser::{InstanceConfig, NetworkInfos},
     types::{
-        agents::{BaseAgent, Settings},
+        agents::{BaseAgent, LoadableFromSettings, Settings},
         Transaction,
     },
 };
+
+/// CLI arguments for Worker
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct WorkerCli {
+    /// Path to the database directory
+    #[arg(short, long, default_value = "db")]
+    db_path: PathBuf,
+}
+
+/// Settings for `Worker`
+#[derive(Debug, AsRef, AsMut, Deref, DerefMut)]
+pub struct WorkerSettings {
+    #[as_ref]
+    #[as_mut]
+    #[deref]
+    #[deref_mut]
+    base: Settings,
+    /// Database path
+    pub db: PathBuf,
+}
+
+impl LoadableFromSettings for WorkerSettings {
+    fn load() -> anyhow::Result<Self> {
+        // Parse command line arguments
+        let cli = WorkerCli::parse();
+
+        Ok(Self {
+            base: Settings::load()?,
+            db: cli.db_path,
+        })
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct Worker {
@@ -31,10 +66,10 @@ pub(crate) struct Worker {
 #[async_trait::async_trait]
 impl BaseAgent for Worker {
     const AGENT_NAME: &'static str = "worker";
-    type Settings = Settings;
+    type Settings = WorkerSettings;
 
-    async fn from_settings(_settings: Self::Settings) -> anyhow::Result<Self> {
-        let db = db::Db::new("./db")?;
+    async fn from_settings(settings: Self::Settings) -> anyhow::Result<Self> {
+        let db = db::Db::new(settings.db)?;
         let network = NetworkInfos::default();
         let config = InstanceConfig::load_from_file("config.json")?;
 

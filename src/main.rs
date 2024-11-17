@@ -1,11 +1,9 @@
 use types::agents::{agent_main, LoadableFromSettings, Settings};
 use worker::Worker;
 
-pub mod cli;
-pub mod config;
 pub mod db;
-pub mod dispatcher;
 pub mod primary;
+pub mod settings;
 pub mod types;
 pub mod worker;
 

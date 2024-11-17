@@ -53,7 +53,7 @@ impl Network {
 
         // Dial the peer identified by the multi-address given as the second
         // command-line argument, if any.
-        if let Some(addr) = std::env::args().nth(1) {
+        if let Some(addr) = std::env::args().nth(3) {
             let remote: Multiaddr = addr.parse().expect("Failed to parse multiaddr");
             swarm.dial(remote).expect("Failed to dial");
             println!("Dialed {addr}")

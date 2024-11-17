@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use sled::{transaction, Db as SledDb};
 
 #[derive(Debug)]
@@ -53,8 +55,8 @@ impl Column {
 
 #[allow(dead_code)]
 impl Db {
-    pub fn new(path: &str) -> Result<Self, anyhow::Error> {
-        let db = sled::open(format!("{}/db", path))?;
+    pub fn new(path: PathBuf) -> Result<Self, anyhow::Error> {
+        let db = sled::open(path)?;
         let columns: [sled::Tree; Column::COUNT] = match Column::iter()
             .map(|column| db.open_tree(column.as_str()))
             .collect::<Result<Vec<_>, _>>()?
@@ -104,7 +106,7 @@ mod test {
 
     #[test]
     fn test_db() {
-        let db = Db::new(":memory:").unwrap();
+        let db = Db::new(":memory:".into()).unwrap();
         db.insert(Column::Batches, "key", 42).unwrap();
         assert_eq!(db.get::<i32>(Column::Batches, "key").unwrap(), Some(42));
         assert_eq!(db.remove::<i32>(Column::Batches, "key").unwrap(), Some(42));
