@@ -14,8 +14,6 @@ impl Transaction {
     }
 }
 
-pub type TxBatch = Vec<Transaction>;
-
 impl Transaction {
     pub fn as_bytes(&self) -> Vec<u8> {
         todo!()
@@ -31,10 +29,26 @@ pub struct Block {
 }
 
 pub enum NetworkRequest {
-    Broadcast(Vec<u8>),
-    SendTo(PeerId, Vec<u8>),
+    Broadcast(RequestPayload),
+    SendTo(PeerId, RequestPayload),
 }
 
-pub struct BatchAcknowledgement {
-    pub hash: Vec<u8>,
+pub type BatchAcknowledgement = Vec<u8>;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum RequestPayload {
+    Batch(TxBatch),
+    Acknoledgment(BatchAcknowledgement),
 }
+
+pub struct ReceivedBatch {
+    pub batch: TxBatch,
+    pub sender: PeerId,
+}
+
+pub struct ReceivedAcknoledgement {
+    pub acknoledgement: BatchAcknowledgement,
+    pub sender: PeerId,
+}
+
+pub type TxBatch = Vec<Transaction>;

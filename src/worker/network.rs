@@ -17,14 +17,14 @@ use libp2p::{
     PeerId, StreamProtocol,
 };
 use tokio::{
-    sync::{
-        mpsc::{self, UnboundedReceiver, UnboundedSender},
-        oneshot,
-    },
+    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
 };
 
-use crate::types::NetworkRequest;
+use crate::types::{
+    BatchAcknowledgement, NetworkRequest, ReceivedAcknoledgement, ReceivedBatch, RequestPayload,
+    TxBatch,
+};
 
 /// Agent version
 const AGENT_VERSION: &str = "peer/0.0.1";
@@ -47,14 +47,16 @@ pub(crate) struct Network {
     to_dial_send: UnboundedSender<(PeerId, Multiaddr)>,
     to_dial_recv: UnboundedReceiver<(PeerId, Multiaddr)>,
     network_rx: mpsc::Receiver<NetworkRequest>,
-    network_resp_tx: oneshot::Sender<Vec<u8>>,
+    received_ack_tx: mpsc::Sender<ReceivedAcknoledgement>,
+    received_batches_tx: mpsc::Sender<ReceivedBatch>,
 }
 
 impl Network {
     #[must_use]
     pub fn spawn(
         network_rx: mpsc::Receiver<NetworkRequest>,
-        network_resp_tx: oneshot::Sender<Vec<u8>>,
+        received_ack_tx: mpsc::Sender<ReceivedAcknoledgement>,
+        received_batches_tx: mpsc::Sender<ReceivedBatch>,
         local_key: Keypair,
     ) -> JoinHandle<()> {
         let local_peer_id = PeerId::from(local_key.public());
@@ -97,7 +99,8 @@ impl Network {
                 out_peers: BTreeMap::new(),
                 local_peer_id,
                 network_rx,
-                network_resp_tx,
+                received_ack_tx: received_ack_tx,
+                received_batches_tx: received_batches_tx,
                 to_dial_send,
                 to_dial_recv,
             }
@@ -144,19 +147,26 @@ impl Network {
     }
 
     /// Sends a message to a specific peer.
-    pub fn send(&mut self, peer_id: PeerId, message: Vec<u8>) {
+    pub fn send(&mut self, peer_id: PeerId, message: RequestPayload) -> anyhow::Result<()> {
+        let serialized = bincode::serialize(&message)?;
         self.swarm
             .behaviour_mut()
             .request_response
-            .send_request(&peer_id, message);
+            .send_request(&peer_id, serialized);
+        Ok(())
     }
 
     /// Broadcasts a message to all connected peers.
-    pub fn broadcast(&mut self, _peers: Vec<String>, message: Vec<u8>) {
+    pub fn broadcast(
+        &mut self,
+        _peers: Vec<String>,
+        message: RequestPayload,
+    ) -> anyhow::Result<()> {
         let connected_peers: Vec<PeerId> = self.swarm.connected_peers().cloned().collect();
         for peer_id in connected_peers {
-            self.send(peer_id, message.clone());
+            self.send(peer_id, message.clone())?;
         }
+        Ok(())
     }
 
     async fn handle_event(&mut self, event: SwarmEvent<WorkerBehaviourEvent>) {
@@ -194,18 +204,47 @@ impl Network {
                 } => {
                     let peer_id = peer;
                     let req: Vec<u8> = request;
-                    print!("request from {peer_id}: \"{:#?}\"", req);
-                    let address = self
-                        .out_peers
-                        .get(&peer_id)
-                        .unwrap_or(self.in_peers.get(&peer_id).unwrap_or(&Multiaddr::empty()))
-                        .clone();
-                    self.swarm
-                        .behaviour_mut()
-                        .request_response
-                        .send_response(channel, ())
-                        .expect("peer connection closed?");
-                    println!(" -> replied: \"Hello Back!!\"");
+                    tracing::info!("request from {peer_id}: \"{:#?}\"", req);
+                    let decoded = match bincode::deserialize::<RequestPayload>(&req) {
+                        Ok(decoded) => decoded,
+                        Err(e) => {
+                            tracing::error!("failed to decode request: {e}");
+                            return;
+                        }
+                    };
+                    tracing::info!("decoded request: {:#?}", decoded);
+                    match decoded {
+                        RequestPayload::Batch(batch) => {
+                            self.received_batches_tx
+                                .send(ReceivedBatch {
+                                    batch,
+                                    sender: peer_id,
+                                })
+                                .await
+                                .expect("failed to send batch");
+                        }
+                        RequestPayload::Acknoledgment(ack) => {
+                            self.received_ack_tx
+                                .send(ReceivedAcknoledgement {
+                                    acknoledgement: ack,
+                                    sender: peer_id,
+                                })
+                                .await
+                                .expect("failed to send ack");
+                        }
+                    }
+                    // osef ?
+                    // let address = self
+                    //     .out_peers
+                    //     .get(&peer_id)
+                    //     .unwrap_or(self.in_peers.get(&peer_id).unwrap_or(&Multiaddr::empty()))
+                    //     .clone();
+                    // self.swarm
+                    //     .behaviour_mut()
+                    //     .request_response
+                    //     .send_response(channel, ())
+                    //     .expect("peer connection closed?");
+                    // println!(" -> replied: \"Hello Back!!\"");
                 }
                 request_response::Message::Response { response, .. } => {
                     let peer_id = peer;

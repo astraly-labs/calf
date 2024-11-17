@@ -104,7 +104,10 @@ async fn receive_task(
     }
 }
 
-async fn send_batch(batches_tx: tokio::sync::broadcast::Sender<TxBatch>, batch: Vec<Transaction>) -> anyhow::Result<()> {
+async fn send_batch(
+    batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
+    batch: Vec<Transaction>,
+) -> anyhow::Result<()> {
     batches_tx.send(batch).map_err(|e| {
         tracing::error!("channel error: failed to send batch: {}", e);
         anyhow::anyhow!("Failed to send batch: {}", e)
@@ -128,7 +131,11 @@ mod test {
         Transaction::new(vec![1u8; size])
     }
 
-    type BatchMakerFixture = (Sender<Transaction>, tokio::sync::broadcast::Receiver<TxBatch>, JoinHandle<()>);
+    type BatchMakerFixture = (
+        Sender<Transaction>,
+        tokio::sync::broadcast::Receiver<TxBatch>,
+        JoinHandle<()>,
+    );
 
     #[fixture]
     fn launch_batch_maker() -> BatchMakerFixture {
