@@ -86,6 +86,8 @@ impl BaseAgent for Worker {
             InstanceConfig::Worker(worker_config) => {
                 let (batches_tx, batches_rx) = mpsc::channel(100);
                 let (transactions_tx, transactions_rx) = mpsc::channel(100);
+                let (network_tx, network_rx) = mpsc::channel(100);
+                let (network_resp_tx, _network_resp_rx) = tokio::sync::oneshot::channel();
 
                 // Spawn BatchMaker
                 let batch_maker = BatchMaker::new(
@@ -97,15 +99,16 @@ impl BaseAgent for Worker {
                 tasks.push(tokio::spawn(async move { batch_maker.spawn().await }));
 
                 // Spawn BatchBroadcaster
-                let batch_broadcaster = BatchBroadcaster::new(batches_rx);
+                let batch_broadcaster = BatchBroadcaster::new(batches_rx, network_tx);
                 tasks.push(tokio::spawn(async move { batch_broadcaster.spawn().await }));
 
                 tasks.push(tokio::spawn(async move {
                     tokio::spawn(transaction_event_listener_task(transactions_tx)).await
                 }));
 
-                let worker_network = WorkerNetwork::new();
-                tasks.push(tokio::spawn(async move { worker_network.spawn().await }));
+                tasks.push(tokio::spawn(async move {
+                    WorkerNetwork::spawn(network_rx, network_resp_tx).await
+                }));
             }
             _ => unreachable!("Worker agent can only be run as a worker"),
         }
