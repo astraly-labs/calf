@@ -107,16 +107,9 @@ impl Network {
     }
 
     pub async fn run(&mut self) {
-        // // Start listening
-        // if let Some(addr) = std::env::args().nth(1) {
-        //     let addr = format!("/ip4/{}/udp/0/quic-v1", addr);
-        //     let listen: Multiaddr = addr.parse().unwrap();
-        //     self.swarm.listen_on(listen).unwrap();
-        // } else {
-        //     self.swarm
-        //         .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
-        //         .unwrap();
-        // }
+        self.swarm
+            .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+            .unwrap();
 
         // TODO: handle gracefully the shutdown of the network
         loop {
