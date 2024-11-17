@@ -2,6 +2,7 @@ pub mod batch_broadcaster;
 pub mod batch_maker;
 pub mod network;
 
+use anyhow::Context;
 use batch_broadcaster::BatchBroadcaster;
 use batch_maker::BatchMaker;
 use clap::{command, Parser};
@@ -16,11 +17,12 @@ use tokio::sync::mpsc;
 
 use crate::{
     db,
-    settings::parser::{InstanceConfig, NetworkInfos},
+    settings::parser::{InstanceConfig, NetworkInfos, WorkerConfig},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         Transaction,
     },
+    utils,
 };
 
 /// CLI arguments for Worker
@@ -30,6 +32,9 @@ pub struct WorkerCli {
     /// Path to the database directory
     #[arg(short, long, default_value = "db")]
     db_path: PathBuf,
+    /// Path to the keypair file
+    #[arg(short, long, default_value = "keypair")]
+    keypair_path: PathBuf,
 }
 
 /// Settings for `Worker`
@@ -42,6 +47,8 @@ pub struct WorkerSettings {
     base: Settings,
     /// Database path
     pub db: PathBuf,
+    /// Key pair path
+    pub keypair: PathBuf,
 }
 
 impl LoadableFromSettings for WorkerSettings {
@@ -52,13 +59,14 @@ impl LoadableFromSettings for WorkerSettings {
         Ok(Self {
             base: Settings::load()?,
             db: cli.db_path,
+            keypair: cli.keypair_path,
         })
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct Worker {
-    config: InstanceConfig,
+    config: WorkerConfig,
     keypair: libp2p::identity::Keypair,
     network: NetworkInfos,
     db: Arc<db::Db>,
@@ -72,20 +80,12 @@ impl BaseAgent for Worker {
     async fn from_settings(settings: Self::Settings) -> anyhow::Result<Self> {
         let db = Arc::new(db::Db::new(settings.db)?);
         let network = NetworkInfos::default();
-        let config = InstanceConfig::load_from_file("config.json")?;
-        let keypair = match &config {
-            InstanceConfig::Worker(worker_config) => {
-                let bytes = hex::decode(&worker_config.keypair)?;
-                match libp2p::identity::Keypair::ed25519_from_bytes(bytes) {
-                    Ok(keypair) => Ok(keypair),
-                    Err(e) => {
-                        tracing::error!("failed to decode keypair from worker configuration file");
-                        Err(e)
-                    }
-                }
-            }
+        let config = match InstanceConfig::load_from_file("config.json")? {
+            InstanceConfig::Worker(worker_config) => worker_config,
             _ => unreachable!("Worker agent can only be run as a worker"),
-        }?;
+        };
+        let keypair = utils::read_keypair_from_file(&settings.keypair)
+            .context("Failed to read keypair from file")?;
 
         Ok(Self {
             config,
@@ -97,36 +97,32 @@ impl BaseAgent for Worker {
 
     async fn run(mut self) {
         let mut tasks = vec![];
-        match self.config {
-            InstanceConfig::Worker(worker_config) => {
-                let (batches_tx, batches_rx) = mpsc::channel(100);
-                let (transactions_tx, transactions_rx) = mpsc::channel(100);
-                let (network_tx, network_rx) = mpsc::channel(100);
-                let (network_resp_tx, _network_resp_rx) = tokio::sync::oneshot::channel();
+        let (batches_tx, batches_rx) = mpsc::channel(100);
+        let (transactions_tx, transactions_rx) = mpsc::channel(100);
+        let (network_tx, network_rx) = mpsc::channel(100);
+        let (network_resp_tx, _network_resp_rx) = tokio::sync::oneshot::channel();
 
-                // Spawn BatchMaker
-                let batch_maker = BatchMaker::new(
-                    batches_tx,
-                    transactions_rx,
-                    worker_config.timeout,
-                    worker_config.batch_size,
-                );
-                tasks.push(tokio::spawn(async move { batch_maker.spawn().await }));
+        // Spawn BatchMaker
+        let batch_maker = BatchMaker::new(
+            batches_tx,
+            transactions_rx,
+            self.config.timeout,
+            self.config.batch_size,
+        );
+        tasks.push(tokio::spawn(async move { batch_maker.spawn().await }));
 
-                // Spawn BatchBroadcaster
-                let batch_broadcaster = BatchBroadcaster::new(batches_rx, network_tx);
-                tasks.push(tokio::spawn(async move { batch_broadcaster.spawn().await }));
+        // Spawn BatchBroadcaster
+        let batch_broadcaster = BatchBroadcaster::new(batches_rx, network_tx);
+        tasks.push(tokio::spawn(async move { batch_broadcaster.spawn().await }));
 
-                tasks.push(tokio::spawn(async move {
-                    tokio::spawn(transaction_event_listener_task(transactions_tx)).await
-                }));
+        tasks.push(tokio::spawn(async move {
+            tokio::spawn(transaction_event_listener_task(transactions_tx)).await
+        }));
 
-                tasks.push(tokio::spawn(async move {
-                    WorkerNetwork::spawn(network_rx, network_resp_tx, self.keypair).await
-                }));
-            }
-            _ => unreachable!("Worker agent can only be run as a worker"),
-        }
+        tasks.push(tokio::spawn(async move {
+            WorkerNetwork::spawn(network_rx, network_resp_tx, self.keypair).await
+        }));
+
         if let Err(e) = try_join_all(tasks).await {
             tracing::error!("Error in Worker: {:?}", e);
         }

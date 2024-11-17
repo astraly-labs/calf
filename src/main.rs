@@ -5,6 +5,7 @@ pub mod db;
 pub mod primary;
 pub mod settings;
 pub mod types;
+pub mod utils;
 pub mod worker;
 
 // Empty settings for now
