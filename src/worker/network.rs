@@ -7,7 +7,8 @@ use futures::StreamExt as _;
 use libp2p::{
     core::{multiaddr::Multiaddr, ConnectedPoint},
     identify::{self},
-    identity::{self, Keypair}, mdns,
+    identity::Keypair,
+    mdns,
     request_response::{self, ProtocolSupport},
     swarm::{
         dial_opts::{DialOpts, PeerCondition},
@@ -22,6 +23,8 @@ use tokio::{
     },
     task::JoinHandle,
 };
+
+use crate::types::NetworkRequest;
 
 /// Agent version
 const AGENT_VERSION: &str = "peer/0.0.1";
@@ -43,16 +46,16 @@ pub(crate) struct Network {
     local_peer_id: PeerId,
     to_dial_send: UnboundedSender<(PeerId, Multiaddr)>,
     to_dial_recv: UnboundedReceiver<(PeerId, Multiaddr)>,
-    network_rx: mpsc::Receiver<Vec<u8>>,
+    network_rx: mpsc::Receiver<NetworkRequest>,
     network_resp_tx: oneshot::Sender<Vec<u8>>,
 }
 
 impl Network {
     #[must_use]
     pub fn spawn(
-        network_rx: mpsc::Receiver<Vec<u8>>,
+        network_rx: mpsc::Receiver<NetworkRequest>,
         network_resp_tx: oneshot::Sender<Vec<u8>>,
-        local_key: Keypair
+        local_key: Keypair,
     ) -> JoinHandle<()> {
         let local_peer_id = PeerId::from(local_key.public());
         println!("local peer id: {local_peer_id}");
@@ -104,19 +107,17 @@ impl Network {
     }
 
     pub async fn run(&mut self) {
-        // Start listening
-        if let Some(addr) = std::env::args().nth(1) {
-            let addr = format!("/ip4/{}/udp/0/quic-v1", addr);
-            let listen: Multiaddr = addr.parse().unwrap();
-            self.swarm.listen_on(listen).unwrap();
-        } else {
-            self.swarm
-                .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
-                .unwrap();
-        }
+        // // Start listening
+        // if let Some(addr) = std::env::args().nth(1) {
+        //     let addr = format!("/ip4/{}/udp/0/quic-v1", addr);
+        //     let listen: Multiaddr = addr.parse().unwrap();
+        //     self.swarm.listen_on(listen).unwrap();
+        // } else {
+        //     self.swarm
+        //         .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+        //         .unwrap();
+        // }
 
-        // TODO: listen to the network_rx channel and broadcast the received messages
-        // responses should be sent on the network_resp_tx channel
         // TODO: handle gracefully the shutdown of the network
         loop {
             tokio::select! {
@@ -125,6 +126,16 @@ impl Network {
                 },
                 event = self.swarm.select_next_some() => {
                     self.handle_event(event).await;
+                },
+                Some(message) = self.network_rx.recv() => {
+                    match message {
+                        NetworkRequest::Broadcast(message) => {
+                            self.broadcast(vec![], message);
+                        },
+                        NetworkRequest::SendTo(peer_id, message) => {
+                            self.send(peer_id, message);
+                        }
+                    }
                 }
             }
         }

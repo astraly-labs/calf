@@ -5,15 +5,15 @@ use tokio::{
 };
 use tracing::Instrument;
 
-use crate::types::TxBatch;
+use crate::types::{NetworkRequest, TxBatch};
 
 pub(crate) struct BatchBroadcaster {
     batches_rx: Receiver<TxBatch>,
-    network_tx: Sender<Vec<u8>>,
+    network_tx: Sender<NetworkRequest>,
 }
 
 impl BatchBroadcaster {
-    pub fn new(batches_rx: Receiver<TxBatch>, network_tx: Sender<Vec<u8>>) -> Self {
+    pub fn new(batches_rx: Receiver<TxBatch>, network_tx: Sender<NetworkRequest>) -> Self {
         Self {
             batches_rx,
             network_tx,
@@ -42,10 +42,13 @@ impl BatchBroadcaster {
 }
 
 #[tracing::instrument(skip_all)]
-async fn broadcast_task(mut rx: Receiver<TxBatch>, network_tx: Sender<Vec<u8>>) {
+async fn broadcast_task(mut rx: Receiver<TxBatch>, network_tx: Sender<NetworkRequest>) {
     while let Some(batch) = rx.recv().await {
         tracing::info!("Broadcasting batch: {:?}", batch);
         let encoded_batch = bincode::serialize(&batch).unwrap();
-        network_tx.send(encoded_batch).await.unwrap();
+        network_tx
+            .send(NetworkRequest::Broadcast(encoded_batch))
+            .await
+            .expect("Failed to broadcast batch");
     }
 }

@@ -1,5 +1,6 @@
 pub mod agents;
 
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,4 +28,9 @@ pub struct BlockHeader {
 
 pub struct Block {
     _header: BlockHeader,
+}
+
+pub enum NetworkRequest {
+    Broadcast(Vec<u8>),
+    SendTo(PeerId, Vec<u8>),
 }

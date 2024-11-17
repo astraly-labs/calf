@@ -75,7 +75,7 @@ impl BaseAgent for Worker {
         let config = InstanceConfig::load_from_file("config.json")?;
         let keypair = match &config {
             InstanceConfig::Worker(worker_config) => {
-                let bytes= hex::decode(&worker_config.keypair)?;
+                let bytes = hex::decode(&worker_config.keypair)?;
                 match libp2p::identity::Keypair::ed25519_from_bytes(bytes) {
                     Ok(keypair) => Ok(keypair),
                     Err(e) => {
@@ -83,7 +83,7 @@ impl BaseAgent for Worker {
                         Err(e)
                     }
                 }
-            },
+            }
             _ => unreachable!("Worker agent can only be run as a worker"),
         }?;
 
