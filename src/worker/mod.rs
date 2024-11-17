@@ -3,7 +3,7 @@ pub mod batch_maker;
 pub mod network;
 
 use anyhow::Context;
-use batch_broadcaster::BatchBroadcaster;
+use batch_broadcaster::{quorum_waiter_task, BatchBroadcaster};
 use batch_maker::BatchMaker;
 use clap::{command, Parser};
 use crossterm::event::{Event, EventStream, KeyCode};
@@ -13,7 +13,7 @@ use futures_timer::Delay;
 use futures_util::future::try_join_all;
 use network::Network as WorkerNetwork;
 use std::{path::PathBuf, sync::Arc, time::Duration};
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 use crate::{
     db,
@@ -24,6 +24,9 @@ use crate::{
     },
     utils,
 };
+
+// ARBITRAIRE !!!
+const QUORUM_TRESHOLD: u32 = 3;
 
 /// CLI arguments for Worker
 #[derive(Parser, Debug)]
@@ -97,10 +100,13 @@ impl BaseAgent for Worker {
 
     async fn run(mut self) {
         let mut tasks = vec![];
-        let (batches_tx, batches_rx) = mpsc::channel(100);
+        let (batches_tx, batches_rx) = broadcast::channel(100);
         let (transactions_tx, transactions_rx) = mpsc::channel(100);
         let (network_tx, network_rx) = mpsc::channel(100);
         let (network_resp_tx, _network_resp_rx) = tokio::sync::oneshot::channel();
+        let (acknolwedgements_tx, acknolwedgements_rx) = mpsc::channel(100);
+        let (digest_tx, _digest_rx) = mpsc::channel(100);
+        let quorum_waiter_batches_rx = batches_tx.subscribe();
 
         // Spawn BatchMaker
         let batch_maker = BatchMaker::new(
@@ -121,6 +127,11 @@ impl BaseAgent for Worker {
 
         tasks.push(tokio::spawn(async move {
             WorkerNetwork::spawn(network_rx, network_resp_tx, self.keypair).await
+        }));
+
+        tasks.push(
+            tokio::spawn(async move {
+                quorum_waiter_task(quorum_waiter_batches_rx, acknolwedgements_rx, QUORUM_TRESHOLD, digest_tx, Arc::clone(&self.db)).await
         }));
 
         if let Err(e) = try_join_all(tasks).await {

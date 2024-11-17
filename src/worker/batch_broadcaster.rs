@@ -11,14 +11,15 @@ use crate::{
     db::Db,
     types::{BatchAcknowledgement, NetworkRequest, TxBatch},
 };
-
+// ARBITRAIRE !!!
+const BATCH_QUORUM_TIMEOUT: u128 = 100; //ms
 pub(crate) struct BatchBroadcaster {
-    batches_rx: Receiver<TxBatch>,
+    batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
     network_tx: Sender<NetworkRequest>,
 }
 
 impl BatchBroadcaster {
-    pub fn new(batches_rx: Receiver<TxBatch>, network_tx: Sender<NetworkRequest>) -> Self {
+    pub fn new(batches_rx: tokio::sync::broadcast::Receiver<TxBatch>, network_tx: Sender<NetworkRequest>) -> Self {
         Self {
             batches_rx,
             network_tx,
@@ -47,8 +48,8 @@ impl BatchBroadcaster {
 }
 
 #[tracing::instrument(skip_all)]
-async fn broadcast_task(mut rx: Receiver<TxBatch>, network_tx: Sender<NetworkRequest>) {
-    while let Some(batch) = rx.recv().await {
+async fn broadcast_task(mut rx: tokio::sync::broadcast::Receiver<TxBatch>, network_tx: Sender<NetworkRequest>) {
+    while let Ok(batch) = rx.recv().await {
         tracing::info!("Broadcasting batch: {:?}", batch);
         let encoded_batch = bincode::serialize(&batch).unwrap();
         network_tx
@@ -62,6 +63,7 @@ struct WaitingBatch {
     ack_number: u32,
     batch: TxBatch,
     digest: blake3::Hash,
+    timestamp: tokio::time::Instant,
 }
 
 impl WaitingBatch {
@@ -71,22 +73,23 @@ impl WaitingBatch {
             ack_number: 0,
             batch,
             digest,
+            timestamp: tokio::time::Instant::now(),
         }
     }
 }
 
 #[tracing::instrument(skip_all)]
-async fn chorum_waiter_task(
-    mut batches_rx: tokio::sync::mpsc::Receiver<TxBatch>,
+pub async fn quorum_waiter_task(
+    mut batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
     mut acknolwedgements_rx: tokio::sync::mpsc::Receiver<BatchAcknowledgement>,
     quorum_threshold: u32,
     digest_tx: tokio::sync::mpsc::Sender<blake3::Hash>,
     db: Arc<Db>,
-) {
+) -> Result<(), tokio::task::JoinError> {
     let mut batches = vec![];
     loop {
         tokio::select! {
-            Some(batch) = batches_rx.recv() => {
+            Ok(batch) = batches_rx.recv() => {
                 let waiting_batch = WaitingBatch::new(batch);
                 if batches.iter().any(|elm: &WaitingBatch| {
                     elm.digest.as_bytes() == waiting_batch.digest.as_bytes()
@@ -96,6 +99,14 @@ async fn chorum_waiter_task(
                 else {
                     batches.push(waiting_batch);
                     tracing::info!("Received new batch");
+                }
+                let now = tokio::time::Instant::now();
+                //perfectible ? rayon ? plein de timers dans le select ?
+                for i in 0..batches.len() {
+                    if now.duration_since(batches[i].timestamp).as_millis() > BATCH_QUORUM_TIMEOUT {
+                        tracing::warn!("Batch timed out: {:?}", batches[i].digest);
+                        batches.remove(i);
+                    }
                 }
             },
             Some(ack) = acknolwedgements_rx.recv() => {
@@ -138,12 +149,12 @@ mod test {
 
     const CHANNEL_CAPACITY: usize = 1000;
 
-    type BatchBroadcasterFixture = (Receiver<NetworkRequest>, Sender<TxBatch>, JoinHandle<()>);
+    type BatchBroadcasterFixture = (Receiver<NetworkRequest>, tokio::sync::broadcast::Sender<TxBatch>, JoinHandle<()>);
 
     #[fixture]
     fn launch_batch_broadcaster() -> BatchBroadcasterFixture {
         let (tx, rx) = mpsc::channel(CHANNEL_CAPACITY);
-        let (batches_tx, batches_rx) = mpsc::channel(CHANNEL_CAPACITY);
+        let (batches_tx, batches_rx) = tokio::sync::broadcast::channel(CHANNEL_CAPACITY);
 
         let batch_maker = BatchBroadcaster::new(batches_rx, tx);
 
@@ -159,7 +170,7 @@ mod test {
 
         let batch = vec![Transaction::new(vec![1; 100])];
 
-        tx.send(batch.clone()).await.unwrap();
+        tx.send(batch.clone()).unwrap();
 
         let network_request = rx.recv().await.unwrap();
 
@@ -182,8 +193,8 @@ mod test {
         let batch1 = vec![Transaction::new(vec![1; 100])];
         let batch2 = vec![Transaction::new(vec![2; 100])];
 
-        tx.send(batch1.clone()).await.unwrap();
-        tx.send(batch2.clone()).await.unwrap();
+        tx.send(batch1.clone()).unwrap();
+        tx.send(batch2.clone()).unwrap();
 
         let network_request1 = rx.recv().await.unwrap();
         let network_request2 = rx.recv().await.unwrap();

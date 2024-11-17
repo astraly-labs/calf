@@ -10,7 +10,7 @@ use crate::types::{Transaction, TxBatch};
 
 #[derive(Debug)]
 pub(crate) struct BatchMaker {
-    batches_tx: Sender<TxBatch>,
+    batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
     transactions_rx: Receiver<Transaction>,
     timeout: u64,
     max_batch_size: usize,
@@ -18,7 +18,7 @@ pub(crate) struct BatchMaker {
 
 impl BatchMaker {
     pub fn new(
-        batches_tx: Sender<TxBatch>,
+        batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
         transactions_rx: Receiver<Transaction>,
         timeout: u64,
         max_batch_size: usize,
@@ -58,7 +58,7 @@ impl BatchMaker {
 
 #[tracing::instrument(skip_all, fields(%max_batch_size, %timeout))]
 async fn receive_task(
-    batches_tx: Sender<TxBatch>,
+    batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
     mut rx: Receiver<Transaction>,
     max_batch_size: usize,
     timeout: u64,
@@ -104,8 +104,8 @@ async fn receive_task(
     }
 }
 
-async fn send_batch(batches_tx: Sender<TxBatch>, batch: Vec<Transaction>) -> anyhow::Result<()> {
-    batches_tx.send(batch).await.map_err(|e| {
+async fn send_batch(batches_tx: tokio::sync::broadcast::Sender<TxBatch>, batch: Vec<Transaction>) -> anyhow::Result<()> {
+    batches_tx.send(batch).map_err(|e| {
         tracing::error!("channel error: failed to send batch: {}", e);
         anyhow::anyhow!("Failed to send batch: {}", e)
     })?;
@@ -128,12 +128,12 @@ mod test {
         Transaction::new(vec![1u8; size])
     }
 
-    type BatchMakerFixture = (Sender<Transaction>, Receiver<TxBatch>, JoinHandle<()>);
+    type BatchMakerFixture = (Sender<Transaction>, tokio::sync::broadcast::Receiver<TxBatch>, JoinHandle<()>);
 
     #[fixture]
     fn launch_batch_maker() -> BatchMakerFixture {
         let (tx, rx) = mpsc::channel(CHANNEL_CAPACITY);
-        let (batches_tx, batches_rx) = mpsc::channel(CHANNEL_CAPACITY);
+        let (batches_tx, batches_rx) = tokio::sync::broadcast::channel(CHANNEL_CAPACITY);
 
         let batch_maker = BatchMaker {
             batches_tx,
