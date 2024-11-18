@@ -3,6 +3,7 @@ pub mod network;
 use anyhow::Context;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
+use network::Network as PrimaryNetwork;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
 
@@ -84,10 +85,13 @@ impl BaseAgent for Primary {
     }
 
     async fn run(mut self) {
-        // let res = tokio::try_join!();
-        // match res {
-        //     Ok(_) => tracing::info!("Primary exited successfully"),
-        //     Err(e) => tracing::error!("Primary exited with error: {:?}", e),
-        // }
+        let (network_tx, network_rx) = mpsc::channel(100);
+        let network_handle = PrimaryNetwork::spawn(network_rx, self.keypair);
+
+        let res = tokio::try_join!(network_handle);
+        match res {
+            Ok(_) => tracing::info!("Primary exited successfully"),
+            Err(e) => tracing::error!("Primary exited with error: {:?}", e),
+        }
     }
 }
