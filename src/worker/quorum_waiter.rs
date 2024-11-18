@@ -2,7 +2,9 @@ use std::sync::Arc;
 use tokio::task::JoinHandle;
 
 use crate::{
-    db::Db, safe_send, types::{ReceivedAcknowledgment, TxBatch}
+    db::Db,
+    safe_send,
+    types::{ReceivedAcknowledgment, TxBatch},
 };
 
 struct WaitingBatch {

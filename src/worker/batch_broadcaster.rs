@@ -1,13 +1,12 @@
-
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
 };
 
-use crate::{safe_send, 
-    types::{
-        NetworkRequest, RequestPayload, TxBatch,
-    }};
+use crate::{
+    safe_send,
+    types::{NetworkRequest, RequestPayload, TxBatch},
+};
 
 pub(crate) struct BatchBroadcaster {
     batches_rx: broadcast::Receiver<TxBatch>,

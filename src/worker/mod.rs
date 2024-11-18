@@ -13,9 +13,9 @@ use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use network::Network as WorkerNetwork;
 use quorum_waiter::QuorumWaiter;
-use transaction_event_listener::TransactionEventListener;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
+use transaction_event_listener::TransactionEventListener;
 
 use crate::{
     db,
@@ -33,7 +33,7 @@ const QUORUM_TRESHOLD: u32 = 3;
 /// CLI arguments for Worker
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
-pub struct WorkerCli {
+pub struct WorkerArgs {
     /// Path to the database directory
     #[arg(short, long, default_value = "db")]
     db_path: PathBuf,
@@ -59,7 +59,7 @@ pub struct WorkerSettings {
 impl LoadableFromSettings for WorkerSettings {
     fn load() -> anyhow::Result<Self> {
         // Parse command line arguments
-        let cli = WorkerCli::parse();
+        let cli = WorkerArgs::parse();
 
         Ok(Self {
             base: Settings::load()?,
@@ -109,10 +109,12 @@ impl BaseAgent for Worker {
         let (digest_tx, _digest_rx) = mpsc::channel(100);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
 
-        let batchmaker_handle = BatchMaker::spawn(batches_tx,
+        let batchmaker_handle = BatchMaker::spawn(
+            batches_tx,
             transactions_rx,
             self.config.timeout,
-            self.config.batch_size);
+            self.config.batch_size,
+        );
 
         let batch_broadcaster_handle = BatchBroadcaster::spawn(batches_rx, network_tx.clone());
 
@@ -142,7 +144,7 @@ impl BaseAgent for Worker {
             transaction_event_listener_handle,
             worker_network_hadle,
             quorum_waiter_handle,
-            batch_acknowledger_task,
+            batch_acknoledger_handle,
         );
 
         match res {
@@ -151,4 +153,3 @@ impl BaseAgent for Worker {
         }
     }
 }
-
