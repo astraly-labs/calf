@@ -49,12 +49,12 @@ impl BatchAcknowledger {
         while let Some(batch) = self.batches_rx.recv().await {
             tracing::info!("Received batch from {}", batch.sender);
             let digest = blake3::hash(&bincode::serialize(&batch.batch)?);
-                self.resquests_tx.send(
-                NetworkRequest::SendTo(
+            self.resquests_tx
+                .send(NetworkRequest::SendTo(
                     batch.sender,
                     RequestPayload::Acknoledgment(digest.as_bytes().to_vec()),
-                ),
-            ).await?;
+                ))
+                .await?;
         }
         Ok(())
     }

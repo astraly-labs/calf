@@ -18,8 +18,7 @@ use libp2p::{
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::
-    types::{NetworkRequest, RequestPayload};
+use crate::types::{NetworkRequest, RequestPayload};
 
 /// Agent version
 const AGENT_VERSION: &str = "peer/0.0.1";
@@ -167,7 +166,10 @@ impl Network {
         Ok(())
     }
 
-    async fn handle_event(&mut self, event: SwarmEvent<PrimaryBehaviourEvent>) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: SwarmEvent<PrimaryBehaviourEvent>,
+    ) -> anyhow::Result<()> {
         match event {
             SwarmEvent::Behaviour(PrimaryBehaviourEvent::Mdns(event)) => match event {
                 mdns::Event::Discovered(list) => {
@@ -175,9 +177,7 @@ impl Network {
                         if peer_id != self.local_peer_id && self.seen.insert(peer_id) {
                             println!("mDNS discovered a new peer: {peer_id}");
                             if !self.out_peers.contains_key(&peer_id) {
-                                    self.to_dial_send.send(
-                                    (peer_id, multiaddr.clone())
-                                ).await?;
+                                self.to_dial_send.send((peer_id, multiaddr.clone())).await?;
                             }
                         }
                     }

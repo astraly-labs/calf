@@ -9,7 +9,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::{
     db,
-    settings::parser::{InstanceConfig, NetworkInfos, PrimaryConfig},
+    settings::parser::{FileLoader as _, InstanceConfig, PrimaryConfig},
     types::agents::{BaseAgent, LoadableFromSettings, Settings},
     utils,
 };
@@ -20,10 +20,10 @@ use crate::{
 pub struct PrimaryArgs {
     /// Path to the database directory
     #[arg(short, long, default_value = "db")]
-    db_path: PathBuf,
+    pub db_path: PathBuf,
     /// Path to the keypair file
     #[arg(short, long, default_value = "keypair")]
-    keypair_path: PathBuf,
+    pub keypair_path: PathBuf,
 }
 
 /// Settings for `Primary`
@@ -33,22 +33,19 @@ pub struct PrimarySettings {
     #[as_mut]
     #[deref]
     #[deref_mut]
-    base: Settings,
-    /// Database path
-    pub db: PathBuf,
-    /// Key pair path
-    pub keypair: PathBuf,
+    pub base: Settings,
 }
 
 impl LoadableFromSettings for PrimarySettings {
     fn load() -> anyhow::Result<Self> {
-        // Parse command line arguments
+        // This won't be called directly anymore, but you might want to keep it
+        // for backward compatibility or testing
         let cli = PrimaryArgs::parse();
-
         Ok(Self {
-            base: Settings::load()?,
-            db: cli.db_path,
-            keypair: cli.keypair_path,
+            base: Settings {
+                db_path: cli.db_path,
+                keypair_path: cli.keypair_path,
+            },
         })
     }
 }
@@ -57,7 +54,6 @@ impl LoadableFromSettings for PrimarySettings {
 pub(crate) struct Primary {
     config: PrimaryConfig,
     keypair: libp2p::identity::Keypair,
-    network: NetworkInfos,
     db: Arc<db::Db>,
 }
 
@@ -67,18 +63,16 @@ impl BaseAgent for Primary {
     type Settings = PrimarySettings;
 
     async fn from_settings(settings: Self::Settings) -> anyhow::Result<Self> {
-        let db = Arc::new(db::Db::new(settings.db)?);
-        let network = NetworkInfos::default();
+        let db = Arc::new(db::Db::new(settings.base.db_path)?);
         let config = match InstanceConfig::load_from_file("config.json")? {
             InstanceConfig::Primary(worker_config) => worker_config,
             _ => unreachable!("Primary agent can only be run as a worker"),
         };
-        let keypair = utils::read_keypair_from_file(&settings.keypair)
+        let keypair = utils::read_keypair_from_file(&settings.base.keypair_path)
             .context("Failed to read keypair from file")?;
 
         Ok(Self {
             config,
-            network,
             db,
             keypair,
         })

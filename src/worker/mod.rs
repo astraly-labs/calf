@@ -20,7 +20,7 @@ use transaction_event_listener::TransactionEventListener;
 
 use crate::{
     db,
-    settings::parser::{InstanceConfig, NetworkInfos, WorkerConfig},
+    settings::parser::{Committee, FileLoader as _},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         ReceivedAcknowledgment,
@@ -30,6 +30,9 @@ use crate::{
 
 // ARBITRAIRE !!!
 const QUORUM_TRESHOLD: u32 = 3;
+const TIMEOUT: u64 = 1000;
+const BATCH_SIZE: usize = 10;
+const QUORUM_TIMEOUT: u128 = 1000;
 
 /// CLI arguments for Worker
 #[derive(Parser, Debug)]
@@ -37,44 +40,39 @@ const QUORUM_TRESHOLD: u32 = 3;
 pub struct WorkerArgs {
     /// Path to the database directory
     #[arg(short, long, default_value = "db")]
-    db_path: PathBuf,
+    pub db_path: PathBuf,
     /// Path to the keypair file
     #[arg(short, long, default_value = "keypair")]
-    keypair_path: PathBuf,
+    pub keypair_path: PathBuf,
 }
 
-/// Settings for `Worker`
 #[derive(Debug, AsRef, AsMut, Deref, DerefMut)]
 pub struct WorkerSettings {
     #[as_ref]
     #[as_mut]
     #[deref]
     #[deref_mut]
-    base: Settings,
-    /// Database path
-    pub db: PathBuf,
-    /// Key pair path
-    pub keypair: PathBuf,
+    pub base: Settings,
 }
 
 impl LoadableFromSettings for WorkerSettings {
     fn load() -> anyhow::Result<Self> {
-        // Parse command line arguments
+        // This won't be called directly anymore, but you might want to keep it
+        // for backward compatibility or testing
         let cli = WorkerArgs::parse();
-
         Ok(Self {
-            base: Settings::load()?,
-            db: cli.db_path,
-            keypair: cli.keypair_path,
+            base: Settings {
+                db_path: cli.db_path,
+                keypair_path: cli.keypair_path,
+            },
         })
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct Worker {
-    config: WorkerConfig,
+    commitee: Committee,
     keypair: libp2p::identity::Keypair,
-    network: NetworkInfos,
     db: Arc<db::Db>,
 }
 
@@ -84,18 +82,13 @@ impl BaseAgent for Worker {
     type Settings = WorkerSettings;
 
     async fn from_settings(settings: Self::Settings) -> anyhow::Result<Self> {
-        let db = Arc::new(db::Db::new(settings.db)?);
-        let network = NetworkInfos::default();
-        let config = match InstanceConfig::load_from_file("config.json")? {
-            InstanceConfig::Worker(worker_config) => worker_config,
-            _ => unreachable!("Worker agent can only be run as a worker"),
-        };
-        let keypair = utils::read_keypair_from_file(&settings.keypair)
+        let db = Arc::new(db::Db::new(settings.base.db_path)?);
+        let commitee = Committee::load_from_file(".config.json")?;
+        let keypair = utils::read_keypair_from_file(&settings.base.keypair_path)
             .context("Failed to read keypair from file")?;
 
         Ok(Self {
-            config,
-            network,
+            commitee,
             db,
             keypair,
         })
@@ -116,8 +109,8 @@ impl BaseAgent for Worker {
         let batchmaker_handle = BatchMaker::spawn(
             batches_tx,
             transactions_rx,
-            self.config.timeout,
-            self.config.batch_size,
+            TIMEOUT,
+            BATCH_SIZE,
             cancellation_token.clone(),
         );
 
@@ -140,7 +133,7 @@ impl BaseAgent for Worker {
             digest_tx,
             Arc::clone(&self.db),
             QUORUM_TRESHOLD,
-            self.config.quorum_timeout.into(),
+            QUORUM_TIMEOUT,
             cancellation_token.clone(),
         );
 

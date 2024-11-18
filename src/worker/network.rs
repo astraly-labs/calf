@@ -210,7 +210,10 @@ impl Network {
         Ok(())
     }
 
-    async fn handle_event(&mut self, event: SwarmEvent<WorkerBehaviourEvent>) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: SwarmEvent<WorkerBehaviourEvent>,
+    ) -> anyhow::Result<()> {
         match event {
             SwarmEvent::Behaviour(WorkerBehaviourEvent::Identify(identify::Event::Received {
                 peer_id,
@@ -260,9 +263,7 @@ impl Network {
                         if peer_id != self.local_peer_id && self.seen.insert(peer_id) {
                             println!("mDNS discovered a new peer: {peer_id}");
                             if !self.out_peers.contains_key(&peer_id) {
-                                    self.to_dial_send.send(
-                                    (peer_id, multiaddr.clone())
-                                ).await?;
+                                self.to_dial_send.send((peer_id, multiaddr.clone())).await?;
                             }
                         }
                     }
@@ -292,20 +293,20 @@ impl Network {
                     tracing::info!("decoded request: {:#?}", decoded);
                     match decoded {
                         RequestPayload::Batch(batch) => {
-                                self.received_batches_tx.send(
-                                ReceivedBatch {
+                            self.received_batches_tx
+                                .send(ReceivedBatch {
                                     batch,
                                     sender: peer_id,
-                                },
-                            ).await?;
+                                })
+                                .await?;
                         }
                         RequestPayload::Acknoledgment(ack) => {
-                                self.received_ack_tx.send(
-                                ReceivedAcknowledgment {
+                            self.received_ack_tx
+                                .send(ReceivedAcknowledgment {
                                     acknoledgement: ack,
                                     sender: peer_id,
-                                },
-                            ).await?;
+                                })
+                                .await?;
                         }
                     }
                 }

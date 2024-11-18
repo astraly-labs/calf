@@ -1,7 +1,7 @@
 use clap::{Args, Parser, Subcommand};
-use primary::PrimaryArgs;
+use primary::{Primary, PrimaryArgs, PrimarySettings};
 use types::agents::{agent_main, LoadableFromSettings, Settings};
-use worker::{Worker, WorkerArgs};
+use worker::{Worker, WorkerArgs, WorkerSettings};
 
 pub mod db;
 pub mod primary;
@@ -19,7 +19,7 @@ impl AsRef<Settings> for Settings {
 
 impl LoadableFromSettings for Settings {
     fn load() -> anyhow::Result<Self> {
-        Ok(Settings {})
+        Ok(Settings::default())
     }
 }
 
@@ -95,11 +95,27 @@ async fn main() -> anyhow::Result<()> {
         Command::Run { mode } => match mode {
             NodeMode::Primary(args) => {
                 tracing::info!("✨ Starting primary node...");
-                // Add primary node initialization here
+                let base_settings = Settings {
+                    db_path: args.db_path,
+                    keypair_path: args.keypair_path,
+                };
+
+                let primary_settings = PrimarySettings {
+                    base: base_settings,
+                };
+                agent_main::<Primary>(primary_settings).await?;
             }
             NodeMode::Worker(args) => {
                 tracing::info!("✨ Starting worker node...");
-                agent_main::<Worker>().await?;
+                let base_settings = Settings {
+                    db_path: args.db_path,
+                    keypair_path: args.keypair_path,
+                };
+                let worker_settings = WorkerSettings {
+                    base: base_settings,
+                };
+
+                agent_main::<Worker>(worker_settings).await?;
             }
         },
         Command::GenerateKeyPair { keypair_path } => {

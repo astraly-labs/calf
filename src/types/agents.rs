@@ -1,5 +1,10 @@
-#[derive(Debug)]
-pub struct Settings {}
+use std::path::PathBuf;
+
+#[derive(Debug, Default)]
+pub struct Settings {
+    pub db_path: PathBuf,
+    pub keypair_path: PathBuf,
+}
 
 /// Settings of an agent defined from configuration
 pub trait LoadableFromSettings: AsRef<Settings> + Sized {
@@ -32,9 +37,7 @@ pub trait BaseAgent: Send + Sync + std::fmt::Debug {
 /// lifecycle. This assumes only a single agent is being run. This will
 /// initialize the metrics server and tracing as well.
 #[allow(unexpected_cfgs)] // TODO: `rustc` 1.80.1 clippy issue
-pub async fn agent_main<A: BaseAgent>() -> anyhow::Result<()> {
-    let settings = A::Settings::load()?;
-
+pub async fn agent_main<A: BaseAgent>(settings: A::Settings) -> anyhow::Result<()> {
     let agent = A::from_settings(settings).await?;
 
     // This await will only end if a panic happens. We won't crash, but instead gracefully shut down

@@ -1,35 +1,58 @@
-use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, path::Path};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::Path,
+};
 
 use crate::types::{PublicKey, Stake, WorkerId};
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-pub struct NetworkInfos {
-    pub validators: Vec<ValidatorInfos>,
+// Helper trait for file operations
+pub trait FileLoader: Sized {
+    fn load_from_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Self>;
+    fn write_to_file<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()>;
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-pub struct ValidatorInfos {
-    pub pubkey: String,
-    pub workers: Vec<WorkerInfo>,
-    pub primary: PrimaryInfo,
+// Implementation for any type that can be serialized/deserialized
+impl<T: Serialize + for<'a> Deserialize<'a>> FileLoader for T {
+    fn load_from_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+        let file = std::fs::File::open(path)?;
+        let reader = std::io::BufReader::new(file);
+        Ok(serde_json::from_reader(reader)?)
+    }
+
+    fn write_to_file<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
+        let file = std::fs::File::create(path)?;
+        let writer = std::io::BufWriter::new(file);
+        Ok(serde_json::to_writer_pretty(writer, self)?)
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-pub struct WorkerInfo {
-    pub id: WorkerId,
-    pub pubkey: String,
-    pub address: String,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Committee {
+    pub authorities: BTreeMap<PublicKey, AuthorityInfo>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-pub struct PrimaryInfo {
-    pub id: u32,
-    pub pubkey: String,
-    pub address: String,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AuthorityInfo {
+    pub primary: PrimaryAddresses,
+    pub stake: Stake,
+    pub workers: HashMap<WorkerId, WorkerAddresses>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PrimaryAddresses {
+    pub primary_to_primary: String,
+    pub worker_to_primary: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct WorkerAddresses {
+    pub primary_to_worker: String,
+    pub transactions: String,
+    pub worker_to_worker: String,
+}
+
+// Instance specific configurations
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum InstanceConfig {
     Primary(PrimaryConfig),
@@ -38,10 +61,9 @@ pub enum InstanceConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WorkerConfig {
-    pub validator_pubkey: String,
-    pub id: u32,
+    pub validator_pubkey: PublicKey,
+    pub id: WorkerId,
     pub keypair: String,
-    pub pubkey: String,
     pub address: String,
     pub primary: PrimaryInfo,
     pub timeout: u64,        // in milliseconds
@@ -55,80 +77,24 @@ pub struct PrimaryConfig {
     pub address: String,
 }
 
-impl NetworkInfos {
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, anyhow::Error> {
-        let file = std::fs::File::open(path)?;
-        let reader = std::io::BufReader::new(file);
-        let config = serde_json::from_reader(reader)?;
-        Ok(config)
-    }
-
-    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), anyhow::Error> {
-        let file = std::fs::File::create(path)?;
-        let writer = std::io::BufWriter::new(file);
-        serde_json::to_writer_pretty(writer, self)?;
-        Ok(())
-    }
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PrimaryInfo {
+    pub address: String,
 }
 
-impl InstanceConfig {
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, anyhow::Error> {
-        let file = std::fs::File::open(path)?;
-        let reader = std::io::BufReader::new(file);
-        let config = serde_json::from_reader(reader)?;
-        Ok(config)
-    }
-
-    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), anyhow::Error> {
-        let file = std::fs::File::create(path)?;
-        let writer = std::io::BufWriter::new(file);
-        serde_json::to_writer_pretty(writer, self)?;
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PrimaryAddresses {
-    pub primary_address: Multiaddr,
-    pub network_key: String,
-    pub hostname: Multiaddr,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct WorkerAddresses {
-    pub primary_to_worker: Multiaddr,
-    pub worker_to_primary: Multiaddr,
-    pub network_key: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Authority {
-    pub protocol_key: String,
-    pub protocol_key_bytes: String,
-    pub stake: Stake,
-    pub primary_address: String,
-    pub network_key: String,
-    pub hostname: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Committee {
-    pub authorities: BTreeMap<PublicKey, Authority>,
-    pub epoch: u64,
-}
-
+// Examples of usage:
 impl Committee {
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, anyhow::Error> {
-        let file = std::fs::File::open(path)?;
-        let reader = std::io::BufReader::new(file);
-        let config = serde_json::from_reader(reader)?;
-        Ok(config)
+    pub fn get_primary_address(&self, authority_key: &PublicKey) -> Option<&String> {
+        self.authorities
+            .get(authority_key)
+            .map(|auth| &auth.primary.primary_to_primary)
     }
 
-    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), anyhow::Error> {
-        let file = std::fs::File::create(path)?;
-        let writer = std::io::BufWriter::new(file);
-        serde_json::to_writer_pretty(writer, self)?;
-        Ok(())
+    pub fn get_worker_address(
+        &self,
+        authority_key: &PublicKey,
+        worker_id: WorkerId,
+    ) -> Option<&WorkerAddresses> {
+        self.authorities.get(authority_key)?.workers.get(&worker_id)
     }
 }
