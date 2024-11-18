@@ -63,6 +63,12 @@ enum Command {
         #[clap(subcommand)]
         mode: NodeMode,
     },
+    /// Generate an ed25519 key pair
+    GenerateKeyPair {
+        /// Path where to save the key pair
+        #[clap(short, long, default_value = "keypair")]
+        keypair_path: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -105,6 +111,9 @@ async fn main() -> anyhow::Result<()> {
                 agent_main::<Worker>().await?;
             }
         },
+        Command::GenerateKeyPair { keypair_path } => {
+            utils::generate_keypair_and_write_to_file(&keypair_path)?;
+        }
     }
 
     Ok(())
