@@ -46,7 +46,7 @@ pub struct ReceivedBatch {
     pub sender: PeerId,
 }
 
-pub struct ReceivedAcknoledgement {
+pub struct ReceivedAcknowledgment {
     pub acknoledgement: BatchAcknowledgement,
     pub sender: PeerId,
 }

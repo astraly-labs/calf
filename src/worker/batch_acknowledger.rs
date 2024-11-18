@@ -2,12 +2,12 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{safe_send, types::{NetworkRequest, ReceivedBatch, RequestPayload}};
 
-pub struct BatchAcknoledger {
+pub struct Batchacknowledger {
     batches_rx: mpsc::Receiver<ReceivedBatch>,
     resquests_tx: mpsc::Sender<NetworkRequest>,
 }
 
-impl BatchAcknoledger {
+impl Batchacknowledger {
     #[must_use]
     pub fn spawn(
         batches_rx: mpsc::Receiver<ReceivedBatch>,

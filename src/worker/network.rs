@@ -22,15 +22,18 @@ use tokio::{
 };
 
 use crate::{safe_send, types::{
-    NetworkRequest, ReceivedAcknoledgement, ReceivedBatch, RequestPayload,
+    NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload,
 }};
 
 /// Agent version
 const AGENT_VERSION: &str = "peer/0.0.1";
 /// Protocol
+// Main protocol
 const MAIN_PROTOCOL: &str = "/calf/1";
-const COMPONENT_PROTOCOL: &str = "/worker/0.1";
-const VALIDATOR_KEY: &str = "/validator/11111";
+// Componenet Protocol /{worker/primary}/{id}
+const COMPONENT_PROTOCOL: &str = "/worker/1";
+// Handshake key
+const VALIDATOR_KEY: &str = "/key/11111";
 
 #[derive(NetworkBehaviour)]
 struct WorkerBehaviour {
@@ -49,7 +52,7 @@ pub(crate) struct Network {
     to_dial_send: mpsc::Sender<(PeerId, Multiaddr)>,
     to_dial_recv: mpsc::Receiver<(PeerId, Multiaddr)>,
     network_rx: mpsc::Receiver<NetworkRequest>,
-    received_ack_tx: mpsc::Sender<ReceivedAcknoledgement>,
+    received_ack_tx: mpsc::Sender<ReceivedAcknowledgment>,
     received_batches_tx: mpsc::Sender<ReceivedBatch>,
 }
 
@@ -57,7 +60,7 @@ impl Network {
     #[must_use]
     pub fn spawn(
         network_rx: mpsc::Receiver<NetworkRequest>,
-        received_ack_tx: mpsc::Sender<ReceivedAcknoledgement>,
+        received_ack_tx: mpsc::Sender<ReceivedAcknowledgment>,
         received_batches_tx: mpsc::Sender<ReceivedBatch>,
         local_key: Keypair,
     ) -> JoinHandle<()> {
@@ -223,7 +226,7 @@ impl Network {
                             }, "failed to send received batch from network");
                         }
                         RequestPayload::Acknoledgment(ack) => {
-                            safe_send!(self.received_ack_tx, ReceivedAcknoledgement {
+                            safe_send!(self.received_ack_tx, ReceivedAcknowledgment {
                                 acknoledgement: ack,
                                 sender: peer_id,
                             }, "failed to send acknoledgment from network");

@@ -1,4 +1,4 @@
-pub mod batch_acknoledger;
+pub mod batch_acknowledger;
 pub mod batch_broadcaster;
 pub mod batch_maker;
 pub mod network;
@@ -6,7 +6,7 @@ pub mod quorum_waiter;
 pub mod transaction_event_listener;
 
 use anyhow::Context;
-use batch_acknoledger::BatchAcknoledger;
+use batch_acknowledger::Batchacknowledger;
 use batch_broadcaster::BatchBroadcaster;
 use batch_maker::BatchMaker;
 use clap::{command, Parser};
@@ -22,7 +22,7 @@ use crate::{
     settings::parser::{InstanceConfig, NetworkInfos, WorkerConfig},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
-        ReceivedAcknoledgement,
+        ReceivedAcknowledgment,
     },
     utils,
 };
@@ -104,7 +104,7 @@ impl BaseAgent for Worker {
         let (batches_tx, batches_rx) = broadcast::channel(100);
         let (transactions_tx, transactions_rx) = mpsc::channel(100);
         let (network_tx, network_rx) = mpsc::channel(100);
-        let (received_ack_tx, received_ack_rx) = mpsc::channel::<ReceivedAcknoledgement>(100);
+        let (received_ack_tx, received_ack_rx) = mpsc::channel::<ReceivedAcknowledgment>(100);
         let (received_batches_tx, received_batches_rx) = mpsc::channel(100);
         let (digest_tx, _digest_rx) = mpsc::channel(100);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
@@ -134,7 +134,7 @@ impl BaseAgent for Worker {
             self.config.quorum_timeout.into(),
         );
 
-        let batch_acknoledger_task = BatchAcknoledger::spawn(received_batches_rx, network_tx);
+        let batch_acknoledger_handle = Batchacknowledger::spawn(received_batches_rx, network_tx);
 
         let res = tokio::try_join!(
             batchmaker_handle,
@@ -142,7 +142,7 @@ impl BaseAgent for Worker {
             transaction_event_listener_handle,
             worker_network_hadle,
             quorum_waiter_handle,
-            batch_acknoledger_task,
+            batch_acknowledger_task,
         );
 
         match res {

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tokio::task::JoinHandle;
 
 use crate::{
-    db::Db, safe_send, types::{ReceivedAcknoledgement, TxBatch}
+    db::Db, safe_send, types::{ReceivedAcknowledgment, TxBatch}
 };
 
 struct WaitingBatch {
@@ -26,7 +26,7 @@ impl WaitingBatch {
 
 pub struct QuorumWaiter {
     batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
-    acknolwedgements_rx: tokio::sync::mpsc::Receiver<ReceivedAcknoledgement>,
+    acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
     quorum_threshold: u32,
     digest_tx: tokio::sync::mpsc::Sender<blake3::Hash>,
     db: Arc<Db>,
@@ -37,7 +37,7 @@ impl QuorumWaiter {
     #[must_use]
     pub fn spawn(
         batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
-        acknolwedgements_rx: tokio::sync::mpsc::Receiver<ReceivedAcknoledgement>,
+        acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
         digest_tx: tokio::sync::mpsc::Sender<blake3::Hash>,
         db: Arc<Db>,
         quorum_threshold: u32,
@@ -46,7 +46,7 @@ impl QuorumWaiter {
         tokio::spawn(async move {
             Self {
                 batches_rx,
-                acknolwedgements_rx,
+                acknowledgments_rx,
                 quorum_threshold,
                 digest_tx,
                 db,
@@ -81,7 +81,7 @@ impl QuorumWaiter {
                         }
                     }
                 },
-                Some(ack) = self.acknolwedgements_rx.recv() => {
+                Some(ack) = self.acknowledgments_rx.recv() => {
                     let ack = ack.acknoledgement;
                     match batches.iter().position(|b| b.digest.as_bytes() == ack.as_slice()) {
                         Some(batch_index) => {
