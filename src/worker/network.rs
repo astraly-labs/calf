@@ -16,7 +16,9 @@ use libp2p::{
     },
     PeerId, StreamProtocol,
 };
+use std::sync::Arc;
 use tokio::{sync::mpsc, task::JoinHandle};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     safe_send,
@@ -31,7 +33,8 @@ const MAIN_PROTOCOL: &str = "/calf/1";
 // Componenet Protocol /{worker/primary}/{id}
 const COMPONENT_PROTOCOL: &str = "/worker/1";
 // Handshake key
-const VALIDATOR_KEY: &str = "/key/11111";
+// local peer id => encode avec ta keypair =>
+const VALIDATOR_KEY: &str = "/key/{}";
 
 #[derive(NetworkBehaviour)]
 struct WorkerBehaviour {
@@ -52,6 +55,7 @@ pub(crate) struct Network {
     network_rx: mpsc::Receiver<NetworkRequest>,
     received_ack_tx: mpsc::Sender<ReceivedAcknowledgment>,
     received_batches_tx: mpsc::Sender<ReceivedBatch>,
+    local_key: Keypair,
 }
 
 impl Network {
@@ -61,9 +65,14 @@ impl Network {
         received_ack_tx: mpsc::Sender<ReceivedAcknowledgment>,
         received_batches_tx: mpsc::Sender<ReceivedBatch>,
         local_key: Keypair,
+        cancellation_token: CancellationToken,
     ) -> JoinHandle<()> {
         let local_peer_id = PeerId::from(local_key.public());
         println!("local peer id: {local_peer_id}");
+        let signature = format!(
+            "/key/{:?}",
+            hex::encode(local_key.sign(&local_peer_id.to_bytes()).unwrap()).as_str()
+        );
 
         let (to_dial_send, to_dial_recv) = mpsc::channel::<(PeerId, Multiaddr)>(100);
 
@@ -79,10 +88,12 @@ impl Network {
                 },
                 mdns: {
                     let cfg = mdns::Config::default();
-                    mdns::tokio::Behaviour::new(cfg, key.public().to_peer_id()).expect("failed to convert publickey to peer id: shuting down")
+                    mdns::tokio::Behaviour::new(cfg, key.public().to_peer_id())
+                        .expect("failed to convert publickey to peer id: shuting down")
                 },
                 request_response: {
                     let cfg = request_response::Config::default().with_max_concurrent_streams(10);
+
                     request_response::cbor::Behaviour::<Vec<u8>, ()>::new(
                         [
                             (StreamProtocol::new(MAIN_PROTOCOL), ProtocolSupport::Full),
@@ -90,7 +101,10 @@ impl Network {
                                 StreamProtocol::new(COMPONENT_PROTOCOL),
                                 ProtocolSupport::Full,
                             ),
-                            (StreamProtocol::new(VALIDATOR_KEY), ProtocolSupport::Full),
+                            (
+                                StreamProtocol::try_from_owned(signature).unwrap(),
+                                ProtocolSupport::Full,
+                            ),
                         ],
                         cfg,
                     )
@@ -101,7 +115,7 @@ impl Network {
             .build();
 
         tokio::spawn(async move {
-            Self {
+            let mut this = Self {
                 swarm,
                 my_addr: Multiaddr::empty(),
                 seen: BTreeSet::new(),
@@ -113,13 +127,33 @@ impl Network {
                 received_batches_tx: received_batches_tx,
                 to_dial_send,
                 to_dial_recv,
+                local_key,
+            };
+
+            let run = this.run();
+
+            let res = cancellation_token.run_until_cancelled(run).await;
+
+            match res {
+                Some(res) => {
+                    match res {
+                        Ok(_) => {
+                            tracing::info!("worker network finished successfully");
+                        }
+                        Err(e) => {
+                            tracing::error!("worker network finished with an error: {e}");
+                        }
+                    };
+                    cancellation_token.cancel();
+                }
+                None => {
+                    tracing::info!("worker network has been cancelled");
+                }
             }
-            .run()
-            .await;
         })
     }
 
-    pub async fn run(&mut self) {
+    pub async fn run(&mut self) -> anyhow::Result<()> {
         self.swarm
             .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
             .unwrap();
@@ -181,19 +215,45 @@ impl Network {
 
     async fn handle_event(&mut self, event: SwarmEvent<WorkerBehaviourEvent>) {
         match event {
-            SwarmEvent::Behaviour(WorkerBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
+            SwarmEvent::Behaviour(WorkerBehaviourEvent::Identify(identify::Event::Received {
+                peer_id,
+                info,
+            })) => {
                 if peer_id != self.local_peer_id {
                     match info.protocols.get(2) {
-                        Some(_) => todo!(),
-                        None => todo!(),
-                    }
-
-                    if info.protocols= PROTOCOL.to_string() {
-                        println!("Peer {peer_id} speaks our protocol");
-                    } else {
-                        println!("{peer_id} doesn't speak our protocol");
-                        println!("disconnecting from {peer_id}");
-                        swarm.disconnect_peer_id(peer_id).expect(&format!("failed to disconnect from {peer_id}"));
+                        Some(key) => {
+                            let auth_key = key.to_string();
+                            if !auth_key.starts_with("/key/") {
+                                tracing::info!("key not found, disconnecting from {}", peer_id);
+                                self.swarm
+                                    .disconnect_peer_id(peer_id)
+                                    .expect(&format!("failed to disconnect from {peer_id}"));
+                            }
+                            // safe unwrap since we check befort that the string start with /key/
+                            let key = auth_key.strip_prefix("/key/").unwrap().to_string();
+                            if key.is_empty() {
+                                tracing::info!("key not found, disconnecting from {}", peer_id);
+                                self.swarm
+                                    .disconnect_peer_id(peer_id)
+                                    .expect(&format!("failed to disconnect from {peer_id}"));
+                            }
+                            // decode key
+                            let key = hex::decode(key).unwrap();
+                            let is_verified =
+                                self.local_key.public().verify(&peer_id.to_bytes(), &key);
+                            tracing::info!(
+                                "is verified {}, is {:?}, should be {:?}",
+                                is_verified,
+                                key,
+                                self.local_key.sign(&peer_id.to_bytes()).unwrap()
+                            );
+                        }
+                        None => {
+                            tracing::info!("key not found, disconnecting from {}", peer_id);
+                            self.swarm
+                                .disconnect_peer_id(peer_id)
+                                .expect(&format!("failed to disconnect from {peer_id}"));
+                        }
                     }
                 }
             }

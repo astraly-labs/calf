@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::Db,
@@ -44,22 +45,43 @@ impl QuorumWaiter {
         db: Arc<Db>,
         quorum_threshold: u32,
         quorum_timeout: u128,
+        cancellation_token: CancellationToken,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
-            Self {
-                batches_rx,
-                acknowledgments_rx,
-                quorum_threshold,
-                digest_tx,
-                db,
-                quorum_timeout,
+            let res = cancellation_token
+                .run_until_cancelled(
+                    Self {
+                        batches_rx,
+                        acknowledgments_rx,
+                        quorum_threshold,
+                        digest_tx,
+                        db,
+                        quorum_timeout,
+                    }
+                    .run(),
+                )
+                .await;
+
+            match res {
+                Some(res) => {
+                    match res {
+                        Ok(_) => {
+                            tracing::info!("Quorum Waiter finnished successfully");
+                        }
+                        Err(e) => {
+                            tracing::error!("Quorum Waiter finished with error: {:?}", e);
+                        }
+                    };
+                    cancellation_token.cancel();
+                }
+                None => {
+                    tracing::info!("Quorum Waiter cancelled");
+                }
             }
-            .run()
-            .await;
         })
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> anyhow::Result<()> {
         let mut batches = vec![];
         loop {
             tokio::select! {

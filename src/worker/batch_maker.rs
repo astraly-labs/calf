@@ -1,5 +1,6 @@
 use std::time::Duration;
 use tokio::{sync::mpsc::Receiver, task::JoinHandle};
+use tokio_util::sync::CancellationToken;
 
 use crate::types::{Transaction, TxBatch};
 
@@ -18,20 +19,41 @@ impl BatchMaker {
         transactions_rx: Receiver<Transaction>,
         timeout: u64,
         max_batch_size: usize,
+        cancellation_token: CancellationToken,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
-            Self {
-                batches_tx,
-                transactions_rx,
-                timeout,
-                max_batch_size,
-            }
-            .run()
-            .await;
+            let res = cancellation_token
+                .run_until_cancelled(
+                    Self {
+                        batches_tx,
+                        transactions_rx,
+                        timeout,
+                        max_batch_size,
+                    }
+                    .run(),
+                )
+                .await;
+
+            match res {
+                Some(res) => {
+                    match res {
+                        Ok(_) => {
+                            tracing::info!("Batch Maker finnished");
+                        }
+                        Err(e) => {
+                            tracing::error!("Batch Maker finished with error: {:?}", e);
+                        }
+                    };
+                    cancellation_token.cancel();
+                }
+                None => {
+                    tracing::info!("Batch Maker cancelled");
+                }
+            };
         })
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> anyhow::Result<()> {
         let mut current_batch: Vec<Transaction> = vec![];
         let mut current_batch_size = 0;
         let timer = tokio::time::sleep(Duration::from_millis(self.timeout));
@@ -55,7 +77,7 @@ impl BatchMaker {
 
                     if current_batch_size >= self.max_batch_size {
                         tracing::info!("batch size reached: worker sending batch of size {}", current_batch_size);
-                        send_batch(sender, std::mem::take(&mut current_batch)).await.expect("Failed to send batch");
+                        send_batch(sender, std::mem::take(&mut current_batch)).await?;
                         current_batch_size = 0;
                         timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_millis(self.timeout));
                     }
@@ -63,7 +85,7 @@ impl BatchMaker {
                 _ = &mut timer => {
                     if !current_batch.is_empty() {
                         tracing::info!("batch timeout reached: worker sending batch of size {}", current_batch_size);
-                        send_batch(sender, std::mem::take(&mut current_batch)).await.expect("Failed to send batch");
+                        send_batch(sender, std::mem::take(&mut current_batch)).await?;
 
                     }
                     tracing::info!("batch timeout reached... doing nothing");
@@ -111,8 +133,13 @@ mod test {
     fn launch_batch_maker() -> BatchMakerFixture {
         let (tx, rx) = mpsc::channel(CHANNEL_CAPACITY);
         let (batches_tx, batches_rx) = tokio::sync::broadcast::channel(CHANNEL_CAPACITY);
-
-        let handle = BatchMaker::spawn(batches_tx, rx, TIMEOUT, MAX_BATCH_SIZE);
+        let handle = BatchMaker::spawn(
+            batches_tx,
+            rx,
+            TIMEOUT,
+            MAX_BATCH_SIZE,
+            CancellationToken::new(),
+        );
 
         (tx, batches_rx, handle)
     }

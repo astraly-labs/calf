@@ -52,3 +52,9 @@ pub struct ReceivedAcknowledgment {
 }
 
 pub type TxBatch = Vec<Transaction>;
+
+#[derive(thiserror::Error, Debug)]
+pub enum SubAgentError {
+    #[error("Stopped by another agent")]
+    CancelledByAnother,
+}

@@ -6,7 +6,7 @@ pub mod quorum_waiter;
 pub mod transaction_event_listener;
 
 use anyhow::Context;
-use batch_acknowledger::Batchacknowledger;
+use batch_acknowledger::BatchAcknowledger;
 use batch_broadcaster::BatchBroadcaster;
 use batch_maker::BatchMaker;
 use clap::{command, Parser};
@@ -15,6 +15,7 @@ use network::Network as WorkerNetwork;
 use quorum_waiter::QuorumWaiter;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
+use tokio_util::sync::CancellationToken;
 use transaction_event_listener::TransactionEventListener;
 
 use crate::{
@@ -109,22 +110,28 @@ impl BaseAgent for Worker {
         let (digest_tx, _digest_rx) = mpsc::channel(100);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
 
+        let cancellation_token = CancellationToken::new();
+        // TODO: le passer à touts les agents
+
         let batchmaker_handle = BatchMaker::spawn(
             batches_tx,
             transactions_rx,
             self.config.timeout,
             self.config.batch_size,
+            cancellation_token.clone(),
         );
 
-        let batch_broadcaster_handle = BatchBroadcaster::spawn(batches_rx, network_tx.clone());
-
-        let transaction_event_listener_handle = TransactionEventListener::spawn(transactions_tx);
+        let batch_broadcaster_handle =
+            BatchBroadcaster::spawn(batches_rx, network_tx.clone(), cancellation_token.clone());
+        let transaction_event_listener_handle =
+            TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
 
         let worker_network_hadle = WorkerNetwork::spawn(
             network_rx,
             received_ack_tx,
             received_batches_tx,
             self.keypair,
+            cancellation_token.clone(),
         );
 
         let quorum_waiter_handle = QuorumWaiter::spawn(
@@ -134,9 +141,11 @@ impl BaseAgent for Worker {
             Arc::clone(&self.db),
             QUORUM_TRESHOLD,
             self.config.quorum_timeout.into(),
+            cancellation_token.clone(),
         );
 
-        let batch_acknoledger_handle = Batchacknowledger::spawn(received_batches_rx, network_tx);
+        let batch_acknowledger_handle =
+            BatchAcknowledger::spawn(received_batches_rx, network_tx, cancellation_token.clone());
 
         let res = tokio::try_join!(
             batchmaker_handle,
@@ -144,7 +153,7 @@ impl BaseAgent for Worker {
             transaction_event_listener_handle,
             worker_network_hadle,
             quorum_waiter_handle,
-            batch_acknoledger_handle,
+            batch_acknowledger_handle,
         );
 
         match res {

@@ -2,11 +2,9 @@ use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
 };
+use tokio_util::sync::CancellationToken;
 
-use crate::{
-    safe_send,
-    types::{NetworkRequest, RequestPayload, TxBatch},
-};
+use crate::types::{NetworkRequest, RequestPayload, TxBatch};
 
 pub(crate) struct BatchBroadcaster {
     batches_rx: broadcast::Receiver<TxBatch>,
@@ -18,26 +16,46 @@ impl BatchBroadcaster {
     pub fn spawn(
         batches_rx: broadcast::Receiver<TxBatch>,
         network_tx: mpsc::Sender<NetworkRequest>,
+        cancellation_token: CancellationToken,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
-            Self {
-                batches_rx,
-                network_tx,
-            }
-            .run()
-            .await
+            let res = cancellation_token
+                .run_until_cancelled(
+                    Self {
+                        batches_rx,
+                        network_tx,
+                    }
+                    .run(),
+                )
+                .await;
+
+            match res {
+                Some(res) => {
+                    match res {
+                        Ok(_) => {
+                            tracing::info!("BatchBroadcaster finnished");
+                        }
+                        Err(e) => {
+                            tracing::error!("BatchBroadcaster finished with Error: {:?}", e);
+                        }
+                    };
+                    cancellation_token.cancel();
+                }
+                None => {
+                    tracing::info!("BatchBroadcaster cancelled");
+                }
+            };
         })
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> anyhow::Result<()> {
         while let Ok(batch) = self.batches_rx.recv().await {
             tracing::info!("Broadcasting batch: {:?}", batch);
-            safe_send!(
-                self.network_tx,
-                NetworkRequest::Broadcast(RequestPayload::Batch(batch)),
-                "failed to broadcast batch"
-            );
+            self.network_tx
+                .send(NetworkRequest::Broadcast(RequestPayload::Batch(batch)))
+                .await?;
         }
+        Ok(())
     }
 }
 
