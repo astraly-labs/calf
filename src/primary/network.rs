@@ -18,10 +18,8 @@ use libp2p::{
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{
-    safe_send,
-    types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload},
-};
+use crate::
+    types::{NetworkRequest, RequestPayload};
 
 /// Agent version
 const AGENT_VERSION: &str = "peer/0.0.1";
@@ -121,7 +119,7 @@ impl Network {
                     self.dial_peer(peer_id, multiaddr).await;
                 },
                 event = self.swarm.select_next_some() => {
-                    self.handle_event(event).await;
+                    let res = self.handle_event(event).await;
                 },
                 Some(message) = self.network_rx.recv() => {
                     match message {
@@ -169,7 +167,7 @@ impl Network {
         Ok(())
     }
 
-    async fn handle_event(&mut self, event: SwarmEvent<PrimaryBehaviourEvent>) {
+    async fn handle_event(&mut self, event: SwarmEvent<PrimaryBehaviourEvent>) -> anyhow::Result<()> {
         match event {
             SwarmEvent::Behaviour(PrimaryBehaviourEvent::Mdns(event)) => match event {
                 mdns::Event::Discovered(list) => {
@@ -177,11 +175,9 @@ impl Network {
                         if peer_id != self.local_peer_id && self.seen.insert(peer_id) {
                             println!("mDNS discovered a new peer: {peer_id}");
                             if !self.out_peers.contains_key(&peer_id) {
-                                safe_send!(
-                                    self.to_dial_send,
-                                    (peer_id, multiaddr.clone()),
-                                    "failed to send to dial rx"
-                                );
+                                    self.to_dial_send.send(
+                                    (peer_id, multiaddr.clone())
+                                ).await?;
                             }
                         }
                     }
@@ -207,13 +203,7 @@ impl Network {
                     let peer_id = peer;
                     let req: Vec<u8> = request;
                     tracing::info!("request from {peer_id}: \"{:#?}\"", req);
-                    let decoded = match bincode::deserialize::<RequestPayload>(&req) {
-                        Ok(decoded) => decoded,
-                        Err(e) => {
-                            tracing::error!("failed to decode request: {e}");
-                            return;
-                        }
-                    };
+                    let decoded = bincode::deserialize::<RequestPayload>(&req)?;
                     tracing::info!("decoded request: {:#?}", decoded);
                     match decoded {
                         RequestPayload::Batch(batch) => {}
@@ -264,5 +254,6 @@ impl Network {
             }
             _ => {}
         }
+        Ok(())
     }
 }

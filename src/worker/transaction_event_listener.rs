@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::{safe_send, types::Transaction};
+use crate::types::Transaction;
 use crossterm::event::{Event, EventStream, KeyCode};
 use futures_timer::Delay;
 use tokio::sync::mpsc;
@@ -54,7 +54,7 @@ impl TransactionEventListener {
                     match maybe_event {
                         Some(Ok(event)) => {
                             if event == Event::Key(KeyCode::Char('t').into()) {
-                                safe_send!(self.tx, transaction.clone(), "failed to send transaction");
+                                self.tx.send(transaction.clone()).await?;
                                 tracing::info!("transaction sent");
                             }
 

@@ -4,7 +4,6 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::Db,
-    safe_send,
     types::{ReceivedAcknowledgment, TxBatch},
 };
 
@@ -113,7 +112,7 @@ impl QuorumWaiter {
                             batch.ack_number += 1;
                             if batch.ack_number >= self.quorum_threshold {
                                 tracing::info!("Batch is now confirmed: {:?}", batch.digest);
-                                safe_send!(self.digest_tx, batch.digest, "failed to send digest from quorum waiter");
+                                self.digest_tx.send(batch.digest).await?;
                                 match self.db.insert(crate::db::Column::Batches, &batch.digest.to_string(), &batch.batch) {
                                     Ok(_) => {
                                         tracing::info!("Batch inserted in DB");

@@ -1,10 +1,7 @@
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    safe_send,
-    types::{NetworkRequest, ReceivedBatch, RequestPayload},
-};
+use crate::types::{NetworkRequest, ReceivedBatch, RequestPayload};
 
 pub struct BatchAcknowledger {
     batches_rx: mpsc::Receiver<ReceivedBatch>,
@@ -52,14 +49,12 @@ impl BatchAcknowledger {
         while let Some(batch) = self.batches_rx.recv().await {
             tracing::info!("Received batch from {}", batch.sender);
             let digest = blake3::hash(&bincode::serialize(&batch.batch)?);
-            safe_send!(
-                self.resquests_tx,
+                self.resquests_tx.send(
                 NetworkRequest::SendTo(
                     batch.sender,
                     RequestPayload::Acknoledgment(digest.as_bytes().to_vec()),
                 ),
-                "failed to send acknoledgment"
-            );
+            ).await?;
         }
         Ok(())
     }
