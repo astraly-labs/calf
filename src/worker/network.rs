@@ -81,7 +81,7 @@ impl Network {
                 },
                 mdns: {
                     let cfg = mdns::Config::default();
-                    mdns::tokio::Behaviour::new(cfg, key.public().to_peer_id()).unwrap()
+                    mdns::tokio::Behaviour::new(cfg, key.public().to_peer_id()).expect("failed to convert publickey to peer id: shuting down")
                 },
                 request_response: {
                     let cfg = request_response::Config::default().with_max_concurrent_streams(10);
@@ -178,6 +178,22 @@ impl Network {
 
     async fn handle_event(&mut self, event: SwarmEvent<WorkerBehaviourEvent>) {
         match event {
+            SwarmEvent::Behaviour(WorkerBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
+                if peer_id != self.local_peer_id {
+                    match info.protocols.get(2) {
+                        Some(_) => todo!(),
+                        None => todo!(),
+                    }
+
+                    if info.protocols= PROTOCOL.to_string() {
+                        println!("Peer {peer_id} speaks our protocol");
+                    } else {
+                        println!("{peer_id} doesn't speak our protocol");
+                        println!("disconnecting from {peer_id}");
+                        swarm.disconnect_peer_id(peer_id).expect(&format!("failed to disconnect from {peer_id}"));
+                    }
+                }
+            }
             SwarmEvent::Behaviour(WorkerBehaviourEvent::Mdns(event)) => match event {
                 mdns::Event::Discovered(list) => {
                     for (peer_id, multiaddr) in list {
