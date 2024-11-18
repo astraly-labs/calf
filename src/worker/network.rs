@@ -23,7 +23,7 @@ use tokio_util::sync::CancellationToken;
 use crate::types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload};
 
 /// Agent version
-const AGENT_VERSION: &str = "peer/0.0.1";
+const AGENT_VERSION: &str = "narwals/0.0.1";
 /// Protocol
 // Main protocol
 const MAIN_PROTOCOL: &str = "/calf/1";
@@ -52,7 +52,7 @@ pub(crate) struct Network {
     network_rx: mpsc::Receiver<NetworkRequest>,
     received_ack_tx: mpsc::Sender<ReceivedAcknowledgment>,
     received_batches_tx: mpsc::Sender<ReceivedBatch>,
-    local_key: Keypair,
+    validator_key: Keypair,
 }
 
 impl Network {
@@ -62,13 +62,14 @@ impl Network {
         received_ack_tx: mpsc::Sender<ReceivedAcknowledgment>,
         received_batches_tx: mpsc::Sender<ReceivedBatch>,
         local_key: Keypair,
+        validator_key: Keypair,
         cancellation_token: CancellationToken,
     ) -> JoinHandle<()> {
         let local_peer_id = PeerId::from(local_key.public());
         println!("local peer id: {local_peer_id}");
         let signature = format!(
-            "/key/{:?}",
-            hex::encode(local_key.sign(&local_peer_id.to_bytes()).unwrap()).as_str()
+            "/key/{}",
+            hex::encode(validator_key.sign(&local_peer_id.to_bytes()).unwrap())
         );
 
         let (to_dial_send, to_dial_recv) = mpsc::channel::<(PeerId, Multiaddr)>(100);
@@ -124,7 +125,7 @@ impl Network {
                 received_batches_tx: received_batches_tx,
                 to_dial_send,
                 to_dial_recv,
-                local_key,
+                validator_key,
             };
 
             let run = this.run();
@@ -220,7 +221,15 @@ impl Network {
                 info,
             })) => {
                 if peer_id != self.local_peer_id {
-                    match info.protocols.get(2) {
+                    if info.protocol_version != MAIN_PROTOCOL {
+                        tracing::info!("protocol missmatch, disconnecting from {}", info.protocol_version);
+                                self.swarm
+                                    .disconnect_peer_id(peer_id)
+                                    .expect(&format!("failed to disconnect from {peer_id}"));
+                        return Ok(());
+                    }
+                    tracing::info!("🚨🚨 info.protocols : {:?}", info.protocols);
+                    match info.protocols.iter().find(|s| s.to_string().starts_with("/key/")) {
                         Some(key) => {
                             let auth_key = key.to_string();
                             if !auth_key.starts_with("/key/") {
@@ -228,24 +237,28 @@ impl Network {
                                 self.swarm
                                     .disconnect_peer_id(peer_id)
                                     .expect(&format!("failed to disconnect from {peer_id}"));
+                                return Ok(());
                             }
                             // safe unwrap since we check befort that the string start with /key/
+                            tracing::info!("auth_key {}",auth_key);
                             let key = auth_key.strip_prefix("/key/").unwrap().to_string();
                             if key.is_empty() {
                                 tracing::info!("key not found, disconnecting from {}", peer_id);
                                 self.swarm
                                     .disconnect_peer_id(peer_id)
                                     .expect(&format!("failed to disconnect from {peer_id}"));
+                                return Ok(());
                             }
                             // decode key
+                            tracing::info!("key => {:?}", key);
                             let key = hex::decode(key).unwrap();
                             let is_verified =
-                                self.local_key.public().verify(&peer_id.to_bytes(), &key);
+                                self.validator_key.public().verify(&peer_id.to_bytes(), &key);
                             tracing::info!(
-                                "is verified {}, is {:?}, should be {:?}",
+                                "🎉 is verified {}, is {:?}, should be {:?}",
                                 is_verified,
                                 key,
-                                self.local_key.sign(&peer_id.to_bytes()).unwrap()
+                                self.validator_key.sign(&peer_id.to_bytes()).unwrap()
                             );
                         }
                         None => {

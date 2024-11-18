@@ -24,6 +24,9 @@ pub struct PrimaryArgs {
     /// Path to the keypair file
     #[arg(short, long, default_value = "keypair")]
     pub keypair_path: PathBuf,
+    /// Path to the validator keypair file
+    #[arg(short, long, default_value = "validator_keypair")]
+    pub validator_keypair_path: PathBuf,
 }
 
 /// Settings for `Primary`
@@ -45,6 +48,7 @@ impl LoadableFromSettings for PrimarySettings {
             base: Settings {
                 db_path: cli.db_path,
                 keypair_path: cli.keypair_path,
+                validator_keypair_path: cli.validator_keypair_path,
             },
         })
     }
