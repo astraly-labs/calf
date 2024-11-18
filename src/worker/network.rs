@@ -16,14 +16,12 @@ use libp2p::{
     },
     PeerId, StreamProtocol,
 };
-use tokio::{
-    sync::mpsc,
-    task::JoinHandle,
-};
+use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{safe_send, types::{
-    NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload,
-}};
+use crate::{
+    safe_send,
+    types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload},
+};
 
 /// Agent version
 const AGENT_VERSION: &str = "peer/0.0.1";
@@ -86,9 +84,14 @@ impl Network {
                 request_response: {
                     let cfg = request_response::Config::default().with_max_concurrent_streams(10);
                     request_response::cbor::Behaviour::<Vec<u8>, ()>::new(
-                        [(StreamProtocol::new(MAIN_PROTOCOL), ProtocolSupport::Full),
-                        (StreamProtocol::new(COMPONENT_PROTOCOL), ProtocolSupport::Full),
-                        (StreamProtocol::new(VALIDATOR_KEY), ProtocolSupport::Full)],
+                        [
+                            (StreamProtocol::new(MAIN_PROTOCOL), ProtocolSupport::Full),
+                            (
+                                StreamProtocol::new(COMPONENT_PROTOCOL),
+                                ProtocolSupport::Full,
+                            ),
+                            (StreamProtocol::new(VALIDATOR_KEY), ProtocolSupport::Full),
+                        ],
                         cfg,
                     )
                 },
@@ -200,7 +203,11 @@ impl Network {
                         if peer_id != self.local_peer_id && self.seen.insert(peer_id) {
                             println!("mDNS discovered a new peer: {peer_id}");
                             if !self.out_peers.contains_key(&peer_id) {
-                                safe_send!(self.to_dial_send, (peer_id, multiaddr.clone()), "failed to send to dial rx");
+                                safe_send!(
+                                    self.to_dial_send,
+                                    (peer_id, multiaddr.clone()),
+                                    "failed to send to dial rx"
+                                );
                             }
                         }
                     }
@@ -236,17 +243,24 @@ impl Network {
                     tracing::info!("decoded request: {:#?}", decoded);
                     match decoded {
                         RequestPayload::Batch(batch) => {
-                            safe_send!(self.received_batches_tx, ReceivedBatch {
-                                batch,
-                                sender: peer_id,
-                            }, "failed to send received batch from network");
+                            safe_send!(
+                                self.received_batches_tx,
+                                ReceivedBatch {
+                                    batch,
+                                    sender: peer_id,
+                                },
+                                "failed to send received batch from network"
+                            );
                         }
                         RequestPayload::Acknoledgment(ack) => {
-                            safe_send!(self.received_ack_tx, ReceivedAcknowledgment {
-                                acknoledgement: ack,
-                                sender: peer_id,
-                            }, "failed to send acknoledgment from network");
-
+                            safe_send!(
+                                self.received_ack_tx,
+                                ReceivedAcknowledgment {
+                                    acknoledgement: ack,
+                                    sender: peer_id,
+                                },
+                                "failed to send acknoledgment from network"
+                            );
                         }
                     }
                 }

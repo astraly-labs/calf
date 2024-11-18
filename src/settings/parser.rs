@@ -42,7 +42,7 @@ pub struct WorkerConfig {
     pub pubkey: String,
     pub address: String,
     pub primary: PrimaryInfo,
-    pub timeout: u64, // in milliseconds
+    pub timeout: u64,        // in milliseconds
     pub quorum_timeout: u64, // in milliseconds
     pub batch_size: usize,
 }
