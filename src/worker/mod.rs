@@ -3,7 +3,6 @@ pub mod batch_broadcaster;
 pub mod batch_maker;
 pub mod network;
 pub mod quorum_waiter;
-pub mod synchronizer;
 pub mod transaction_event_listener;
 
 use anyhow::Context;
