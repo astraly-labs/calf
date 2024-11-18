@@ -64,54 +64,63 @@ impl Network {
         local_key: Keypair,
         cancellation_token: CancellationToken,
     ) -> JoinHandle<()> {
-        let local_peer_id = PeerId::from(local_key.public());
-        println!("local peer id: {local_peer_id}");
-        let signature = format!(
-            "/key/{:?}",
-            hex::encode(local_key.sign(&local_peer_id.to_bytes()).unwrap()).as_str()
-        );
-
-        let (to_dial_send, to_dial_recv) = mpsc::channel::<(PeerId, Multiaddr)>(100);
-
-        let swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
-            .with_tokio()
-            .with_quic()
-            .with_behaviour(|key| WorkerBehaviour {
-                identify: {
-                    let cfg = identify::Config::new(MAIN_PROTOCOL.to_string(), key.public())
-                        .with_push_listen_addr_updates(true)
-                        .with_agent_version(AGENT_VERSION.to_string());
-                    identify::Behaviour::new(cfg)
-                },
-                mdns: {
-                    let cfg = mdns::Config::default();
-                    mdns::tokio::Behaviour::new(cfg, key.public().to_peer_id())
-                        .expect("failed to convert publickey to peer id: shuting down")
-                },
-                request_response: {
-                    let cfg = request_response::Config::default().with_max_concurrent_streams(10);
-
-                    request_response::cbor::Behaviour::<Vec<u8>, ()>::new(
-                        [
-                            (StreamProtocol::new(MAIN_PROTOCOL), ProtocolSupport::Full),
-                            (
-                                StreamProtocol::new(COMPONENT_PROTOCOL),
-                                ProtocolSupport::Full,
-                            ),
-                            (
-                                StreamProtocol::try_from_owned(signature).unwrap(),
-                                ProtocolSupport::Full,
-                            ),
-                        ],
-                        cfg,
-                    )
-                },
-            })
-            .unwrap()
-            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
-            .build();
-
         tokio::spawn(async move {
+            let local_peer_id = PeerId::from(local_key.public());
+            println!("local peer id: {local_peer_id}");
+            let signature = format!(
+                "/key/{:?}",
+                hex::encode(local_key.sign(&local_peer_id.to_bytes()).unwrap()).as_str()
+            );
+
+            let (to_dial_send, to_dial_recv) = mpsc::channel::<(PeerId, Multiaddr)>(100);
+
+            let mdns_config = match mdns::tokio::Behaviour::new(
+                mdns::Config::default(),
+                local_key.public().to_peer_id(),
+            ) {
+                Ok(mdns) => mdns,
+                Err(e) => {
+                    tracing::error!("failed to create mdns behaviour: exiting {e}");
+                    cancellation_token.cancel();
+                    return;
+                }
+            };
+
+            let swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
+                .with_tokio()
+                .with_quic()
+                .with_behaviour(|key| WorkerBehaviour {
+                    identify: {
+                        let cfg = identify::Config::new(MAIN_PROTOCOL.to_string(), key.public())
+                            .with_push_listen_addr_updates(true)
+                            .with_agent_version(AGENT_VERSION.to_string());
+                        identify::Behaviour::new(cfg)
+                    },
+                    mdns: mdns_config,
+                    request_response: {
+                        let cfg =
+                            request_response::Config::default().with_max_concurrent_streams(10);
+
+                        request_response::cbor::Behaviour::<Vec<u8>, ()>::new(
+                            [
+                                (StreamProtocol::new(MAIN_PROTOCOL), ProtocolSupport::Full),
+                                (
+                                    StreamProtocol::new(COMPONENT_PROTOCOL),
+                                    ProtocolSupport::Full,
+                                ),
+                                (
+                                    StreamProtocol::try_from_owned(signature).unwrap(),
+                                    ProtocolSupport::Full,
+                                ),
+                            ],
+                            cfg,
+                        )
+                    },
+                })
+                .unwrap()
+                .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+                .build();
+
             let mut this = Self {
                 swarm,
                 my_addr: Multiaddr::empty(),
