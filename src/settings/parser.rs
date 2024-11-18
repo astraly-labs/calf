@@ -43,6 +43,7 @@ pub struct WorkerConfig {
     pub address: String,
     pub primary: PrimaryInfo,
     pub timeout: u64, // in milliseconds
+    pub quorum_timeout: u64, // in milliseconds
     pub batch_size: usize,
 }
 
@@ -83,5 +84,3 @@ impl InstanceConfig {
         Ok(())
     }
 }
-
-// Remplacer les String par un type keypair serialisable (celui de la libp2p ne l'est pas)

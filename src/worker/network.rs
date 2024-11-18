@@ -22,8 +22,7 @@ use tokio::{
 };
 
 use crate::types::{
-    BatchAcknowledgement, NetworkRequest, ReceivedAcknoledgement, ReceivedBatch, RequestPayload,
-    TxBatch,
+    NetworkRequest, ReceivedAcknoledgement, ReceivedBatch, RequestPayload,
 };
 
 /// Agent version
@@ -233,18 +232,6 @@ impl Network {
                                 .expect("failed to send ack");
                         }
                     }
-                    // osef ?
-                    // let address = self
-                    //     .out_peers
-                    //     .get(&peer_id)
-                    //     .unwrap_or(self.in_peers.get(&peer_id).unwrap_or(&Multiaddr::empty()))
-                    //     .clone();
-                    // self.swarm
-                    //     .behaviour_mut()
-                    //     .request_response
-                    //     .send_response(channel, ())
-                    //     .expect("peer connection closed?");
-                    // println!(" -> replied: \"Hello Back!!\"");
                 }
                 request_response::Message::Response { response, .. } => {
                     let peer_id = peer;

@@ -1,10 +1,8 @@
-use futures_util::future::try_join_all;
 use std::time::Duration;
 use tokio::{
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::Receiver,
     task::JoinHandle,
 };
-use tracing::Instrument;
 
 use crate::types::{Transaction, TxBatch};
 
@@ -17,60 +15,32 @@ pub(crate) struct BatchMaker {
 }
 
 impl BatchMaker {
-    pub fn new(
-        batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
+    #[must_use]
+    pub fn spawn(batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
         transactions_rx: Receiver<Transaction>,
         timeout: u64,
-        max_batch_size: usize,
-    ) -> Self {
-        Self {
-            batches_tx,
-            transactions_rx,
-            timeout,
-            max_batch_size,
-        }
+        max_batch_size: usize,)-> JoinHandle<()>
+    {
+        tokio::spawn(async move {
+            Self {
+                batches_tx,
+                transactions_rx,
+                timeout,
+                max_batch_size,
+            }
+            .run().await;
+        })
     }
 
-    pub fn spawn(self) -> JoinHandle<()> {
-        tokio::spawn(self.run().instrument(tracing::info_span!("batch_maker")))
-    }
-
-    pub async fn run(self) {
-        let Self {
-            batches_tx,
-            transactions_rx,
-            timeout,
-            max_batch_size,
-        } = self;
-
-        let tasks = vec![tokio::spawn(receive_task(
-            batches_tx,
-            transactions_rx,
-            max_batch_size,
-            timeout,
-        ))];
-
-        if let Err(e) = try_join_all(tasks).await {
-            tracing::error!("Error in BatchMaker: {:?}", e);
-        }
-    }
-}
-
-#[tracing::instrument(skip_all, fields(%max_batch_size, %timeout))]
-async fn receive_task(
-    batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
-    mut rx: Receiver<Transaction>,
-    max_batch_size: usize,
-    timeout: u64,
-) {
-    let mut current_batch: Vec<Transaction> = vec![];
+    pub async fn run(mut self) {
+        let mut current_batch: Vec<Transaction> = vec![];
     let mut current_batch_size = 0;
-    let timer = tokio::time::sleep(Duration::from_millis(timeout));
+    let timer = tokio::time::sleep(Duration::from_millis(self.timeout));
     tokio::pin!(timer);
     loop {
-        let sender = batches_tx.clone();
+        let sender = self.batches_tx.clone();
         tokio::select! {
-            Some(tx) = rx.recv() => {
+            Some(tx) = self.transactions_rx.recv() => {
                 tracing::info!("received transaction: {:?}", tx);
                 let serialized_tx = match bincode::serialize(&tx) {
                     Ok(serialized) => serialized,
@@ -84,11 +54,11 @@ async fn receive_task(
                 current_batch.push(tx);
                 current_batch_size += tx_size;
 
-                if current_batch_size >= max_batch_size {
+                if current_batch_size >= self.max_batch_size {
                     tracing::info!("batch size reached: worker sending batch of size {}", current_batch_size);
                     send_batch(sender, std::mem::take(&mut current_batch)).await.expect("Failed to send batch");
                     current_batch_size = 0;
-                    timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout));
+                    timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_millis(self.timeout));
                 }
             },
             _ = &mut timer => {
@@ -98,9 +68,10 @@ async fn receive_task(
 
                 }
                 tracing::info!("batch timeout reached... doing nothing");
-                timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout));
+                timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_millis(self.timeout));
             }
         }
+    }
     }
 }
 
@@ -132,7 +103,7 @@ mod test {
     }
 
     type BatchMakerFixture = (
-        Sender<Transaction>,
+        mpsc::Sender<Transaction>,
         tokio::sync::broadcast::Receiver<TxBatch>,
         JoinHandle<()>,
     );
@@ -142,14 +113,10 @@ mod test {
         let (tx, rx) = mpsc::channel(CHANNEL_CAPACITY);
         let (batches_tx, batches_rx) = tokio::sync::broadcast::channel(CHANNEL_CAPACITY);
 
-        let batch_maker = BatchMaker {
-            batches_tx,
-            transactions_rx: rx,
-            timeout: TIMEOUT,
-            max_batch_size: MAX_BATCH_SIZE,
-        };
-
-        let handle = batch_maker.spawn();
+        let handle = BatchMaker::spawn(batches_tx,
+            rx,
+            TIMEOUT,
+            MAX_BATCH_SIZE,);
 
         (tx, batches_rx, handle)
     }

@@ -1,19 +1,21 @@
+pub mod batch_acknoledger;
 pub mod batch_broadcaster;
 pub mod batch_maker;
 pub mod network;
+pub mod quorum_waiter;
 pub mod synchronizer;
+pub mod transaction_event_listener;
 
 use anyhow::Context;
-use batch_broadcaster::{quorum_waiter_task, BatchBroadcaster};
+use batch_acknoledger::BatchAcknoledger;
+use batch_broadcaster::BatchBroadcaster;
 use batch_maker::BatchMaker;
 use clap::{command, Parser};
-use crossterm::event::{Event, EventStream, KeyCode};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
-use futures::{FutureExt as _, StreamExt as _};
-use futures_timer::Delay;
-use futures_util::future::try_join_all;
 use network::Network as WorkerNetwork;
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use quorum_waiter::QuorumWaiter;
+use transaction_event_listener::TransactionEventListener;
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::{
@@ -21,7 +23,7 @@ use crate::{
     settings::parser::{InstanceConfig, NetworkInfos, WorkerConfig},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
-        NetworkRequest, ReceivedAcknoledgement, ReceivedBatch, RequestPayload, Transaction,
+        ReceivedAcknoledgement,
     },
     utils,
 };
@@ -100,7 +102,6 @@ impl BaseAgent for Worker {
     }
 
     async fn run(mut self) {
-        let mut tasks = vec![];
         let (batches_tx, batches_rx) = broadcast::channel(100);
         let (transactions_tx, transactions_rx) = mpsc::channel(100);
         let (network_tx, network_rx) = mpsc::channel(100);
@@ -109,100 +110,46 @@ impl BaseAgent for Worker {
         let (digest_tx, _digest_rx) = mpsc::channel(100);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
 
-        // Spawn BatchMaker
-        let batch_maker = BatchMaker::new(
-            batches_tx,
+        let batchmaker_handle = BatchMaker::spawn(batches_tx,
             transactions_rx,
             self.config.timeout,
-            self.config.batch_size,
+            self.config.batch_size);
+
+        let batch_broadcaster_handle = BatchBroadcaster::spawn(batches_rx, network_tx.clone());
+
+        let transaction_event_listener_handle = TransactionEventListener::spawn(transactions_tx);
+
+        let worker_network_hadle = WorkerNetwork::spawn(
+            network_rx,
+            received_ack_tx,
+            received_batches_tx,
+            self.keypair,
         );
-        tasks.push(tokio::spawn(async move { batch_maker.spawn().await }));
 
-        // Spawn BatchBroadcaster
-        let batch_broadcaster = BatchBroadcaster::new(batches_rx, network_tx.clone());
-        tasks.push(tokio::spawn(async move { batch_broadcaster.spawn().await }));
+        let quorum_waiter_handle = QuorumWaiter::spawn(
+            quorum_waiter_batches_rx,
+            received_ack_rx,
+            digest_tx,
+            Arc::clone(&self.db),
+            QUORUM_TRESHOLD,
+            self.config.quorum_timeout.into(),
+        );
 
-        tasks.push(tokio::spawn(async move {
-            tokio::spawn(transaction_event_listener_task(transactions_tx)).await
-        }));
+        let batch_acknoledger_task = BatchAcknoledger::spawn(received_batches_rx, network_tx);
 
-        tasks.push(tokio::spawn(async move {
-            WorkerNetwork::spawn(
-                network_rx,
-                received_ack_tx,
-                received_batches_tx,
-                self.keypair,
-            )
-            .await
-        }));
+        let res = tokio::try_join!(
+            batchmaker_handle,
+            batch_broadcaster_handle,
+            transaction_event_listener_handle,
+            worker_network_hadle,
+            quorum_waiter_handle,
+            batch_acknoledger_task,
+        );
 
-        tasks.push(tokio::spawn(async move {
-            tokio::spawn(quorum_waiter_task(
-                quorum_waiter_batches_rx,
-                received_ack_rx,
-                QUORUM_TRESHOLD,
-                digest_tx,
-                Arc::clone(&self.db),
-            ))
-            .await
-        }));
-
-        tasks.push(tokio::spawn(async move {
-            tokio::spawn(batch_acknoledgement_task(received_batches_rx, network_tx)).await
-        }));
-
-        if let Err(e) = try_join_all(tasks).await {
-            tracing::error!("Error in Worker: {:?}", e);
+        match res {
+            Ok(_) => tracing::info!("Worker exited successfully"),
+            Err(e) => tracing::error!("Worker exited with error: {:?}", e),
         }
     }
 }
 
-#[tracing::instrument(skip_all)]
-async fn batch_acknoledgement_task(
-    mut batches_rx: mpsc::Receiver<ReceivedBatch>,
-    resquests_tx: mpsc::Sender<NetworkRequest>,
-) {
-    while let Some(batch) = batches_rx.recv().await {
-        tracing::info!("Received batch from {}", batch.sender);
-        let digest = blake3::hash(&bincode::serialize(&batch.batch).expect("TODO: erreur"));
-        resquests_tx
-            .send(NetworkRequest::SendTo(
-                batch.sender,
-                RequestPayload::Acknoledgment(digest.as_bytes().to_vec()),
-            ))
-            .await
-            .unwrap();
-    }
-}
-
-#[tracing::instrument(skip_all)]
-async fn transaction_event_listener_task(tx: mpsc::Sender<Transaction>) {
-    let transaction = Transaction { data: vec![1; 100] };
-
-    let mut reader = EventStream::new();
-
-    loop {
-        let delay = Delay::new(Duration::from_millis(1_000)).fuse();
-        let event = reader.next().fuse();
-
-        tokio::select! {
-            _ = delay => { },
-            maybe_event = event => {
-                match maybe_event {
-                    Some(Ok(event)) => {
-                        if event == Event::Key(KeyCode::Char('t').into()) {
-                            tx.send(transaction.clone()).await.unwrap();
-                            tracing::info!("transaction sent");
-                        }
-
-                        if event == Event::Key(KeyCode::Esc.into()) {
-                            break;
-                        }
-                    }
-                    Some(Err(e)) => tracing::error!("Transaction Sender Error: {:?}\r", e),
-                    None => break,
-                }
-            }
-        };
-    }
-}

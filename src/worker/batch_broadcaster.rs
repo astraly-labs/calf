@@ -1,146 +1,42 @@
-use std::sync::Arc;
 
-use futures_util::future::try_join_all;
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
 };
-use tracing::Instrument;
 
-use crate::{
-    db::Db,
+use crate::
     types::{
-        BatchAcknowledgement, NetworkRequest, ReceivedAcknoledgement, RequestPayload, TxBatch,
-    },
-};
-// ARBITRAIRE !!!
-const BATCH_QUORUM_TIMEOUT: u128 = 100; //ms
+        NetworkRequest, RequestPayload, TxBatch,
+    };
+
 pub(crate) struct BatchBroadcaster {
-    batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
+    batches_rx: broadcast::Receiver<TxBatch>,
     network_tx: mpsc::Sender<NetworkRequest>,
 }
 
 impl BatchBroadcaster {
-    pub fn new(
-        batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
+    #[must_use]
+    pub fn spawn(
+        batches_rx: broadcast::Receiver<TxBatch>,
         network_tx: mpsc::Sender<NetworkRequest>,
-    ) -> Self {
-        Self {
-            batches_rx,
-            network_tx,
-        }
-    }
-
-    pub fn spawn(self) -> JoinHandle<()> {
-        tokio::spawn(
-            self.run()
-                .instrument(tracing::info_span!("batch_broadcaster")),
-        )
-    }
-
-    pub async fn run(self) {
-        let Self {
-            batches_rx,
-            network_tx,
-        } = self;
-
-        let tasks = vec![tokio::spawn(broadcast_task(batches_rx, network_tx))];
-
-        if let Err(e) = try_join_all(tasks).await {
-            tracing::error!("Error in BatchBroadcaster: {:?}", e);
-        }
-    }
-}
-
-#[tracing::instrument(skip_all)]
-async fn broadcast_task(
-    mut rx: tokio::sync::broadcast::Receiver<TxBatch>,
-    network_tx: mpsc::Sender<NetworkRequest>,
-) {
-    while let Ok(batch) = rx.recv().await {
-        tracing::info!("Broadcasting batch: {:?}", batch);
-        network_tx
-            .send(NetworkRequest::Broadcast(RequestPayload::Batch(batch)))
-            .await
-            .expect("Failed to broadcast batch");
-    }
-}
-
-struct WaitingBatch {
-    ack_number: u32,
-    batch: TxBatch,
-    digest: blake3::Hash,
-    timestamp: tokio::time::Instant,
-}
-
-impl WaitingBatch {
-    fn new(batch: TxBatch) -> Self {
-        let digest = blake3::hash(&bincode::serialize(&batch).expect("batch hash failed"));
-        Self {
-            ack_number: 0,
-            batch,
-            digest,
-            timestamp: tokio::time::Instant::now(),
-        }
-    }
-}
-
-#[tracing::instrument(skip_all)]
-pub async fn quorum_waiter_task(
-    mut batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
-    mut acknolwedgements_rx: tokio::sync::mpsc::Receiver<ReceivedAcknoledgement>,
-    quorum_threshold: u32,
-    digest_tx: tokio::sync::mpsc::Sender<blake3::Hash>,
-    db: Arc<Db>,
-) {
-    let mut batches = vec![];
-    loop {
-        tokio::select! {
-            Ok(batch) = batches_rx.recv() => {
-                let waiting_batch = WaitingBatch::new(batch);
-                if batches.iter().any(|elm: &WaitingBatch| {
-                    elm.digest.as_bytes() == waiting_batch.digest.as_bytes()
-                }) {
-                    tracing::warn!("Received duplicate batch");
-                }
-                else {
-                    batches.push(waiting_batch);
-                    tracing::info!("Received new batch");
-                }
-                let now = tokio::time::Instant::now();
-                //perfectible ? rayon ? plein de timers dans le select ?
-                for i in 0..batches.len() {
-                    if now.duration_since(batches[i].timestamp).as_millis() > BATCH_QUORUM_TIMEOUT {
-                        tracing::warn!("Batch timed out: {:?}", batches[i].digest);
-                        batches.remove(i);
-                    }
-                }
-            },
-            Some(ack) = acknolwedgements_rx.recv() => {
-                let ack = ack.acknoledgement;
-                match batches.iter().position(|b| b.digest.as_bytes() == ack.as_slice()) {
-                    Some(batch_index) => {
-                        let batch = &mut batches[batch_index];
-                        batch.ack_number += 1;
-                        if batch.ack_number >= quorum_threshold {
-                            tracing::info!("Batch is now confirmed: {:?}", batch.digest);
-                            digest_tx.send(batch.digest).await.expect("Failed to send digest");
-                            match db.insert(crate::db::Column::Batches, &batch.digest.to_string(), &batch.batch) {
-                                Ok(_) => {
-                                    tracing::info!("Batch inserted in DB");
-                                },
-                                Err(e) => {
-                                    tracing::error!("Failed to insert batch in DB: {:?}", e);
-                                }
-                            }
-                            batches.remove(batch_index);
-                        }
-                    },
-                    None => {
-                        tracing::warn!("Received ack for unknown batch");
-                    }
-                };
+    ) -> JoinHandle<()> {
+        tokio::spawn(async move {
+            Self {
+                batches_rx,
+                network_tx,
             }
+            .run()
+            .await
+        })
+    }
+
+    pub async fn run(mut self) {
+        while let Ok(batch) = self.batches_rx.recv().await {
+            tracing::info!("Broadcasting batch: {:?}", batch);
+            self.network_tx
+                .send(NetworkRequest::Broadcast(RequestPayload::Batch(batch)))
+                .await
+                .expect("Failed to broadcast batch");
         }
     }
 }
