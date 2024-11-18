@@ -189,7 +189,7 @@ impl Network {
                             self.seen.remove(&peer_id);
                             self.swarm
                                 .disconnect_peer_id(peer_id)
-                                .expect(&format!("failed to disconnect from {peer_id}"));
+                                .map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
                         }
                     }
                 }

@@ -15,14 +15,14 @@ struct WaitingBatch {
 }
 
 impl WaitingBatch {
-    fn new(batch: TxBatch) -> Self {
-        let digest = blake3::hash(&bincode::serialize(&batch).expect("batch hash failed"));
-        Self {
+    fn new(batch: TxBatch) -> anyhow::Result<Self> {
+        let digest = blake3::hash(&bincode::serialize(&batch)?);
+        Ok(Self {
             ack_number: 0,
             batch,
             digest,
             timestamp: tokio::time::Instant::now(),
-        }
+        })
     }
 }
 
@@ -85,7 +85,13 @@ impl QuorumWaiter {
         loop {
             tokio::select! {
                 Ok(batch) = self.batches_rx.recv() => {
-                    let waiting_batch = WaitingBatch::new(batch);
+                    let waiting_batch = match WaitingBatch::new(batch) {
+                        Ok(waiting_batch) => waiting_batch,
+                        Err(e) => {
+                            tracing::error!("Failed to create waiting batch: {:?}", e);
+                            continue;
+                        }
+                    };
                     if batches.iter().any(|elm: &WaitingBatch| {
                         elm.digest.as_bytes() == waiting_batch.digest.as_bytes()
                     }) {

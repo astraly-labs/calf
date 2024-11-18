@@ -233,8 +233,7 @@ impl Network {
                     if info.protocol_version != MAIN_PROTOCOL {
                         tracing::info!("protocol missmatch, disconnecting from {}", info.protocol_version);
                                 self.swarm
-                                    .disconnect_peer_id(peer_id)
-                                    .expect(&format!("failed to disconnect from {peer_id}"));
+                                    .disconnect_peer_id(peer_id).map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
                         return Ok(());
                     }
                     tracing::info!("🚨🚨 info.protocols : {:?}", info.protocols);
@@ -245,7 +244,7 @@ impl Network {
                                 tracing::info!("key not found, disconnecting from {}", peer_id);
                                 self.swarm
                                     .disconnect_peer_id(peer_id)
-                                    .expect(&format!("failed to disconnect from {peer_id}"));
+                                    .map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
                                 return Ok(());
                             }
                             // safe unwrap since we check befort that the string start with /key/
@@ -255,7 +254,7 @@ impl Network {
                                 tracing::info!("key not found, disconnecting from {}", peer_id);
                                 self.swarm
                                     .disconnect_peer_id(peer_id)
-                                    .expect(&format!("failed to disconnect from {peer_id}"));
+                                    .map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
                                 return Ok(());
                             }
                             // decode key
@@ -274,7 +273,7 @@ impl Network {
                             tracing::info!("key not found, disconnecting from {}", peer_id);
                             self.swarm
                                 .disconnect_peer_id(peer_id)
-                                .expect(&format!("failed to disconnect from {peer_id}"));
+                                .map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
                         }
                     }
                 }
@@ -297,7 +296,7 @@ impl Network {
                             self.seen.remove(&peer_id);
                             self.swarm
                                 .disconnect_peer_id(peer_id)
-                                .expect(&format!("failed to disconnect from {peer_id}"));
+                                .map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
                         }
                     }
                 }
