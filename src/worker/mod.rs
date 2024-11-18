@@ -44,6 +44,9 @@ pub struct WorkerArgs {
     /// Path to the keypair file
     #[arg(short, long, default_value = "keypair")]
     pub keypair_path: PathBuf,
+    /// Path to the keypair file
+    #[arg(short, long, default_value = "validator_keypair")]
+    pub validator_keypair_path: PathBuf,
 }
 
 #[derive(Debug, AsRef, AsMut, Deref, DerefMut)]
@@ -64,6 +67,7 @@ impl LoadableFromSettings for WorkerSettings {
             base: Settings {
                 db_path: cli.db_path,
                 keypair_path: cli.keypair_path,
+                validator_keypair_path: cli.validator_keypair_path,
             },
         })
     }
@@ -73,6 +77,7 @@ impl LoadableFromSettings for WorkerSettings {
 pub(crate) struct Worker {
     commitee: Committee,
     keypair: libp2p::identity::Keypair,
+    validator_keypair: libp2p::identity::Keypair,
     db: Arc<db::Db>,
 }
 
@@ -86,11 +91,13 @@ impl BaseAgent for Worker {
         let commitee = Committee::load_from_file(".config.json")?;
         let keypair = utils::read_keypair_from_file(&settings.base.keypair_path)
             .context("Failed to read keypair from file")?;
-
+        let validator_keypair = utils::read_keypair_from_file(&settings.base.validator_keypair_path)
+        .context("Failed to read keypair from file")?;
         Ok(Self {
             commitee,
             db,
             keypair,
+            validator_keypair,
         })
     }
 
@@ -124,6 +131,7 @@ impl BaseAgent for Worker {
             received_ack_tx,
             received_batches_tx,
             self.keypair,
+            self.validator_keypair,
             cancellation_token.clone(),
         );
 

@@ -98,6 +98,7 @@ async fn main() -> anyhow::Result<()> {
                 let base_settings = Settings {
                     db_path: args.db_path,
                     keypair_path: args.keypair_path,
+                    validator_keypair_path: args.validator_keypair_path,
                 };
 
                 let primary_settings = PrimarySettings {
@@ -110,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
                 let base_settings = Settings {
                     db_path: args.db_path,
                     keypair_path: args.keypair_path,
+                    validator_keypair_path: args.validator_keypair_path,
                 };
                 let worker_settings = WorkerSettings {
                     base: base_settings,

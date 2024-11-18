@@ -4,6 +4,7 @@ use std::path::PathBuf;
 pub struct Settings {
     pub db_path: PathBuf,
     pub keypair_path: PathBuf,
+    pub validator_keypair_path: PathBuf,
 }
 
 /// Settings of an agent defined from configuration
