@@ -4,10 +4,10 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::
+use crate::{safe_send, 
     types::{
         NetworkRequest, RequestPayload, TxBatch,
-    };
+    }};
 
 pub(crate) struct BatchBroadcaster {
     batches_rx: broadcast::Receiver<TxBatch>,
@@ -33,10 +33,11 @@ impl BatchBroadcaster {
     pub async fn run(mut self) {
         while let Ok(batch) = self.batches_rx.recv().await {
             tracing::info!("Broadcasting batch: {:?}", batch);
-            self.network_tx
-                .send(NetworkRequest::Broadcast(RequestPayload::Batch(batch)))
-                .await
-                .expect("Failed to broadcast batch");
+            safe_send!(
+                self.network_tx,
+                NetworkRequest::Broadcast(RequestPayload::Batch(batch)),
+                "failed to broadcast batch"
+            );
         }
     }
 }

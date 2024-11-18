@@ -2,8 +2,7 @@ use std::sync::Arc;
 use tokio::task::JoinHandle;
 
 use crate::{
-    db::Db,
-    types::{ReceivedAcknoledgement, TxBatch},
+    db::Db, safe_send, types::{ReceivedAcknoledgement, TxBatch}
 };
 
 struct WaitingBatch {
@@ -90,7 +89,7 @@ impl QuorumWaiter {
                             batch.ack_number += 1;
                             if batch.ack_number >= self.quorum_threshold {
                                 tracing::info!("Batch is now confirmed: {:?}", batch.digest);
-                                self.digest_tx.send(batch.digest).await.expect("Failed to send digest");
+                                safe_send!(self.digest_tx, batch.digest, "failed to send digest from quorum waiter");
                                 match self.db.insert(crate::db::Column::Batches, &batch.digest.to_string(), &batch.batch) {
                                     Ok(_) => {
                                         tracing::info!("Batch inserted in DB");
@@ -102,8 +101,7 @@ impl QuorumWaiter {
                                 batches.remove(batch_index);
                             }
                         },
-                        None => {
-                            tracing::warn!("Received ack for unknown batch");
+                        _ => {
                         }
                     };
                 }

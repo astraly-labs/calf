@@ -8,6 +8,19 @@ pub mod types;
 pub mod utils;
 pub mod worker;
 
+#[macro_export]
+macro_rules! safe_send {
+    ($sender:expr, $message:expr, $error_msg:expr) => {
+        if let Err(err) = $sender.send($message).await {
+            tracing::error!(
+                "{}: Failed to send message. Reason: {}",
+                $error_msg,
+                err
+            );
+        }
+    };
+}
+
 // Empty settings for now
 impl AsRef<Settings> for Settings {
     fn as_ref(&self) -> &Settings {

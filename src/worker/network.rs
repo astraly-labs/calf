@@ -17,17 +17,20 @@ use libp2p::{
     PeerId, StreamProtocol,
 };
 use tokio::{
-    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+    sync::mpsc,
     task::JoinHandle,
 };
 
-use crate::types::{
+use crate::{safe_send, types::{
     NetworkRequest, ReceivedAcknoledgement, ReceivedBatch, RequestPayload,
-};
+}};
 
 /// Agent version
 const AGENT_VERSION: &str = "peer/0.0.1";
-const PROTOCOL: &str = "/foo/1";
+/// Protocol
+const MAIN_PROTOCOL: &str = "/calf/1";
+const COMPONENT_PROTOCOL: &str = "/worker/0.1";
+const VALIDATOR_KEY: &str = "/validator/11111";
 
 #[derive(NetworkBehaviour)]
 struct WorkerBehaviour {
@@ -43,8 +46,8 @@ pub(crate) struct Network {
     in_peers: BTreeMap<PeerId, Multiaddr>,
     out_peers: BTreeMap<PeerId, Multiaddr>,
     local_peer_id: PeerId,
-    to_dial_send: UnboundedSender<(PeerId, Multiaddr)>,
-    to_dial_recv: UnboundedReceiver<(PeerId, Multiaddr)>,
+    to_dial_send: mpsc::Sender<(PeerId, Multiaddr)>,
+    to_dial_recv: mpsc::Receiver<(PeerId, Multiaddr)>,
     network_rx: mpsc::Receiver<NetworkRequest>,
     received_ack_tx: mpsc::Sender<ReceivedAcknoledgement>,
     received_batches_tx: mpsc::Sender<ReceivedBatch>,
@@ -61,14 +64,14 @@ impl Network {
         let local_peer_id = PeerId::from(local_key.public());
         println!("local peer id: {local_peer_id}");
 
-        let (to_dial_send, to_dial_recv) = mpsc::unbounded_channel::<(PeerId, Multiaddr)>();
+        let (to_dial_send, to_dial_recv) = mpsc::channel::<(PeerId, Multiaddr)>(100);
 
         let swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
             .with_quic()
             .with_behaviour(|key| WorkerBehaviour {
                 identify: {
-                    let cfg = identify::Config::new(PROTOCOL.to_string(), key.public())
+                    let cfg = identify::Config::new(MAIN_PROTOCOL.to_string(), key.public())
                         .with_push_listen_addr_updates(true)
                         .with_agent_version(AGENT_VERSION.to_string());
                     identify::Behaviour::new(cfg)
@@ -80,7 +83,9 @@ impl Network {
                 request_response: {
                     let cfg = request_response::Config::default().with_max_concurrent_streams(10);
                     request_response::cbor::Behaviour::<Vec<u8>, ()>::new(
-                        [(StreamProtocol::new(PROTOCOL), ProtocolSupport::Full)],
+                        [(StreamProtocol::new(MAIN_PROTOCOL), ProtocolSupport::Full),
+                        (StreamProtocol::new(COMPONENT_PROTOCOL), ProtocolSupport::Full),
+                        (StreamProtocol::new(VALIDATOR_KEY), ProtocolSupport::Full)],
                         cfg,
                     )
                 },
@@ -176,9 +181,7 @@ impl Network {
                         if peer_id != self.local_peer_id && self.seen.insert(peer_id) {
                             println!("mDNS discovered a new peer: {peer_id}");
                             if !self.out_peers.contains_key(&peer_id) {
-                                self.to_dial_send.send((peer_id, multiaddr.clone())).expect(
-                                    &format!("failed to send dial for {peer_id}:{multiaddr}"),
-                                );
+                                safe_send!(self.to_dial_send, (peer_id, multiaddr.clone()), "failed to send to dial rx");
                             }
                         }
                     }
@@ -214,22 +217,17 @@ impl Network {
                     tracing::info!("decoded request: {:#?}", decoded);
                     match decoded {
                         RequestPayload::Batch(batch) => {
-                            self.received_batches_tx
-                                .send(ReceivedBatch {
-                                    batch,
-                                    sender: peer_id,
-                                })
-                                .await
-                                .expect("failed to send batch");
+                            safe_send!(self.received_batches_tx, ReceivedBatch {
+                                batch,
+                                sender: peer_id,
+                            }, "failed to send received batch from network");
                         }
                         RequestPayload::Acknoledgment(ack) => {
-                            self.received_ack_tx
-                                .send(ReceivedAcknoledgement {
-                                    acknoledgement: ack,
-                                    sender: peer_id,
-                                })
-                                .await
-                                .expect("failed to send ack");
+                            safe_send!(self.received_ack_tx, ReceivedAcknoledgement {
+                                acknoledgement: ack,
+                                sender: peer_id,
+                            }, "failed to send acknoledgment from network");
+
                         }
                     }
                 }
