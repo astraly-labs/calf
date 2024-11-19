@@ -1,11 +1,14 @@
+pub mod header_builder;
 pub mod network;
 
 use anyhow::Context;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
+use header_builder::HeaderBuilder;
 use network::Network as PrimaryNetwork;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     db,
@@ -84,9 +87,14 @@ impl BaseAgent for Primary {
 
     async fn run(mut self) {
         let (network_tx, network_rx) = mpsc::channel(100);
-        let network_handle = PrimaryNetwork::spawn(network_rx, self.keypair);
+        let (digest_tx, digest_rx) = broadcast::channel(100);
+        let network_handle = PrimaryNetwork::spawn(network_rx, self.keypair, digest_tx);
 
-        let res = tokio::try_join!(network_handle);
+        let cancellation_token = CancellationToken::new();
+
+        let header_builder = HeaderBuilder::spawn(digest_rx, network_tx, cancellation_token);
+
+        let res = tokio::try_join!(network_handle, header_builder);
         match res {
             Ok(_) => tracing::info!("Primary exited successfully"),
             Err(e) => tracing::error!("Primary exited with error: {:?}", e),

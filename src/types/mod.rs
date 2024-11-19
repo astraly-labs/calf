@@ -1,6 +1,5 @@
 pub mod agents;
 
-use blake3::Hash;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
@@ -21,14 +20,6 @@ impl Transaction {
     }
 }
 
-pub struct BlockHeader {
-    // parents_hash: Vec<Hash>,
-}
-
-pub struct Block {
-    _header: BlockHeader,
-}
-
 pub enum NetworkRequest {
     Broadcast(RequestPayload),
     SendTo(PeerId, RequestPayload),
@@ -41,6 +32,7 @@ pub enum RequestPayload {
     Batch(TxBatch),
     Acknoledgment(BatchAcknowledgement),
     Digest(Digest),
+    Header(BlockHeader),
 }
 
 pub struct ReceivedBatch {
@@ -58,3 +50,10 @@ pub type Digest = [u8; 32];
 pub type PublicKey = String;
 pub type WorkerId = u32;
 pub type Stake = u64;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BlockHeader {
+    pub parents_hashes: Vec<Digest>,
+    pub timestamp_ms: u128,
+    pub digests: Vec<Digest>,
+}

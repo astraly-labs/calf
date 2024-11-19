@@ -111,7 +111,6 @@ impl BaseAgent for Worker {
         let quorum_waiter_batches_rx = batches_tx.subscribe();
 
         let cancellation_token = CancellationToken::new();
-        // TODO: le passer à touts les agents
 
         let batchmaker_handle = BatchMaker::spawn(
             batches_tx,
