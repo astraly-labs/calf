@@ -69,26 +69,16 @@ impl HeaderBuilder {
                     if !batch.is_empty() {
                         let block_header = self.build_current_header(&mut batch);
                         self.broadcast_header(block_header).await?;
+
+                        batch.clear();
                     }
                 }
                 Ok(digest) = self.digest_rx.recv() => {
                     batch.push(digest);
                     if batch.len() >= MAX_DIGESTS_IN_HEADER as usize {
-                        let now = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .expect("Failed to measure time")
-                            .as_millis();
-                        let header = BlockHeader {
-                            author: self.authority_key.encode_protobuf(),
-                            parents_hashes: vec![],
-                            timestamp_ms: now,
-                            digests: batch.clone(),
-                        };
+                        let block_header = self.build_current_header(&mut batch);
+                        self.broadcast_header(block_header).await?;
 
-                        tracing::info!("🤖 [Batch] Broadcasting header {:?}", header.clone());
-                        self.network_tx
-                            .send(NetworkRequest::Broadcast(RequestPayload::Header(header)))
-                            .await?;
                         batch.clear();
                     }
                 }
@@ -96,26 +86,28 @@ impl HeaderBuilder {
         }
     }
 
+    /// Builds the block header given a batch of digests
+    /// NOTE: `timestamp_ms` field is set to the current timestamp
     pub fn build_current_header(&self, batch: &mut Vec<Digest>) -> BlockHeader {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Failed to measure time")
             .as_millis();
+
         let header = BlockHeader {
+            round: 0,
             author: self.authority_key.encode_protobuf(),
             parents_hashes: vec![],
             timestamp_ms: now,
             digests: batch.clone(),
         };
 
-        tracing::info!("🤖 [Timer] Broadcasting header {:?}", header.clone());
-
-        batch.clear();
-
         header
     }
 
+    /// Broadcasts the block header to the other primaries
     pub async fn broadcast_header(&self, header: BlockHeader) -> anyhow::Result<()> {
+        tracing::info!("🤖 [Batch] Broadcasting header {:?}", header.clone());
         self.network_tx
             .send(NetworkRequest::Broadcast(RequestPayload::Header(header)))
             .await?;

@@ -32,6 +32,12 @@ pub struct Committee {
     pub authorities: BTreeMap<PublicKey, AuthorityInfo>,
 }
 
+impl Committee {
+    pub fn has_authority_key(&self, key: &PublicKey) -> bool {
+        self.authorities.contains_key(key)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorityInfo {
     pub primary: PrimaryAddresses,

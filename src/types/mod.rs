@@ -33,6 +33,7 @@ pub enum RequestPayload {
     Acknoledgment(BatchAcknowledgement),
     Digest(Digest),
     Header(BlockHeader),
+    Vote(BlockHeader),
 }
 
 pub struct ReceivedBatch {
@@ -50,10 +51,12 @@ pub type Digest = [u8; 32];
 pub type PublicKey = Vec<u8>;
 pub type WorkerId = u32;
 pub type Stake = u64;
+pub type Round = u64;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockHeader {
     pub author: PublicKey,
+    pub round: Round,
     pub parents_hashes: Vec<Digest>,
     pub timestamp_ms: u128,
     pub digests: Vec<Digest>,

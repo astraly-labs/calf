@@ -100,7 +100,13 @@ impl BaseAgent for Primary {
             cancellation_token.clone(),
         );
 
-        let header_processor = HeaderProcessor::spawn(header_rx, network_tx, cancellation_token);
+        let header_processor = HeaderProcessor::spawn(
+            self.commitee,
+            header_rx,
+            network_tx,
+            cancellation_token,
+            self.db,
+        );
 
         let res = tokio::try_join!(network_handle, header_builder);
         match res {
