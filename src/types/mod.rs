@@ -28,6 +28,7 @@ pub struct Block {
     _header: BlockHeader,
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum NetworkRequest {
     Broadcast(RequestPayload),
     SendTo(PeerId, RequestPayload),
@@ -35,7 +36,7 @@ pub enum NetworkRequest {
 
 pub type BatchAcknowledgement = Vec<u8>;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum RequestPayload {
     Batch(TxBatch),
     Acknoledgment(BatchAcknowledgement),
@@ -46,6 +47,7 @@ pub struct ReceivedBatch {
     pub sender: PeerId,
 }
 
+#[derive(Debug, Clone)]
 pub struct ReceivedAcknowledgment {
     pub acknoledgement: BatchAcknowledgement,
     pub sender: PeerId,

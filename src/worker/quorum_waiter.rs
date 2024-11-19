@@ -134,7 +134,104 @@ impl QuorumWaiter {
                         }
                     };
                 }
+                else => {
+                    tracing::error!("all senders dropped");
+                    break Err(anyhow::anyhow!("all senders dropped"));
+                }
             }
         }
     }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{sync::Arc, time::Duration};
+    use crate::{db::Db, types::{ReceivedAcknowledgment, TxBatch}};
+    use super::QuorumWaiter;
+
+    type QuorumWaiterFixture = (
+        tokio::sync::broadcast::Sender<TxBatch>,
+        tokio::sync::mpsc::Sender<ReceivedAcknowledgment>,
+        tokio::sync::mpsc::Receiver<blake3::Hash>,
+        tokio_util::sync::CancellationToken,
+        Arc<Db>,
+        tokio::task::JoinHandle<()>
+    );
+
+    fn lauch_quorum_waiter(db_path: &str) -> QuorumWaiterFixture {
+        let (batches_tx, batches_rx) = tokio::sync::broadcast::channel(10);
+        let (acknowledgments_tx, acknowledgments_rx) = tokio::sync::mpsc::channel(10);
+        let (digest_tx, digest_rx) = tokio::sync::mpsc::channel(10);
+        let db = Db::new(db_path.into()).expect("failed to open db");
+        let quorum_threshold = 2;
+        let quorum_timeout = 1000;
+        let cancellation_token = tokio_util::sync::CancellationToken::new();
+        let cancellation_token_clone = cancellation_token.clone();
+        let db_waiter = Arc::new(db);
+        let db_test = db_waiter.clone();
+        let handle = QuorumWaiter::spawn(
+            batches_rx,
+            acknowledgments_rx,
+            digest_tx,
+            db_waiter,
+            quorum_threshold,
+            quorum_timeout,
+            cancellation_token_clone,
+        );
+        (batches_tx, acknowledgments_tx, digest_rx, cancellation_token, db_test, handle)
+    }
+
+    #[rstest::rstest]
+    #[tokio::test]
+    async fn test_cancelled() {
+        let (_, _, _, cancellation_token, _, handle) = lauch_quorum_waiter("/tmp/test_db_0");
+        cancellation_token.cancel();
+        handle.await.expect("failed to await handle");
+    }
+
+    #[rstest::rstest]
+    #[tokio::test]
+    async fn test_quorum_received() {
+        let (batches_tx, acknowledgments_tx, mut digest_rx, _, _, _) = lauch_quorum_waiter("/tmp/test_db_1");
+
+        let batch = TxBatch::default();
+        let digest = blake3::hash(&bincode::serialize(&batch).expect("failed to serialize batch"));
+        let ack = ReceivedAcknowledgment {
+            acknoledgement: digest.as_bytes().to_vec(),
+            sender: libp2p::PeerId::random(),
+        };
+
+        batches_tx.send(batch).expect("failed to send batch");
+        for _ in 0..3 {
+            acknowledgments_tx.send(ack.clone()).await.expect("failed to send ack");
+        }
+        let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
+        assert!(res.unwrap().unwrap().as_bytes() == digest.as_bytes());
+    }
+
+    #[rstest::rstest]
+    #[tokio::test]
+    async fn test_batch_forgotten_after_quorum_quorum_received() {
+        let (batches_tx, acknowledgments_tx, mut digest_rx, _, _, _) = lauch_quorum_waiter("/tmp/test_db_1");
+
+        let batch = TxBatch::default();
+        let digest = blake3::hash(&bincode::serialize(&batch).expect("failed to serialize batch"));
+        let ack = ReceivedAcknowledgment {
+            acknoledgement: digest.as_bytes().to_vec(),
+            sender: libp2p::PeerId::random(),
+        };
+
+        batches_tx.send(batch).expect("failed to send batch");
+        for _ in 0..3 {
+            acknowledgments_tx.send(ack.clone()).await.expect("failed to send ack");
+        }
+        let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
+        assert!(res.unwrap().unwrap().as_bytes() == digest.as_bytes());
+        for _ in 0..3 {
+            acknowledgments_tx.send(ack.clone()).await.expect("failed to send ack");
+        }
+        let res = tokio::time::timeout(Duration::from_millis(100), digest_rx.recv()).await;
+        assert!(res.is_err());
+    }
+
 }
