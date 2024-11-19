@@ -1,7 +1,9 @@
 pub mod agents;
+pub mod signing;
 
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
+use signing::{Signable, SignedType};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Transaction {
@@ -32,8 +34,8 @@ pub enum RequestPayload {
     Batch(TxBatch),
     Acknoledgment(BatchAcknowledgement),
     Digest(Digest),
-    Header(BlockHeader),
-    Vote(BlockHeader),
+    Header(SignedBlockHeader),
+    Vote(SignedBlockHeader),
 }
 
 pub struct ReceivedBatch {
@@ -61,3 +63,7 @@ pub struct BlockHeader {
     pub timestamp_ms: u128,
     pub digests: Vec<Digest>,
 }
+
+impl Signable for BlockHeader {}
+
+pub type SignedBlockHeader = SignedType<BlockHeader>;

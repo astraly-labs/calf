@@ -94,7 +94,7 @@ impl BaseAgent for Primary {
         let cancellation_token = CancellationToken::new();
 
         let header_builder = HeaderBuilder::spawn(
-            self.keypair.public(),
+            self.keypair,
             digest_rx,
             network_tx.clone(),
             cancellation_token.clone(),

@@ -1,13 +1,16 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use libp2p::identity::PublicKey;
+use libp2p::identity::{Keypair, PublicKey, SigningError};
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::types::{BlockHeader, Digest, NetworkRequest, RequestPayload};
+use crate::types::{
+    signing::{sign_with_keypair, Signable as _, Signature},
+    BlockHeader, Digest, NetworkRequest, RequestPayload, SignedBlockHeader,
+};
 
 const MAX_DIGESTS_IN_HEADER: u64 = 10;
 const HEADER_PRODUCTION_INTERVAL_IN_SECS: u64 = 5;
@@ -15,13 +18,13 @@ const HEADER_PRODUCTION_INTERVAL_IN_SECS: u64 = 5;
 pub(crate) struct HeaderBuilder {
     digest_rx: broadcast::Receiver<Digest>,
     network_tx: mpsc::Sender<NetworkRequest>,
-    authority_key: PublicKey,
+    local_keypair: Keypair,
 }
 
 impl HeaderBuilder {
     #[must_use]
     pub fn spawn(
-        authority_key: PublicKey,
+        local_keypair: Keypair,
         digest_rx: broadcast::Receiver<Digest>,
         network_tx: mpsc::Sender<NetworkRequest>,
         cancellation_token: CancellationToken,
@@ -32,7 +35,7 @@ impl HeaderBuilder {
                     Self {
                         digest_rx,
                         network_tx,
-                        authority_key,
+                        local_keypair,
                     }
                     .run(),
                 )
@@ -68,7 +71,8 @@ impl HeaderBuilder {
                 _ = timer.tick() => {
                     if !batch.is_empty() {
                         let block_header = self.build_current_header(&mut batch);
-                        self.broadcast_header(block_header).await?;
+                        let signed_header = sign_with_keypair(&self.local_keypair, block_header)?;
+                        self.broadcast_header(signed_header).await?;
 
                         batch.clear();
                     }
@@ -77,7 +81,8 @@ impl HeaderBuilder {
                     batch.push(digest);
                     if batch.len() >= MAX_DIGESTS_IN_HEADER as usize {
                         let block_header = self.build_current_header(&mut batch);
-                        self.broadcast_header(block_header).await?;
+                        let signed_header = sign_with_keypair(&self.local_keypair, block_header)?;
+                        self.broadcast_header(signed_header).await?;
 
                         batch.clear();
                     }
@@ -94,9 +99,11 @@ impl HeaderBuilder {
             .expect("Failed to measure time")
             .as_millis();
 
+        let public_key = self.local_keypair.public().encode_protobuf();
+
         let header = BlockHeader {
             round: 0,
-            author: self.authority_key.encode_protobuf(),
+            author: public_key,
             parents_hashes: vec![],
             timestamp_ms: now,
             digests: batch.clone(),
@@ -106,7 +113,7 @@ impl HeaderBuilder {
     }
 
     /// Broadcasts the block header to the other primaries
-    pub async fn broadcast_header(&self, header: BlockHeader) -> anyhow::Result<()> {
+    pub async fn broadcast_header(&self, header: SignedBlockHeader) -> anyhow::Result<()> {
         tracing::info!("🤖 [Batch] Broadcasting header {:?}", header.clone());
         self.network_tx
             .send(NetworkRequest::Broadcast(RequestPayload::Header(header)))

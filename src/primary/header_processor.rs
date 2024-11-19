@@ -10,11 +10,11 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     db::{Column, Db},
     settings::parser::Committee,
-    types::{BlockHeader, NetworkRequest, RequestPayload, Round},
+    types::{BlockHeader, NetworkRequest, RequestPayload, Round, SignedBlockHeader},
 };
 
 pub(crate) struct HeaderProcessor {
-    header_rx: broadcast::Receiver<BlockHeader>,
+    header_rx: broadcast::Receiver<SignedBlockHeader>,
     network_tx: mpsc::Sender<NetworkRequest>,
     commitee: Committee,
     db: Arc<Db>,
@@ -24,7 +24,7 @@ impl HeaderProcessor {
     #[must_use]
     pub fn spawn(
         commitee: Committee,
-        header_rx: broadcast::Receiver<BlockHeader>,
+        header_rx: broadcast::Receiver<SignedBlockHeader>,
         network_tx: mpsc::Sender<NetworkRequest>,
         cancellation_token: CancellationToken,
         db: Arc<Db>,
@@ -69,14 +69,14 @@ impl HeaderProcessor {
 
                     // Checks
                     // 1. is the header built by an authority
-                    if self.commitee.has_authority_key(&header.author) {
+                    if self.commitee.has_authority_key(&header.value.author) {
                         // 2. is the header the first one they see for this round
-                        if !self.has_seen_header_for_round(header.round)? {
+                        if !self.has_seen_header_for_round(header.value.round)? {
                             // Then
                             // 1. Send back a vote for it
                             self.broadcast_vote(&header).await.context("Failed to broadcast vote")?;
                             // 2. Store it in db
-                            self.db.insert(Column::Headers, &header.round.to_string(), header).context("Failed to insert header in db")?;
+                            self.db.insert(Column::Headers, &header.value.round.to_string(), header).context("Failed to insert header in db")?;
                         }
                     }
                 }
@@ -93,7 +93,7 @@ impl HeaderProcessor {
     }
 
     /// Broadcasts a vote for the given block header to the other primaries
-    pub async fn broadcast_vote(&self, header: &BlockHeader) -> anyhow::Result<()> {
+    pub async fn broadcast_vote(&self, header: &SignedBlockHeader) -> anyhow::Result<()> {
         tracing::info!(
             "🤖 [Batch] Broadcasting vote for header {:?}",
             header.clone()

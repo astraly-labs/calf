@@ -21,7 +21,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::types::{BlockHeader, Digest, NetworkRequest, RequestPayload};
+use crate::types::{BlockHeader, Digest, NetworkRequest, RequestPayload, SignedBlockHeader};
 
 /// Agent version
 const AGENT_VERSION: &str = "peer/0.0.1";
@@ -50,7 +50,7 @@ pub(crate) struct Network {
     to_dial_recv: mpsc::Receiver<(PeerId, Multiaddr)>,
     network_rx: mpsc::Receiver<NetworkRequest>,
     digest_tx: broadcast::Sender<Digest>,
-    header_tx: broadcast::Sender<BlockHeader>,
+    header_tx: broadcast::Sender<SignedBlockHeader>,
 }
 
 impl Network {
@@ -59,7 +59,7 @@ impl Network {
         network_rx: mpsc::Receiver<NetworkRequest>,
         local_key: Keypair,
         digest_tx: broadcast::Sender<Digest>,
-        header_tx: broadcast::Sender<BlockHeader>,
+        header_tx: broadcast::Sender<SignedBlockHeader>,
     ) -> JoinHandle<()> {
         let local_peer_id = PeerId::from(local_key.public());
         println!("local peer id: {local_peer_id}");
@@ -222,6 +222,7 @@ impl Network {
                             self.digest_tx.send(batch_digest)?;
                         }
                         RequestPayload::Header(header) => {
+                            // TODO: check signature
                             self.header_tx.send(header)?;
                         }
                         _ => {}
