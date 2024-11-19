@@ -1,10 +1,12 @@
 pub mod header_builder;
+pub mod header_processor;
 pub mod network;
 
 use anyhow::Context;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use header_builder::HeaderBuilder;
+use header_processor::HeaderProcessor;
 use network::Network as PrimaryNetwork;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
@@ -12,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     db,
-    settings::parser::{FileLoader as _, InstanceConfig, PrimaryConfig},
+    settings::parser::{Committee, FileLoader as _, InstanceConfig, PrimaryConfig},
     types::agents::{BaseAgent, LoadableFromSettings, Settings},
     utils,
 };
@@ -59,7 +61,7 @@ impl LoadableFromSettings for PrimarySettings {
 
 #[derive(Debug)]
 pub(crate) struct Primary {
-    config: PrimaryConfig,
+    commitee: Committee,
     keypair: libp2p::identity::Keypair,
     db: Arc<db::Db>,
 }
@@ -71,15 +73,12 @@ impl BaseAgent for Primary {
 
     async fn from_settings(settings: Self::Settings) -> anyhow::Result<Self> {
         let db = Arc::new(db::Db::new(settings.base.db_path)?);
-        let config = match InstanceConfig::load_from_file("config.json")? {
-            InstanceConfig::Primary(worker_config) => worker_config,
-            _ => unreachable!("Primary agent can only be run as a worker"),
-        };
+        let commitee = Committee::load_from_file(".config.json")?;
         let keypair = utils::read_keypair_from_file(&settings.base.keypair_path)
             .context("Failed to read keypair from file")?;
 
         Ok(Self {
-            config,
+            commitee,
             db,
             keypair,
         })
@@ -88,11 +87,20 @@ impl BaseAgent for Primary {
     async fn run(mut self) {
         let (network_tx, network_rx) = mpsc::channel(100);
         let (digest_tx, digest_rx) = broadcast::channel(100);
-        let network_handle = PrimaryNetwork::spawn(network_rx, self.keypair, digest_tx);
+        let (header_tx, header_rx) = broadcast::channel(100);
+        let network_handle =
+            PrimaryNetwork::spawn(network_rx, self.keypair.clone(), digest_tx, header_tx);
 
         let cancellation_token = CancellationToken::new();
 
-        let header_builder = HeaderBuilder::spawn(digest_rx, network_tx, cancellation_token);
+        let header_builder = HeaderBuilder::spawn(
+            self.keypair.public(),
+            digest_rx,
+            network_tx.clone(),
+            cancellation_token.clone(),
+        );
+
+        let header_processor = HeaderProcessor::spawn(header_rx, network_tx, cancellation_token);
 
         let res = tokio::try_join!(network_handle, header_builder);
         match res {

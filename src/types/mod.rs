@@ -47,12 +47,13 @@ pub struct ReceivedAcknowledgment {
 
 pub type TxBatch = Vec<Transaction>;
 pub type Digest = [u8; 32];
-pub type PublicKey = String;
+pub type PublicKey = Vec<u8>;
 pub type WorkerId = u32;
 pub type Stake = u64;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockHeader {
+    pub author: PublicKey,
     pub parents_hashes: Vec<Digest>,
     pub timestamp_ms: u128,
     pub digests: Vec<Digest>,
