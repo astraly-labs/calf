@@ -1,10 +1,11 @@
+use libp2p::PeerId;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::Db,
-    types::{ReceivedAcknowledgment, TxBatch},
+    types::{NetworkRequest, ReceivedAcknowledgment, RequestPayload, TxBatch},
 };
 
 struct WaitingBatch {
@@ -30,7 +31,7 @@ pub struct QuorumWaiter {
     batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
     acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
     quorum_threshold: u32,
-    digest_tx: tokio::sync::mpsc::Sender<blake3::Hash>,
+    digest_tx: tokio::sync::mpsc::Sender<NetworkRequest>,
     db: Arc<Db>,
     quorum_timeout: u128,
 }
@@ -40,7 +41,7 @@ impl QuorumWaiter {
     pub fn spawn(
         batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
         acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
-        digest_tx: tokio::sync::mpsc::Sender<blake3::Hash>,
+        digest_tx: tokio::sync::mpsc::Sender<NetworkRequest>,
         db: Arc<Db>,
         quorum_threshold: u32,
         quorum_timeout: u128,
@@ -118,7 +119,8 @@ impl QuorumWaiter {
                             batch.ack_number += 1;
                             if batch.ack_number >= self.quorum_threshold {
                                 tracing::info!("Batch is now confirmed: {:?}", batch.digest);
-                                self.digest_tx.send(batch.digest).await?;
+                                let primary_id = PeerId::from_bytes(&[0;32])?; // TODO: get primary id
+                                self.digest_tx.send(NetworkRequest::SendTo(primary_id, RequestPayload::Digest(*batch.digest.as_bytes()))).await?;
                                 match self.db.insert(crate::db::Column::Batches, &batch.digest.to_string(), &batch.batch) {
                                     Ok(_) => {
                                         tracing::info!("Batch inserted in DB");

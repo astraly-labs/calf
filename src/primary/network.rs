@@ -206,8 +206,8 @@ impl Network {
                     let decoded = bincode::deserialize::<RequestPayload>(&req)?;
                     tracing::info!("decoded request: {:#?}", decoded);
                     match decoded {
-                        RequestPayload::Batch(batch) => {}
-                        RequestPayload::Acknoledgment(ack) => {}
+                        RequestPayload::Digest(batch_digest) => {}
+                        _ => {}
                     }
                 }
                 request_response::Message::Response { response, .. } => {

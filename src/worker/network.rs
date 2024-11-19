@@ -66,12 +66,12 @@ impl Network {
         cancellation_token: CancellationToken,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
-        let local_peer_id = PeerId::from(local_key.public());
-        println!("local peer id: {local_peer_id}");
-        let signature = format!(
-            "/key/{}",
-            hex::encode(validator_key.sign(&local_peer_id.to_bytes()).unwrap())
-        );
+            let local_peer_id = PeerId::from(local_key.public());
+            println!("local peer id: {local_peer_id}");
+            let signature = format!(
+                "/key/{}",
+                hex::encode(validator_key.sign(&local_peer_id.to_bytes()).unwrap())
+            );
 
             let (to_dial_send, to_dial_recv) = mpsc::channel::<(PeerId, Multiaddr)>(100);
 
@@ -231,37 +231,47 @@ impl Network {
             })) => {
                 if peer_id != self.local_peer_id {
                     if info.protocol_version != MAIN_PROTOCOL {
-                        tracing::info!("protocol missmatch, disconnecting from {}", info.protocol_version);
-                                self.swarm
-                                    .disconnect_peer_id(peer_id).map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
+                        tracing::info!(
+                            "protocol missmatch, disconnecting from {}",
+                            info.protocol_version
+                        );
+                        self.swarm
+                            .disconnect_peer_id(peer_id)
+                            .map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
                         return Ok(());
                     }
                     tracing::info!("🚨🚨 info.protocols : {:?}", info.protocols);
-                    match info.protocols.iter().find(|s| s.to_string().starts_with("/key/")) {
+                    match info
+                        .protocols
+                        .iter()
+                        .find(|s| s.to_string().starts_with("/key/"))
+                    {
                         Some(key) => {
                             let auth_key = key.to_string();
                             if !auth_key.starts_with("/key/") {
                                 tracing::info!("key not found, disconnecting from {}", peer_id);
-                                self.swarm
-                                    .disconnect_peer_id(peer_id)
-                                    .map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
+                                self.swarm.disconnect_peer_id(peer_id).map_err(|_| {
+                                    anyhow::anyhow!("failed to disconnect from peer")
+                                })?;
                                 return Ok(());
                             }
                             // safe unwrap since we check befort that the string start with /key/
-                            tracing::info!("auth_key {}",auth_key);
+                            tracing::info!("auth_key {}", auth_key);
                             let key = auth_key.strip_prefix("/key/").unwrap().to_string();
                             if key.is_empty() {
                                 tracing::info!("key not found, disconnecting from {}", peer_id);
-                                self.swarm
-                                    .disconnect_peer_id(peer_id)
-                                    .map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
+                                self.swarm.disconnect_peer_id(peer_id).map_err(|_| {
+                                    anyhow::anyhow!("failed to disconnect from peer")
+                                })?;
                                 return Ok(());
                             }
                             // decode key
                             tracing::info!("key => {:?}", key);
                             let key = hex::decode(key).unwrap();
-                            let is_verified =
-                                self.validator_key.public().verify(&peer_id.to_bytes(), &key);
+                            let is_verified = self
+                                .validator_key
+                                .public()
+                                .verify(&peer_id.to_bytes(), &key);
                             tracing::info!(
                                 "🎉 is verified {}, is {:?}, should be {:?}",
                                 is_verified,
@@ -328,6 +338,9 @@ impl Network {
                                     sender: peer_id,
                                 })
                                 .await?;
+                        }
+                        _ => {
+                            tracing::warn!("Received unknown request, ignoring");
                         }
                     }
                 }

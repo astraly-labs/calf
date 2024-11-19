@@ -1,5 +1,6 @@
 pub mod agents;
 
+use blake3::Hash;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
@@ -39,6 +40,7 @@ pub type BatchAcknowledgement = Vec<u8>;
 pub enum RequestPayload {
     Batch(TxBatch),
     Acknoledgment(BatchAcknowledgement),
+    Digest(Digest),
 }
 
 pub struct ReceivedBatch {
@@ -52,6 +54,7 @@ pub struct ReceivedAcknowledgment {
 }
 
 pub type TxBatch = Vec<Transaction>;
+pub type Digest = [u8; 32];
 pub type PublicKey = String;
 pub type WorkerId = u32;
 pub type Stake = u64;
