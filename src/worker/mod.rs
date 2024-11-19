@@ -20,7 +20,7 @@ use transaction_event_listener::TransactionEventListener;
 
 use crate::{
     db,
-    settings::parser::{Committee, FileLoader as _},
+    settings::parser::{AuthorityInfo, Committee, FileLoader as _},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         ReceivedAcknowledgment,
@@ -33,6 +33,12 @@ const QUORUM_TRESHOLD: u32 = 3;
 const TIMEOUT: u64 = 1000;
 const BATCH_SIZE: usize = 10;
 const QUORUM_TIMEOUT: u128 = 1000;
+
+// Wrapper
+struct WorkerMetadata {
+    pub id: u32,
+    pub authority : AuthorityInfo,
+}
 
 /// CLI arguments for Worker
 #[derive(Parser, Debug)]
@@ -47,6 +53,9 @@ pub struct WorkerArgs {
     /// Path to the keypair file
     #[arg(short, long, default_value = "validator_keypair")]
     pub validator_keypair_path: PathBuf,
+    /// Path to the database directory
+    #[arg(short, long)]
+    pub id: u32,
 }
 
 #[derive(Debug, AsRef, AsMut, Deref, DerefMut)]
@@ -75,6 +84,7 @@ impl LoadableFromSettings for WorkerSettings {
 
 #[derive(Debug)]
 pub(crate) struct Worker {
+    id: u32,
     commitee: Committee,
     keypair: libp2p::identity::Keypair,
     validator_keypair: libp2p::identity::Keypair,
@@ -125,7 +135,11 @@ impl BaseAgent for Worker {
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
 
+        let id: u32 = 0;
+        let worker_metadata = WorkerMetadata{ id, authority: self.commitee.authorities.get("Lgp3UeZp6e/AKH1jfs9XU7hXKJH3XuVHf6TGhpEiBjc=").unwrap().clone() };
+
         let worker_network_hadle = WorkerNetwork::spawn(
+            worker_metadata,
             network_rx,
             received_ack_tx,
             received_batches_tx,
