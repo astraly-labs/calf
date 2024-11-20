@@ -5,15 +5,16 @@ pub mod network;
 pub mod quorum_waiter;
 pub mod transaction_event_listener;
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use batch_acknowledger::BatchAcknowledger;
 use batch_broadcaster::BatchBroadcaster;
 use batch_maker::BatchMaker;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
+use libp2p::{identity::Keypair, PeerId};
 use network::Network as WorkerNetwork;
 use quorum_waiter::QuorumWaiter;
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 use transaction_event_listener::TransactionEventListener;
@@ -141,10 +142,10 @@ impl BaseAgent for Worker {
             authority: self
                 .commitee
                 .get_authority_info_by_key(
-                    &"Lgp3UeZp6e/AKH1jfs9XU7hXKJH3XuVHf6TGhpEiBjc="
-                        .as_bytes()
-                        .to_vec(),
+                    &PeerId::from_str("12D3KooWD8jmgJT19beox9Gsjs4uKhjM6dEtLhRrPky41mmuRwYF")
+                        .unwrap(),
                 )
+                .context("Invalid authority key")
                 .unwrap()
                 .clone(),
         };

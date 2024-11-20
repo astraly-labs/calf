@@ -139,6 +139,7 @@ impl VoteAggregator {
                             // Add it to my local DAG
                             self.dag.lock().unwrap().insert(round_number, (self.local_keypair.public().to_peer_id(),certificate));
 
+                            tracing::info!("💚 DAG Updated");
                             waiting_headers.remove(header_index);
                         }
                     },

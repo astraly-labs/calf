@@ -238,8 +238,7 @@ impl Network {
                         }
                         RequestPayload::Vote(vote) => {
                             // Check if the vote is for a header I've built
-                            let myself = self.local_keypair.public().encode_protobuf();
-                            if vote.header().author == myself {
+                            if vote.header().author == peer_id {
                                 // TODO: And if the peer is an authority
                                 // if self.commitee.has_authority_key(peer_id) {
                                 // }

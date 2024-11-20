@@ -59,7 +59,7 @@ pub type Round = u64;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct BlockHeader {
-    pub author: PublicKey,
+    pub author: PeerId,
     pub round: Round,
     pub timestamp_ms: u128,
     pub digests: Vec<Digest>,

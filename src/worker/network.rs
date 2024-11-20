@@ -157,7 +157,7 @@ impl Network {
                             tracing::info!("worker network finished successfully");
                         }
                         Err(e) => {
-                            tracing::error!("worker network finished with an error: {e}");
+                            tracing::error!("worker network finished with an error: {:#?}", e);
                         }
                     };
                     cancellation_token.cancel();
@@ -178,7 +178,7 @@ impl Network {
         Ok(())
     }
 
-    pub async fn start_listening(&mut self) -> anyhow::Result<()> {
+    pub fn start_listening(&mut self) -> anyhow::Result<()> {
         let worker_addr =
             self.element_metadata.authority.workers[&self.element_metadata.id].clone();
         let (addr, port) = worker_addr.worker_to_worker.rsplit_once(":").unwrap();
@@ -204,11 +204,11 @@ impl Network {
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
         // listening for worker to worker, worker to primary, and foreign worker to connect
-        self.start_listening().await?;
+        self.start_listening()?;
 
         // connect to know peers
         // connect to other workers from same validator
-        self.try_connect_to_peer();
+        self.try_connect_to_peer().await;
         // connect to our primary
         // connect to external workers
 

@@ -114,11 +114,11 @@ impl HeaderBuilder {
             .expect("Failed to measure time")
             .as_millis();
 
-        let public_key = self.local_keypair.public().encode_protobuf();
+        let peer_id = self.local_keypair.public().to_peer_id();
 
         let header = BlockHeader {
             round: current_round,
-            author: public_key,
+            author: peer_id,
             timestamp_ms: now,
             digests: batch.clone(),
         };
