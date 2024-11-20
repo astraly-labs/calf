@@ -70,7 +70,7 @@ impl Network {
         commitee: Committee,
     ) -> JoinHandle<()> {
         let local_peer_id = PeerId::from(local_key.public());
-        println!("local peer id: {local_peer_id}");
+        tracing::info!("local peer id: {local_peer_id}");
 
         let (to_dial_send, to_dial_recv) = mpsc::channel::<(PeerId, Multiaddr)>(100);
 
@@ -162,7 +162,7 @@ impl Network {
             .condition(PeerCondition::DisconnectedAndNotDialing)
             .addresses(vec![multiaddr.clone()])
             .build();
-        println!("Dialing {} -> {peer_id}", self.my_addr);
+        tracing::info!("Dialing {} -> {peer_id}", self.my_addr);
         let _ = self.swarm.dial(dial_opts);
     }
 
@@ -198,7 +198,7 @@ impl Network {
                 mdns::Event::Discovered(list) => {
                     for (peer_id, multiaddr) in list {
                         if peer_id != self.local_peer_id && self.seen.insert(peer_id) {
-                            println!("mDNS discovered a new peer: {peer_id}");
+                            tracing::info!("mDNS discovered a new peer: {peer_id}");
                             if !self.out_peers.contains_key(&peer_id) {
                                 self.to_dial_send.send((peer_id, multiaddr.clone())).await?;
                             }
@@ -208,7 +208,7 @@ impl Network {
                 mdns::Event::Expired(list) => {
                     for (peer_id, _multiaddr) in list {
                         if peer_id != self.local_peer_id {
-                            println!("mDNS peer has expired: {peer_id}");
+                            tracing::info!("mDNS peer has expired: {peer_id}");
                             self.seen.remove(&peer_id);
                             self.swarm
                                 .disconnect_peer_id(peer_id)
@@ -250,13 +250,13 @@ impl Network {
                 }
                 request_response::Message::Response { response, .. } => {
                     let peer_id = peer;
-                    println!("response from {peer_id}: \"{:#?}\"", response);
+                    tracing::info!("response from {peer_id}: \"{:#?}\"", response);
                 }
             },
 
             // Swarm Events
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                println!("connection to {peer_id} closed");
+                tracing::info!("connection to {peer_id} closed");
                 self.in_peers.remove(&peer_id);
                 self.out_peers.remove(&peer_id);
             }
@@ -264,30 +264,30 @@ impl Network {
                 peer_id, endpoint, ..
             } => match endpoint {
                 ConnectedPoint::Dialer { address, .. } => {
-                    println!("dialed to {peer_id}: {address}");
+                    tracing::info!("dialed to {peer_id}: {address}");
                     self.out_peers.insert(peer_id, address.clone());
                 }
                 ConnectedPoint::Listener { send_back_addr, .. } => {
-                    println!("received dial from {peer_id}: {send_back_addr}");
+                    tracing::info!("received dial from {peer_id}: {send_back_addr}");
                     self.in_peers.insert(peer_id, send_back_addr.clone());
                 }
             },
             SwarmEvent::Dialing { peer_id, .. } => {
                 if let Some(peer_id) = peer_id {
-                    println!("dialing {peer_id}...");
+                    tracing::info!("dialing {peer_id}...");
                 }
             }
             SwarmEvent::ExternalAddrConfirmed { address } => {
-                println!("external address confirmed as {address}");
+                tracing::info!("external address confirmed as {address}");
                 self.my_addr = address;
             }
             SwarmEvent::NewListenAddr { address, .. } => {
-                println!("local peer is listening on {address}");
+                tracing::info!("local peer is listening on {address}");
                 self.my_addr = address;
             }
             SwarmEvent::OutgoingConnectionError { peer_id, .. } => {
                 if let Some(peer_id) = peer_id {
-                    println!("failed to dial {peer_id}...");
+                    tracing::info!("failed to dial {peer_id}...");
                 }
             }
             _ => {}
