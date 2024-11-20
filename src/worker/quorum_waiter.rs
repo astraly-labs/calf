@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::Db,
-    types::{NetworkRequest, ReceivedAcknowledgment, RequestPayload, TxBatch},
+    types::{Digest, NetworkRequest, ReceivedAcknowledgment, RequestPayload, TxBatch},
 };
 
 #[derive(Debug)]
@@ -35,7 +35,7 @@ pub struct QuorumWaiter {
     batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
     acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
     quorum_threshold: u32,
-    digest_tx: tokio::sync::mpsc::Sender<NetworkRequest>,
+    digest_tx: tokio::sync::mpsc::Sender<Digest>,
     db: Arc<Db>,
     quorum_timeout: u128,
 }
@@ -45,7 +45,7 @@ impl QuorumWaiter {
     pub fn spawn(
         batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
         acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
-        digest_tx: tokio::sync::mpsc::Sender<NetworkRequest>,
+        digest_tx: tokio::sync::mpsc::Sender<Digest>,
         db: Arc<Db>,
         quorum_threshold: u32,
         quorum_timeout: u128,
@@ -120,7 +120,7 @@ impl QuorumWaiter {
                                     tracing::warn!("Duplicate acknowledgment from peer: {:?}", sender);
                                 }
                                 if batch.acknowledgers.len() as u32 >= self.quorum_threshold {
-                                    self.digest_tx.send(batch.digest).await?;
+                                    self.digest_tx.send(batch.digest.into()).await?;
                                     let _ = self.insert_batch_in_db(batches.remove(batch_index));
                                 }
                         },
@@ -160,13 +160,13 @@ mod test {
     use super::QuorumWaiter;
     use crate::{
         db::Db,
-        types::{ReceivedAcknowledgment, Transaction, TxBatch},
+        types::{Digest, ReceivedAcknowledgment, Transaction, TxBatch},
     };
 
     type QuorumWaiterFixture = (
         tokio::sync::broadcast::Sender<TxBatch>,
         tokio::sync::mpsc::Sender<ReceivedAcknowledgment>,
-        tokio::sync::mpsc::Receiver<blake3::Hash>,
+        tokio::sync::mpsc::Receiver<Digest>,
         tokio_util::sync::CancellationToken,
         Arc<Db>,
         tokio::task::JoinHandle<()>,
@@ -234,7 +234,7 @@ mod test {
                 .expect("failed to send ack");
         }
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
-        assert!(res.unwrap().unwrap().as_bytes() == digest.as_bytes());
+        assert!(res.unwrap().unwrap() == *digest.as_bytes());
         token.cancel();
         handle.await.expect("failed to await handle");
     }
@@ -260,7 +260,7 @@ mod test {
                 .expect("failed to send ack");
         }
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
-        assert!(res.unwrap().unwrap().as_bytes() == digest.as_bytes());
+        assert!(res.unwrap().unwrap() == *digest.as_bytes());
 
         for _ in 0..3 {
             acknowledgments_tx
@@ -288,9 +288,8 @@ mod test {
             .map(|n| vec![Transaction { data: vec![n; 100] }; 100])
             .collect::<Vec<TxBatch>>();
         let digest =
-            blake3::hash(&bincode::serialize(&batches[9]).expect("failed to serialize batch"))
-                .as_bytes()
-                .to_vec();
+            *blake3::hash(&bincode::serialize(&batches[9]).expect("failed to serialize batch"))
+                .as_bytes();
         for batch in batches {
             batches_tx.send(batch).expect("failed to send batch");
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -298,7 +297,7 @@ mod test {
         for _ in 0..3 {
             acknowledgments_tx
                 .send(ReceivedAcknowledgment {
-                    acknoledgement: digest.clone(),
+                    acknoledgement: digest.clone().into(),
                     sender: libp2p::PeerId::random(),
                 })
                 .await
@@ -308,9 +307,7 @@ mod test {
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv())
             .await
             .unwrap()
-            .unwrap()
-            .as_bytes()
-            .to_vec();
+            .unwrap();
 
         assert!(res == digest);
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;

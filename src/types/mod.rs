@@ -23,6 +23,7 @@ impl Transaction {
         todo!()
     }
 }
+#[derive(Debug, PartialEq, Eq)]
 pub enum NetworkRequest {
     Broadcast(RequestPayload),
     SendTo(PeerId, RequestPayload),

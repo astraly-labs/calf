@@ -121,6 +121,7 @@ impl BaseAgent for Worker {
         let (received_ack_tx, received_ack_rx) = mpsc::channel::<ReceivedAcknowledgment>(100);
         let (received_batches_tx, received_batches_rx) = mpsc::channel(100);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
+        let (digest_tx, digest_rx) = tokio::sync::mpsc::channel(100);
 
         let cancellation_token = CancellationToken::new();
 
@@ -163,7 +164,7 @@ impl BaseAgent for Worker {
         let quorum_waiter_handle = QuorumWaiter::spawn(
             quorum_waiter_batches_rx,
             received_ack_rx,
-            network_tx.clone(),
+            digest_tx,
             Arc::clone(&self.db),
             QUORUM_TRESHOLD,
             QUORUM_TIMEOUT,

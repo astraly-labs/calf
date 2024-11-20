@@ -244,7 +244,7 @@ impl Network {
             .addresses(vec![multiaddr.clone()])
             .build();
         tracing::info!("Dialing {} -> {peer_id}", self.my_addr);
-        let _ = self.swarm.dial(dial_opts);
+        self.swarm.dial(dial_opts)
     }
 
     /// Sends a message to a specific peer.
