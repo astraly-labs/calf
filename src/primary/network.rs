@@ -51,6 +51,8 @@ pub(crate) struct Network {
     network_rx: mpsc::Receiver<NetworkRequest>,
     digest_tx: broadcast::Sender<Digest>,
     header_tx: broadcast::Sender<SignedBlockHeader>,
+    votes_tx: broadcast::Sender<SignedBlockHeader>,
+    local_keypair: Keypair,
 }
 
 impl Network {
@@ -60,6 +62,7 @@ impl Network {
         local_key: Keypair,
         digest_tx: broadcast::Sender<Digest>,
         header_tx: broadcast::Sender<SignedBlockHeader>,
+        votes_tx: broadcast::Sender<SignedBlockHeader>,
     ) -> JoinHandle<()> {
         let local_peer_id = PeerId::from(local_key.public());
         println!("local peer id: {local_peer_id}");
@@ -112,6 +115,8 @@ impl Network {
                 to_dial_recv,
                 digest_tx,
                 header_tx,
+                votes_tx,
+                local_keypair: local_key,
             }
             .run()
             .await;
@@ -224,6 +229,12 @@ impl Network {
                         RequestPayload::Header(header) => {
                             // TODO: check signature
                             self.header_tx.send(header)?;
+                        }
+                        RequestPayload::Vote(vote) => {
+                            let myself = self.local_keypair.public().encode_protobuf();
+                            if vote.value.author == myself {
+                                self.votes_tx.send(vote)?;
+                            }
                         }
                         _ => {}
                     }

@@ -1,18 +1,31 @@
 use std::{
-    collections::{BTreeMap, BTreeSet}, str::FromStr, time::Duration
+    collections::{BTreeMap, BTreeSet},
+    str::FromStr,
+    time::Duration,
 };
 
 use futures::StreamExt as _;
 use libp2p::{
-    core::{multiaddr::Multiaddr, ConnectedPoint}, identify::{self}, identity::Keypair, mdns, multiaddr::Protocol, request_response::{self, ProtocolSupport}, swarm::{
-        dial_opts::{DialOpts, PeerCondition}, DialError, NetworkBehaviour, SwarmEvent
-    }, PeerId, StreamProtocol
+    core::{multiaddr::Multiaddr, ConnectedPoint},
+    identify::{self},
+    identity::Keypair,
+    mdns,
+    multiaddr::Protocol,
+    request_response::{self, ProtocolSupport},
+    swarm::{
+        dial_opts::{DialOpts, PeerCondition},
+        DialError, NetworkBehaviour, SwarmEvent,
+    },
+    PeerId, StreamProtocol,
 };
 use std::sync::Arc;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use crate::{settings::parser::{AuthorityInfo, WorkerAddresses}, types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload}};
+use crate::{
+    settings::parser::{AuthorityInfo, WorkerAddresses},
+    types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload},
+};
 
 use super::WorkerMetadata;
 
@@ -64,14 +77,10 @@ impl Network {
                 "/key/{}",
                 hex::encode(validator_key.sign(&local_peer_id.to_bytes()).unwrap())
             );
-            
-            let component = format!(
-                "/worker/{}",
-                element_metadata.id,
-                
-            );
 
-            // initializing libp2p utilities 
+            let component = format!("/worker/{}", element_metadata.id,);
+
+            // initializing libp2p utilities
             let (to_dial_send, to_dial_recv) = mpsc::channel::<(PeerId, Multiaddr)>(100);
 
             let mdns_config = match mdns::tokio::Behaviour::new(
@@ -164,29 +173,37 @@ impl Network {
         let peer_addr = Multiaddr::from_str("/ip4/127.0.0.1/udp/3019/quic-v1").unwrap();
         match self.dial_peer(PeerId::random(), peer_addr.clone()).await {
             Ok(_) => tracing::info!("succesfully connected to {}", peer_addr),
-            Err(e) => tracing::error!("Error {:?}",e),
+            Err(e) => tracing::error!("Error {:?}", e),
         };
         Ok(())
     }
 
-
     pub async fn start_listening(&mut self) -> anyhow::Result<()> {
-        let worker_addr = self.element_metadata.authority.workers[&self.element_metadata.id].clone();
-        let (addr,port) = worker_addr.worker_to_worker.rsplit_once(":").unwrap();
-        let w2w_addr = Multiaddr::empty().with(Protocol::Ip4(addr.parse()?)).with(Protocol::Udp(port.parse()?)).with(Protocol::QuicV1);
+        let worker_addr =
+            self.element_metadata.authority.workers[&self.element_metadata.id].clone();
+        let (addr, port) = worker_addr.worker_to_worker.rsplit_once(":").unwrap();
+        let w2w_addr = Multiaddr::empty()
+            .with(Protocol::Ip4(addr.parse()?))
+            .with(Protocol::Udp(port.parse()?))
+            .with(Protocol::QuicV1);
         self.swarm.listen_on(w2w_addr)?;
-        let (addr,port) = worker_addr.primary_to_worker.rsplit_once(":").unwrap();
-        let p2w_addr = Multiaddr::empty().with(Protocol::Ip4(addr.parse()?)).with(Protocol::Udp(port.parse()?)).with(Protocol::QuicV1);
+        let (addr, port) = worker_addr.primary_to_worker.rsplit_once(":").unwrap();
+        let p2w_addr = Multiaddr::empty()
+            .with(Protocol::Ip4(addr.parse()?))
+            .with(Protocol::Udp(port.parse()?))
+            .with(Protocol::QuicV1);
         self.swarm.listen_on(p2w_addr)?;
-        let (addr,port) = worker_addr.transactions.rsplit_once(":").unwrap();
-        let tx_addr = Multiaddr::empty().with(Protocol::Ip4(addr.parse()?)).with(Protocol::Udp(port.parse()?)).with(Protocol::QuicV1);
+        let (addr, port) = worker_addr.transactions.rsplit_once(":").unwrap();
+        let tx_addr = Multiaddr::empty()
+            .with(Protocol::Ip4(addr.parse()?))
+            .with(Protocol::Udp(port.parse()?))
+            .with(Protocol::QuicV1);
         self.swarm.listen_on(tx_addr)?;
         Ok(())
     }
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
-        
-        // listening for worker to worker, worker to primary, and foreign worker to connect 
+        // listening for worker to worker, worker to primary, and foreign worker to connect
         self.start_listening().await?;
 
         // connect to know peers
@@ -310,9 +327,7 @@ impl Network {
                                 key,
                                 self.validator_key.sign(&peer_id.to_bytes()).unwrap()
                             );
-                            if !is_verified {
-
-                            }
+                            if !is_verified {}
                         }
                         None => {
                             tracing::info!("key not found, disconnecting from {}", peer_id);
@@ -399,20 +414,25 @@ impl Network {
                 println!("local peer is listening on {address}");
                 self.my_addr = address;
             }
-            SwarmEvent::OutgoingConnectionError {peer_id, error, ..} => {
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                 if let Some(peer_id) = peer_id {
-                    println!("failed to dial {peer_id} : {:?}...",error);
+                    println!("failed to dial {peer_id} : {:?}...", error);
                     match error {
                         DialError::WrongPeerId { obtained, endpoint } => {
                             let addr: Multiaddr = endpoint.get_remote_address().clone();
-                            let pos = addr.iter().position(|p| matches!(p, Protocol::P2p(_))).unwrap();
-                            let new_addr = addr.replace(pos, |_| Some(Protocol::P2p(obtained))).unwrap();
+                            let pos = addr
+                                .iter()
+                                .position(|p| matches!(p, Protocol::P2p(_)))
+                                .unwrap();
+                            let new_addr = addr
+                                .replace(pos, |_| Some(Protocol::P2p(obtained)))
+                                .unwrap();
                             match self.dial_peer(obtained, new_addr.clone()).await {
                                 Ok(_) => tracing::info!("tried to dial to {}", new_addr),
-                                Err(e) => tracing::error!("Retry failed")
+                                Err(e) => tracing::error!("Retry failed"),
                             }
-                        },
-                        _ => {},
+                        }
+                        _ => {}
                     }
                 }
             }

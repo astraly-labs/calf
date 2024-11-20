@@ -55,7 +55,7 @@ pub type WorkerId = u32;
 pub type Stake = u64;
 pub type Round = u64;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct BlockHeader {
     pub author: PublicKey,
     pub round: Round,

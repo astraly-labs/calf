@@ -37,7 +37,7 @@ const QUORUM_TIMEOUT: u128 = 1000;
 // Wrapper
 struct WorkerMetadata {
     pub id: u32,
-    pub authority : AuthorityInfo,
+    pub authority: AuthorityInfo,
 }
 
 /// CLI arguments for Worker
@@ -105,6 +105,7 @@ impl BaseAgent for Worker {
             utils::read_keypair_from_file(&settings.base.validator_keypair_path)
                 .context("Failed to read keypair from file")?;
         Ok(Self {
+            id: 0,
             commitee,
             db,
             keypair,
@@ -135,8 +136,18 @@ impl BaseAgent for Worker {
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
 
-        let id: u32 = 0;
-        let worker_metadata = WorkerMetadata{ id, authority: self.commitee.authorities.get("Lgp3UeZp6e/AKH1jfs9XU7hXKJH3XuVHf6TGhpEiBjc=").unwrap().clone() };
+        let worker_metadata = WorkerMetadata {
+            id: self.id,
+            authority: self
+                .commitee
+                .get_authority_info_by_key(
+                    &"Lgp3UeZp6e/AKH1jfs9XU7hXKJH3XuVHf6TGhpEiBjc="
+                        .as_bytes()
+                        .to_vec(),
+                )
+                .unwrap()
+                .clone(),
+        };
 
         let worker_network_hadle = WorkerNetwork::spawn(
             worker_metadata,

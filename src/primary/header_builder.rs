@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use libp2p::identity::{Keypair, PublicKey, SigningError};
 use tokio::{
@@ -7,9 +10,12 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::types::{
-    signing::{sign_with_keypair, Signable as _, Signature},
-    BlockHeader, Digest, NetworkRequest, RequestPayload, SignedBlockHeader,
+use crate::{
+    db::{Column, Db},
+    types::{
+        signing::{sign_with_keypair, Signable as _, Signature},
+        BlockHeader, Digest, NetworkRequest, RequestPayload, Round, SignedBlockHeader,
+    },
 };
 
 const MAX_DIGESTS_IN_HEADER: u64 = 10;
@@ -19,6 +25,7 @@ pub(crate) struct HeaderBuilder {
     digest_rx: broadcast::Receiver<Digest>,
     network_tx: mpsc::Sender<NetworkRequest>,
     local_keypair: Keypair,
+    db: Arc<Db>,
 }
 
 impl HeaderBuilder {
@@ -28,6 +35,7 @@ impl HeaderBuilder {
         digest_rx: broadcast::Receiver<Digest>,
         network_tx: mpsc::Sender<NetworkRequest>,
         cancellation_token: CancellationToken,
+        db: Arc<Db>,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let res = cancellation_token
@@ -36,6 +44,7 @@ impl HeaderBuilder {
                         digest_rx,
                         network_tx,
                         local_keypair,
+                        db,
                     }
                     .run(),
                 )
@@ -70,7 +79,8 @@ impl HeaderBuilder {
             tokio::select! {
                 _ = timer.tick() => {
                     if !batch.is_empty() {
-                        let block_header = self.build_current_header(&mut batch);
+                        let current_round = 0; // TODO: fetch it
+                        let block_header = self.build_current_header(&mut batch, current_round);
                         let signed_header = sign_with_keypair(&self.local_keypair, block_header)?;
                         self.broadcast_header(signed_header).await?;
 
@@ -80,7 +90,8 @@ impl HeaderBuilder {
                 Ok(digest) = self.digest_rx.recv() => {
                     batch.push(digest);
                     if batch.len() >= MAX_DIGESTS_IN_HEADER as usize {
-                        let block_header = self.build_current_header(&mut batch);
+                        let current_round = 0; // TODO: fetch it
+                        let block_header = self.build_current_header(&mut batch, current_round);
                         let signed_header = sign_with_keypair(&self.local_keypair, block_header)?;
                         self.broadcast_header(signed_header).await?;
 
@@ -93,7 +104,11 @@ impl HeaderBuilder {
 
     /// Builds the block header given a batch of digests
     /// NOTE: `timestamp_ms` field is set to the current timestamp
-    pub fn build_current_header(&self, batch: &mut Vec<Digest>) -> BlockHeader {
+    pub fn build_current_header(
+        &self,
+        batch: &mut Vec<Digest>,
+        current_round: Round,
+    ) -> BlockHeader {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Failed to measure time")
@@ -102,7 +117,7 @@ impl HeaderBuilder {
         let public_key = self.local_keypair.public().encode_protobuf();
 
         let header = BlockHeader {
-            round: 0,
+            round: current_round,
             author: public_key,
             parents_hashes: vec![],
             timestamp_ms: now,

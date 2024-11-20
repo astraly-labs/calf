@@ -1,6 +1,7 @@
 pub mod header_builder;
 pub mod header_processor;
 pub mod network;
+pub mod vote_aggregator;
 
 use anyhow::Context;
 use clap::{command, Parser};
@@ -11,6 +12,7 @@ use network::Network as PrimaryNetwork;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
+use vote_aggregator::VoteAggregator;
 
 use crate::{
     db,
@@ -88,8 +90,14 @@ impl BaseAgent for Primary {
         let (network_tx, network_rx) = mpsc::channel(100);
         let (digest_tx, digest_rx) = broadcast::channel(100);
         let (header_tx, header_rx) = broadcast::channel(100);
-        let network_handle =
-            PrimaryNetwork::spawn(network_rx, self.keypair.clone(), digest_tx, header_tx);
+        let (votes_tx, votes_rx) = broadcast::channel(100);
+        let network_handle = PrimaryNetwork::spawn(
+            network_rx,
+            self.keypair.clone(),
+            digest_tx,
+            header_tx.clone(),
+            votes_tx,
+        );
 
         let cancellation_token = CancellationToken::new();
 
@@ -98,17 +106,32 @@ impl BaseAgent for Primary {
             digest_rx,
             network_tx.clone(),
             cancellation_token.clone(),
+            self.db.clone(),
         );
 
         let header_processor = HeaderProcessor::spawn(
-            self.commitee,
+            self.commitee.clone(),
             header_rx,
+            network_tx.clone(),
+            cancellation_token.clone(),
+            self.db.clone(),
+        );
+
+        let vote_aggregator = VoteAggregator::spawn(
+            self.commitee,
+            votes_rx,
             network_tx,
+            header_tx.subscribe(),
             cancellation_token,
             self.db,
         );
 
-        let res = tokio::try_join!(network_handle, header_builder);
+        let res = tokio::try_join!(
+            network_handle,
+            header_builder,
+            header_processor,
+            vote_aggregator
+        );
         match res {
             Ok(_) => tracing::info!("Primary exited successfully"),
             Err(e) => tracing::error!("Primary exited with error: {:?}", e),

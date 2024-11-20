@@ -29,12 +29,20 @@ impl<T: Serialize + for<'a> Deserialize<'a>> FileLoader for T {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Committee {
-    pub authorities: BTreeMap<PublicKey, AuthorityInfo>,
+    authorities: BTreeMap<PublicKey, AuthorityInfo>,
 }
 
 impl Committee {
     pub fn has_authority_key(&self, key: &PublicKey) -> bool {
         self.authorities.contains_key(key)
+    }
+
+    pub fn quorum_threshold(&self) -> usize {
+        self.authorities.keys().len() * 2 / 3 + 1
+    }
+
+    pub fn get_authority_info_by_key(&self, key: &PublicKey) -> Option<&AuthorityInfo> {
+        self.authorities.get(key)
     }
 }
 
