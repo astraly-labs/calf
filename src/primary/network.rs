@@ -21,7 +21,10 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::types::{BlockHeader, Digest, NetworkRequest, RequestPayload, SignedBlockHeader};
+use crate::{
+    settings::parser::Committee,
+    types::{BlockHeader, Digest, NetworkRequest, RequestPayload, SignedBlockHeader, Vote},
+};
 
 /// Agent version
 const AGENT_VERSION: &str = "peer/0.0.1";
@@ -51,8 +54,9 @@ pub(crate) struct Network {
     network_rx: mpsc::Receiver<NetworkRequest>,
     digest_tx: broadcast::Sender<Digest>,
     header_tx: broadcast::Sender<SignedBlockHeader>,
-    votes_tx: broadcast::Sender<SignedBlockHeader>,
+    votes_tx: broadcast::Sender<Vote>,
     local_keypair: Keypair,
+    commitee: Committee,
 }
 
 impl Network {
@@ -62,7 +66,8 @@ impl Network {
         local_key: Keypair,
         digest_tx: broadcast::Sender<Digest>,
         header_tx: broadcast::Sender<SignedBlockHeader>,
-        votes_tx: broadcast::Sender<SignedBlockHeader>,
+        votes_tx: broadcast::Sender<Vote>,
+        commitee: Committee,
     ) -> JoinHandle<()> {
         let local_peer_id = PeerId::from(local_key.public());
         println!("local peer id: {local_peer_id}");
@@ -117,6 +122,7 @@ impl Network {
                 header_tx,
                 votes_tx,
                 local_keypair: local_key,
+                commitee,
             }
             .run()
             .await;
@@ -231,8 +237,12 @@ impl Network {
                             self.header_tx.send(header)?;
                         }
                         RequestPayload::Vote(vote) => {
+                            // Check if the vote is for a header I've built
                             let myself = self.local_keypair.public().encode_protobuf();
-                            if vote.value.author == myself {
+                            if vote.header().author == myself {
+                                // TODO: And if the peer is an authority
+                                // if self.commitee.has_authority_key(peer_id) {
+                                // }
                                 self.votes_tx.send(vote)?;
                             }
                         }

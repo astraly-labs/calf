@@ -119,7 +119,6 @@ impl HeaderBuilder {
         let header = BlockHeader {
             round: current_round,
             author: public_key,
-            parents_hashes: vec![],
             timestamp_ms: now,
             digests: batch.clone(),
         };

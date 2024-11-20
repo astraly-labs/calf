@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
+use libp2p::{identity::Keypair, PeerId};
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -9,13 +10,14 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     db::Db,
     settings::parser::Committee,
-    types::{NetworkRequest, SignedBlockHeader},
+    types::{Certificate, Dag, NetworkRequest, SignedBlockHeader, Vote},
 };
 
 const QUORUM_TIMEOUT: u128 = 1000;
 
 struct WaitingHeader {
     ack_number: u32,
+    votes: Vec<PeerId>,
     header: SignedBlockHeader,
     timestamp: tokio::time::Instant,
 }
@@ -24,6 +26,7 @@ impl WaitingHeader {
     fn new(header: SignedBlockHeader) -> anyhow::Result<Self> {
         Ok(Self {
             ack_number: 0,
+            votes: vec![],
             header,
             timestamp: tokio::time::Instant::now(),
         })
@@ -31,22 +34,26 @@ impl WaitingHeader {
 }
 
 pub(crate) struct VoteAggregator {
-    votes_rx: broadcast::Receiver<SignedBlockHeader>,
+    votes_rx: broadcast::Receiver<Vote>,
     network_tx: mpsc::Sender<NetworkRequest>,
     header_rx: broadcast::Receiver<SignedBlockHeader>,
     commitee: Committee,
     db: Arc<Db>,
+    dag: Arc<Mutex<Dag>>,
+    local_keypair: Keypair,
 }
 
 impl VoteAggregator {
     #[must_use]
     pub fn spawn(
         commitee: Committee,
-        votes_rx: broadcast::Receiver<SignedBlockHeader>,
+        votes_rx: broadcast::Receiver<Vote>,
         network_tx: mpsc::Sender<NetworkRequest>,
         header_rx: broadcast::Receiver<SignedBlockHeader>,
         cancellation_token: CancellationToken,
         db: Arc<Db>,
+        dag: Arc<Mutex<Dag>>,
+        local_keypair: Keypair,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let res = cancellation_token
@@ -57,6 +64,8 @@ impl VoteAggregator {
                         network_tx,
                         header_rx,
                         db,
+                        dag,
+                        local_keypair,
                     }
                     .run(),
                 )
@@ -82,7 +91,7 @@ impl VoteAggregator {
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
-        let mut votes = vec![];
+        let mut waiting_headers = vec![];
         loop {
             tokio::select! {
                 Ok(header) = self.header_rx.recv() => {
@@ -93,38 +102,50 @@ impl VoteAggregator {
                             continue;
                         }
                     };
-                    if votes.iter().any(|elm: &WaitingHeader| {
+                    if waiting_headers.iter().any(|elm: &WaitingHeader| {
                        elm.header.value == waiting_header.header.value
                     }) {
                         tracing::warn!("Received duplicate header");
                     }
                     else {
-                        votes.push(waiting_header);
+                        waiting_headers.push(waiting_header);
                         tracing::info!("Received new header");
                     }
                     let now = tokio::time::Instant::now();
                     //perfectible ? rayon ? une "liste de timers" ?
-                    for i in 0..votes.len() {
-                        if now.duration_since(votes[i].timestamp).as_millis() > QUORUM_TIMEOUT {
-                            tracing::warn!("Header timed out: {:?}", votes[i].header);
-                            votes.remove(i);
+                    for i in 0..waiting_headers.len() {
+                        if now.duration_since(waiting_headers[i].timestamp).as_millis() > QUORUM_TIMEOUT {
+                            tracing::warn!("Header timed out: {:?}", waiting_headers[i].header);
+                            waiting_headers.remove(i);
                         }
                     }
             },
-                Ok(vote) = self.votes_rx.recv() => {
-                    match votes.iter().position(|b| b.header.value == vote.value) {
-                        Some(header_index) => {
-                            let waiting_header = &mut votes[header_index];
-                            waiting_header.ack_number += 1;
-                            if waiting_header.ack_number >= self.commitee.quorum_threshold().try_into()? {
-                                tracing::info!("Header is now confirmed: {:?}", waiting_header.header);
-                                votes.remove(header_index);
-                            }
-                        },
-                        _ => {
+            Ok(vote) = self.votes_rx.recv() => {
+                // Check if we have a corresponding header waiting for votes
+                match waiting_headers.iter().position(|b| b.header.value == *vote.header()) {
+                    Some(header_index) => {
+                        let waiting_header = &mut waiting_headers[header_index];
+                        waiting_header.votes.push(*vote.peer_id());
+                        waiting_header.ack_number += 1;
+                        if waiting_header.ack_number >= self.commitee.quorum_threshold().try_into()? {
+                            tracing::info!("✅ Quorum Reached for round : {:?}", waiting_header.header.value.round);
+                            let signed_authorities = waiting_header.votes.clone();
+                            let header_value = waiting_header.header.value.clone();
+                            let round_number = header_value.round;
+
+                            // Create certificate
+                            let certificate = Certificate::new(signed_authorities, header_value);
+
+                            // Add it to my local DAG
+                            self.dag.lock().unwrap().insert(round_number, (self.local_keypair.public().to_peer_id(),certificate));
+
+                            waiting_headers.remove(header_index);
                         }
-                    };
-                }
+                    },
+                    _ => {
+                    }
+                };
+            }
             }
         }
     }

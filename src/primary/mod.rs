@@ -9,7 +9,10 @@ use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use header_builder::HeaderBuilder;
 use header_processor::HeaderProcessor;
 use network::Network as PrimaryNetwork;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 use vote_aggregator::VoteAggregator;
@@ -91,18 +94,22 @@ impl BaseAgent for Primary {
         let (digest_tx, digest_rx) = broadcast::channel(100);
         let (header_tx, header_rx) = broadcast::channel(100);
         let (votes_tx, votes_rx) = broadcast::channel(100);
+
+        let dag = Arc::new(Mutex::new(Default::default()));
+
         let network_handle = PrimaryNetwork::spawn(
             network_rx,
             self.keypair.clone(),
             digest_tx,
             header_tx.clone(),
             votes_tx,
+            self.commitee.clone(),
         );
 
         let cancellation_token = CancellationToken::new();
 
         let header_builder = HeaderBuilder::spawn(
-            self.keypair,
+            self.keypair.clone(),
             digest_rx,
             network_tx.clone(),
             cancellation_token.clone(),
@@ -115,6 +122,7 @@ impl BaseAgent for Primary {
             network_tx.clone(),
             cancellation_token.clone(),
             self.db.clone(),
+            self.keypair.clone(),
         );
 
         let vote_aggregator = VoteAggregator::spawn(
@@ -124,6 +132,8 @@ impl BaseAgent for Primary {
             header_tx.subscribe(),
             cancellation_token,
             self.db,
+            dag,
+            self.keypair,
         );
 
         let res = tokio::try_join!(

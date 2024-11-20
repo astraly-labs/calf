@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
+use libp2p::identity::Keypair;
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -10,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     db::{Column, Db},
     settings::parser::Committee,
-    types::{BlockHeader, NetworkRequest, RequestPayload, Round, SignedBlockHeader},
+    types::{BlockHeader, NetworkRequest, RequestPayload, Round, SignedBlockHeader, Vote},
 };
 
 pub(crate) struct HeaderProcessor {
@@ -18,6 +19,7 @@ pub(crate) struct HeaderProcessor {
     network_tx: mpsc::Sender<NetworkRequest>,
     commitee: Committee,
     db: Arc<Db>,
+    local_keypair: Keypair,
 }
 
 impl HeaderProcessor {
@@ -28,6 +30,7 @@ impl HeaderProcessor {
         network_tx: mpsc::Sender<NetworkRequest>,
         cancellation_token: CancellationToken,
         db: Arc<Db>,
+        local_keypair: Keypair,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let res = cancellation_token
@@ -37,6 +40,7 @@ impl HeaderProcessor {
                         header_rx,
                         network_tx,
                         db,
+                        local_keypair,
                     }
                     .run(),
                 )
@@ -99,9 +103,10 @@ impl HeaderProcessor {
             header.clone()
         );
         self.network_tx
-            .send(NetworkRequest::Broadcast(RequestPayload::Vote(
-                header.clone(),
-            )))
+            .send(NetworkRequest::Broadcast(RequestPayload::Vote(Vote::new(
+                self.local_keypair.public().to_peer_id(),
+                header.value.clone(),
+            ))))
             .await?;
         Ok(())
     }

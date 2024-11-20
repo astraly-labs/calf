@@ -1,6 +1,8 @@
 pub mod agents;
 pub mod signing;
 
+use std::collections::HashMap;
+
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use signing::{Signable, SignedType};
@@ -35,7 +37,7 @@ pub enum RequestPayload {
     Acknoledgment(BatchAcknowledgement),
     Digest(Digest),
     Header(SignedBlockHeader),
-    Vote(SignedBlockHeader),
+    Vote(Vote),
 }
 
 pub struct ReceivedBatch {
@@ -59,11 +61,46 @@ pub type Round = u64;
 pub struct BlockHeader {
     pub author: PublicKey,
     pub round: Round,
-    pub parents_hashes: Vec<Digest>,
     pub timestamp_ms: u128,
     pub digests: Vec<Digest>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct Certificate {
+    signed_authorities: Vec<PeerId>,
+    header: BlockHeader,
+}
+
+impl Certificate {
+    pub fn new(signed_authorities: Vec<PeerId>, header: BlockHeader) -> Self {
+        Self {
+            signed_authorities,
+            header,
+        }
+    }
+}
+
 impl Signable for BlockHeader {}
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct Vote {
+    peer_id: PeerId,
+    header: BlockHeader,
+}
+
+impl Vote {
+    pub fn new(peer_id: PeerId, header: BlockHeader) -> Self {
+        Self { peer_id, header }
+    }
+    pub fn peer_id(&self) -> &PeerId {
+        &self.peer_id
+    }
+
+    pub fn header(&self) -> &BlockHeader {
+        &self.header
+    }
+}
+
 pub type SignedBlockHeader = SignedType<BlockHeader>;
+
+pub type Dag = HashMap<Round, (PeerId, Certificate)>;
