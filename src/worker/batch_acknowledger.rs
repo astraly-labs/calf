@@ -71,7 +71,6 @@ mod test {
 
     use super::BatchAcknowledger;
 
-
     type BatchAcknowledgerFixture = (
         tokio::sync::mpsc::Sender<ReceivedBatch>,
         tokio::sync::mpsc::Receiver<NetworkRequest>,
@@ -97,9 +96,14 @@ mod test {
             batch: TxBatch::default(),
         };
 
-        let expected_request = NetworkRequest::SendTo(batch.sender, RequestPayload::Acknoledgment(
-            blake3::hash(&bincode::serialize(&batch.batch).expect("failed to serialize batch")).as_bytes().to_vec(),
-        ));
+        let expected_request = NetworkRequest::SendTo(
+            batch.sender,
+            RequestPayload::Acknoledgment(
+                blake3::hash(&bincode::serialize(&batch.batch).expect("failed to serialize batch"))
+                    .as_bytes()
+                    .to_vec(),
+            ),
+        );
         batches_tx.send(batch).await.expect("failed to send batch");
         let res = requests_rx.recv().await.expect("failed to receive request");
         assert_eq!(res, expected_request);
@@ -112,5 +116,4 @@ mod test {
         token.cancel();
         handle.await.expect("failed to await handle");
     }
-
 }

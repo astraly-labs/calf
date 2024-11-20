@@ -54,6 +54,7 @@ pub struct ReceivedAcknowledgment {
 }
 
 pub type TxBatch = Vec<Transaction>;
+pub type Digest = Vec<u8>;
 pub type PublicKey = String;
 pub type WorkerId = u32;
 pub type Stake = u64;

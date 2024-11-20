@@ -91,8 +91,9 @@ impl BaseAgent for Worker {
         let commitee = Committee::load_from_file(".config.json")?;
         let keypair = utils::read_keypair_from_file(&settings.base.keypair_path)
             .context("Failed to read keypair from file")?;
-        let validator_keypair = utils::read_keypair_from_file(&settings.base.validator_keypair_path)
-        .context("Failed to read keypair from file")?;
+        let validator_keypair =
+            utils::read_keypair_from_file(&settings.base.validator_keypair_path)
+                .context("Failed to read keypair from file")?;
         Ok(Self {
             commitee,
             db,

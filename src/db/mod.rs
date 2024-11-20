@@ -106,7 +106,7 @@ mod test {
 
     #[test]
     fn test_db() {
-        let db = Db::new(":memory:".into()).unwrap();
+        let db = Db::new("/tmp/test_db_3".into()).unwrap();
         db.insert(Column::Batches, "key", 42).unwrap();
         assert_eq!(db.get::<i32>(Column::Batches, "key").unwrap(), Some(42));
         assert_eq!(db.remove::<i32>(Column::Batches, "key").unwrap(), Some(42));
