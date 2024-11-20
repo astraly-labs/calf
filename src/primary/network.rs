@@ -16,9 +16,15 @@ use libp2p::{
     },
     PeerId, StreamProtocol,
 };
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::{
+    sync::{broadcast, mpsc},
+    task::JoinHandle,
+};
 
-use crate::types::{NetworkRequest, RequestPayload};
+use crate::{
+    settings::parser::Committee,
+    types::{BlockHeader, Digest, NetworkRequest, RequestPayload, SignedBlockHeader, Vote},
+};
 
 /// Agent version
 const AGENT_VERSION: &str = "peer/0.0.1";
@@ -46,11 +52,23 @@ pub(crate) struct Network {
     to_dial_send: mpsc::Sender<(PeerId, Multiaddr)>,
     to_dial_recv: mpsc::Receiver<(PeerId, Multiaddr)>,
     network_rx: mpsc::Receiver<NetworkRequest>,
+    digest_tx: broadcast::Sender<Digest>,
+    header_tx: broadcast::Sender<SignedBlockHeader>,
+    votes_tx: broadcast::Sender<Vote>,
+    local_keypair: Keypair,
+    commitee: Committee,
 }
 
 impl Network {
     #[must_use]
-    pub fn spawn(network_rx: mpsc::Receiver<NetworkRequest>, local_key: Keypair) -> JoinHandle<()> {
+    pub fn spawn(
+        network_rx: mpsc::Receiver<NetworkRequest>,
+        local_key: Keypair,
+        digest_tx: broadcast::Sender<Digest>,
+        header_tx: broadcast::Sender<SignedBlockHeader>,
+        votes_tx: broadcast::Sender<Vote>,
+        commitee: Committee,
+    ) -> JoinHandle<()> {
         let local_peer_id = PeerId::from(local_key.public());
         tracing::info!("local peer id: {local_peer_id}");
 
@@ -100,6 +118,11 @@ impl Network {
                 network_rx,
                 to_dial_send,
                 to_dial_recv,
+                digest_tx,
+                header_tx,
+                votes_tx,
+                local_keypair: local_key,
+                commitee,
             }
             .run()
             .await;
@@ -206,8 +229,23 @@ impl Network {
                     let decoded = bincode::deserialize::<RequestPayload>(&req)?;
                     tracing::info!("decoded request: {:#?}", decoded);
                     match decoded {
-                        RequestPayload::Batch(batch) => {}
-                        RequestPayload::Acknoledgment(ack) => {}
+                        RequestPayload::Digest(batch_digest) => {
+                            self.digest_tx.send(batch_digest)?;
+                        }
+                        RequestPayload::Header(header) => {
+                            // TODO: check signature
+                            self.header_tx.send(header)?;
+                        }
+                        RequestPayload::Vote(vote) => {
+                            // Check if the vote is for a header I've built
+                            if vote.header().author == peer_id {
+                                // TODO: And if the peer is an authority
+                                // if self.commitee.has_authority_key(peer_id) {
+                                // }
+                                self.votes_tx.send(vote)?;
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 request_response::Message::Response { response, .. } => {

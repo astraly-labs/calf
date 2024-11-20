@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    str::FromStr,
     time::Duration,
 };
 
@@ -9,11 +10,12 @@ use libp2p::{
     identify::{self},
     identity::Keypair,
     mdns,
+    multiaddr::Protocol,
     request_response::{self, ProtocolSupport},
     swarm::{
         behaviour,
         dial_opts::{DialOpts, PeerCondition},
-        NetworkBehaviour, SwarmEvent,
+        DialError, NetworkBehaviour, SwarmEvent,
     },
     PeerId, StreamProtocol,
 };
@@ -21,7 +23,12 @@ use std::sync::Arc;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use crate::types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload};
+use crate::{
+    settings::parser::{AuthorityInfo, WorkerAddresses},
+    types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload},
+};
+
+use super::WorkerMetadata;
 
 /// Agent version
 const AGENT_VERSION: &str = "narwals/0.0.1";
@@ -29,10 +36,6 @@ const AGENT_VERSION: &str = "narwals/0.0.1";
 // Main protocol
 const MAIN_PROTOCOL: &str = "/calf/1";
 // Componenet Protocol /{worker/primary}/{id}
-const COMPONENT_PROTOCOL: &str = "/worker/1";
-// Handshake key
-// local peer id => encode avec ta keypair =>
-const VALIDATOR_KEY: &str = "/key/{}";
 
 #[derive(NetworkBehaviour)]
 struct WorkerBehaviour {
@@ -42,6 +45,7 @@ struct WorkerBehaviour {
 }
 
 pub(crate) struct Network {
+    element_metadata: WorkerMetadata,
     swarm: libp2p::Swarm<WorkerBehaviour>,
     my_addr: Multiaddr,
     seen: BTreeSet<PeerId>,
@@ -59,6 +63,7 @@ pub(crate) struct Network {
 impl Network {
     #[must_use]
     pub fn spawn(
+        element_metadata: WorkerMetadata,
         network_rx: mpsc::Receiver<NetworkRequest>,
         received_ack_tx: mpsc::Sender<ReceivedAcknowledgment>,
         received_batches_tx: mpsc::Sender<ReceivedBatch>,
@@ -74,6 +79,9 @@ impl Network {
                 hex::encode(validator_key.sign(&local_peer_id.to_bytes()).unwrap())
             );
 
+            let component = format!("/worker/{}", element_metadata.id,);
+
+            // initializing libp2p utilities
             let (to_dial_send, to_dial_recv) = mpsc::channel::<(PeerId, Multiaddr)>(100);
 
             let mdns_config = match mdns::tokio::Behaviour::new(
@@ -107,7 +115,7 @@ impl Network {
                             [
                                 (StreamProtocol::new(MAIN_PROTOCOL), ProtocolSupport::Full),
                                 (
-                                    StreamProtocol::new(COMPONENT_PROTOCOL),
+                                    StreamProtocol::try_from_owned(component).unwrap(),
                                     ProtocolSupport::Full,
                                 ),
                                 (
@@ -120,10 +128,11 @@ impl Network {
                     },
                 })
                 .unwrap()
-                .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+                .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(15)))
                 .build();
 
             let mut this = Self {
+                element_metadata,
                 swarm,
                 my_addr: Multiaddr::empty(),
                 seen: BTreeSet::new(),
@@ -149,7 +158,7 @@ impl Network {
                             tracing::info!("worker network finished successfully");
                         }
                         Err(e) => {
-                            tracing::error!("worker network finished with an error: {e}");
+                            tracing::error!("worker network finished with an error: {:#?}", e);
                         }
                     };
                     cancellation_token.cancel();
@@ -161,16 +170,56 @@ impl Network {
         })
     }
 
+    pub async fn try_connect_to_peer(&mut self) -> anyhow::Result<()> {
+        let peer_addr = Multiaddr::from_str("/ip4/127.0.0.1/udp/3019/quic-v1").unwrap();
+        match self.dial_peer(PeerId::random(), peer_addr.clone()).await {
+            Ok(_) => tracing::info!("succesfully connected to {}", peer_addr),
+            Err(e) => tracing::error!("Error {:?}", e),
+        };
+        Ok(())
+    }
+
+    pub fn start_listening(&mut self) -> anyhow::Result<()> {
+        let worker_addr =
+            self.element_metadata.authority.workers[&self.element_metadata.id].clone();
+        let (addr, port) = worker_addr.worker_to_worker.rsplit_once(":").unwrap();
+        let w2w_addr = Multiaddr::empty()
+            .with(Protocol::Ip4(addr.parse()?))
+            .with(Protocol::Udp(port.parse()?))
+            .with(Protocol::QuicV1);
+        self.swarm.listen_on(w2w_addr)?;
+        let (addr, port) = worker_addr.primary_to_worker.rsplit_once(":").unwrap();
+        let p2w_addr = Multiaddr::empty()
+            .with(Protocol::Ip4(addr.parse()?))
+            .with(Protocol::Udp(port.parse()?))
+            .with(Protocol::QuicV1);
+        self.swarm.listen_on(p2w_addr)?;
+        let (addr, port) = worker_addr.transactions.rsplit_once(":").unwrap();
+        let tx_addr = Multiaddr::empty()
+            .with(Protocol::Ip4(addr.parse()?))
+            .with(Protocol::Udp(port.parse()?))
+            .with(Protocol::QuicV1);
+        self.swarm.listen_on(tx_addr)?;
+        Ok(())
+    }
+
     pub async fn run(&mut self) -> anyhow::Result<()> {
-        self.swarm
-            .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
-            .unwrap();
+        // listening for worker to worker, worker to primary, and foreign worker to connect
+        self.start_listening()?;
+
+        // connect to know peers
+        // connect to other workers from same validator
+        self.try_connect_to_peer().await;
+        // connect to our primary
+        // connect to external workers
+
+        self.try_connect_to_peer().await;
 
         // TODO: handle gracefully the shutdown of the network
         loop {
             tokio::select! {
                 Some((peer_id, multiaddr)) = self.to_dial_recv.recv() => {
-                    self.dial_peer(peer_id, multiaddr).await;
+                    let _ = self.dial_peer(peer_id, multiaddr).await;
                 },
                 event = self.swarm.select_next_some() => {
                     self.handle_event(event).await?;
@@ -189,7 +238,7 @@ impl Network {
         }
     }
 
-    async fn dial_peer(&mut self, peer_id: PeerId, multiaddr: Multiaddr) {
+    async fn dial_peer(&mut self, peer_id: PeerId, multiaddr: Multiaddr) -> Result<(), DialError> {
         let dial_opts = DialOpts::peer_id(peer_id)
             .condition(PeerCondition::DisconnectedAndNotDialing)
             .addresses(vec![multiaddr.clone()])
@@ -279,6 +328,7 @@ impl Network {
                                 key,
                                 self.validator_key.sign(&peer_id.to_bytes()).unwrap()
                             );
+                            if !is_verified {}
                         }
                         None => {
                             tracing::info!("key not found, disconnecting from {}", peer_id);
@@ -289,29 +339,6 @@ impl Network {
                     }
                 }
             }
-            SwarmEvent::Behaviour(WorkerBehaviourEvent::Mdns(event)) => match event {
-                mdns::Event::Discovered(list) => {
-                    for (peer_id, multiaddr) in list {
-                        if peer_id != self.local_peer_id && self.seen.insert(peer_id) {
-                            tracing::info!("mDNS discovered a new peer: {peer_id}");
-                            if !self.out_peers.contains_key(&peer_id) {
-                                self.to_dial_send.send((peer_id, multiaddr.clone())).await?;
-                            }
-                        }
-                    }
-                }
-                mdns::Event::Expired(list) => {
-                    for (peer_id, _multiaddr) in list {
-                        if peer_id != self.local_peer_id {
-                            tracing::info!("mDNS peer has expired: {peer_id}");
-                            self.seen.remove(&peer_id);
-                            self.swarm
-                                .disconnect_peer_id(peer_id)
-                                .map_err(|_| anyhow::anyhow!("failed to disconnect from peer"))?;
-                        }
-                    }
-                }
-            },
             SwarmEvent::Behaviour(WorkerBehaviourEvent::RequestResponse(
                 request_response::Event::Message { peer, message },
             )) => match message {
@@ -340,6 +367,9 @@ impl Network {
                                 })
                                 .await?;
                         }
+                        _ => {
+                            tracing::warn!("Received unknown request, ignoring");
+                        }
                     }
                     //self.swarm.behaviour_mut().request_response.send_response(channel, ()).map_err(op);
                 }
@@ -354,6 +384,12 @@ impl Network {
                 tracing::info!("connection to {peer_id} closed");
                 self.in_peers.remove(&peer_id);
                 self.out_peers.remove(&peer_id);
+                // match self.dial_peer(peer_id,  self.in_peers[&peer_id].clone()).await {
+                //     Ok(_) => tracing::info!("reconnect succesfully !"),
+                //     Err(_) => {
+                //         println!("reconnection to {peer_id} failed => Closing connection");
+                //     },
+                // }
             }
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..
@@ -380,9 +416,26 @@ impl Network {
                 tracing::info!("local peer is listening on {address}");
                 self.my_addr = address;
             }
-            SwarmEvent::OutgoingConnectionError { peer_id, .. } => {
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                 if let Some(peer_id) = peer_id {
-                    tracing::info!("failed to dial {peer_id}...");
+                    tracing::error!("failed to dial {peer_id} : {:?}...", error);
+                    match error {
+                        DialError::WrongPeerId { obtained, endpoint } => {
+                            let addr: Multiaddr = endpoint.get_remote_address().clone();
+                            let pos = addr
+                                .iter()
+                                .position(|p| matches!(p, Protocol::P2p(_)))
+                                .unwrap();
+                            let new_addr = addr
+                                .replace(pos, |_| Some(Protocol::P2p(obtained)))
+                                .unwrap();
+                            match self.dial_peer(obtained, new_addr.clone()).await {
+                                Ok(_) => tracing::info!("tried to dial to {}", new_addr),
+                                Err(e) => tracing::error!("Retry failed"),
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
             _ => {}

@@ -22,6 +22,7 @@ pub enum Error {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Column {
     Batches,
+    Headers,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -45,6 +46,7 @@ impl Column {
     fn as_str(&self) -> &'static str {
         match self {
             Column::Batches => "batches",
+            Column::Headers => "headers",
         }
     }
 

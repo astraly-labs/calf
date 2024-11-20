@@ -1,4 +1,3 @@
-use core::panic;
 use libp2p::PeerId;
 use std::{
     collections::{HashMap, HashSet},
@@ -9,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::Db,
-    types::{ReceivedAcknowledgment, TxBatch},
+    types::{NetworkRequest, ReceivedAcknowledgment, RequestPayload, TxBatch},
 };
 
 #[derive(Debug)]
@@ -36,7 +35,7 @@ pub struct QuorumWaiter {
     batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
     acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
     quorum_threshold: u32,
-    digest_tx: tokio::sync::mpsc::Sender<blake3::Hash>,
+    digest_tx: tokio::sync::mpsc::Sender<NetworkRequest>,
     db: Arc<Db>,
     quorum_timeout: u128,
 }
@@ -46,7 +45,7 @@ impl QuorumWaiter {
     pub fn spawn(
         batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
         acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
-        digest_tx: tokio::sync::mpsc::Sender<blake3::Hash>,
+        digest_tx: tokio::sync::mpsc::Sender<NetworkRequest>,
         db: Arc<Db>,
         quorum_threshold: u32,
         quorum_timeout: u128,

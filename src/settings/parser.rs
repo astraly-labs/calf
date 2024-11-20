@@ -1,3 +1,4 @@
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -29,7 +30,21 @@ impl<T: Serialize + for<'a> Deserialize<'a>> FileLoader for T {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Committee {
-    pub authorities: BTreeMap<PublicKey, AuthorityInfo>,
+    authorities: BTreeMap<PeerId, AuthorityInfo>,
+}
+
+impl Committee {
+    pub fn has_authority_key(&self, key: &PeerId) -> bool {
+        self.authorities.contains_key(key)
+    }
+
+    pub fn quorum_threshold(&self) -> usize {
+        self.authorities.keys().len() * 2 / 3 + 1
+    }
+
+    pub fn get_authority_info_by_key(&self, key: &PeerId) -> Option<&AuthorityInfo> {
+        self.authorities.get(key)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -84,7 +99,7 @@ pub struct PrimaryInfo {
 
 // Examples of usage:
 impl Committee {
-    pub fn get_primary_address(&self, authority_key: &PublicKey) -> Option<&String> {
+    pub fn get_primary_address(&self, authority_key: &PeerId) -> Option<&String> {
         self.authorities
             .get(authority_key)
             .map(|auth| &auth.primary.primary_to_primary)
@@ -92,7 +107,7 @@ impl Committee {
 
     pub fn get_worker_address(
         &self,
-        authority_key: &PublicKey,
+        authority_key: &PeerId,
         worker_id: WorkerId,
     ) -> Option<&WorkerAddresses> {
         self.authorities.get(authority_key)?.workers.get(&worker_id)

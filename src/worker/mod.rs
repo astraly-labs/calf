@@ -5,22 +5,23 @@ pub mod network;
 pub mod quorum_waiter;
 pub mod transaction_event_listener;
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use batch_acknowledger::BatchAcknowledger;
 use batch_broadcaster::BatchBroadcaster;
 use batch_maker::BatchMaker;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
+use libp2p::{identity::Keypair, PeerId};
 use network::Network as WorkerNetwork;
 use quorum_waiter::QuorumWaiter;
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 use transaction_event_listener::TransactionEventListener;
 
 use crate::{
     db,
-    settings::parser::{Committee, FileLoader as _},
+    settings::parser::{AuthorityInfo, Committee, FileLoader as _},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         ReceivedAcknowledgment,
@@ -33,6 +34,12 @@ const QUORUM_TRESHOLD: u32 = 3;
 const TIMEOUT: u64 = 1000;
 const BATCH_SIZE: usize = 10;
 const QUORUM_TIMEOUT: u128 = 1000;
+
+// Wrapper
+struct WorkerMetadata {
+    pub id: u32,
+    pub authority: AuthorityInfo,
+}
 
 /// CLI arguments for Worker
 #[derive(Parser, Debug)]
@@ -47,6 +54,9 @@ pub struct WorkerArgs {
     /// Path to the keypair file
     #[arg(short, long, default_value = "validator_keypair")]
     pub validator_keypair_path: PathBuf,
+    /// Path to the database directory
+    #[arg(short, long)]
+    pub id: u32,
 }
 
 #[derive(Debug, AsRef, AsMut, Deref, DerefMut)]
@@ -75,6 +85,7 @@ impl LoadableFromSettings for WorkerSettings {
 
 #[derive(Debug)]
 pub(crate) struct Worker {
+    id: u32,
     commitee: Committee,
     keypair: libp2p::identity::Keypair,
     validator_keypair: libp2p::identity::Keypair,
@@ -95,6 +106,7 @@ impl BaseAgent for Worker {
             utils::read_keypair_from_file(&settings.base.validator_keypair_path)
                 .context("Failed to read keypair from file")?;
         Ok(Self {
+            id: 0,
             commitee,
             db,
             keypair,
@@ -108,11 +120,9 @@ impl BaseAgent for Worker {
         let (network_tx, network_rx) = mpsc::channel(100);
         let (received_ack_tx, received_ack_rx) = mpsc::channel::<ReceivedAcknowledgment>(100);
         let (received_batches_tx, received_batches_rx) = mpsc::channel(100);
-        let (digest_tx, _digest_rx) = mpsc::channel(100);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
 
         let cancellation_token = CancellationToken::new();
-        // TODO: le passer à touts les agents
 
         let batchmaker_handle = BatchMaker::spawn(
             batches_tx,
@@ -127,7 +137,21 @@ impl BaseAgent for Worker {
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
 
+        let worker_metadata = WorkerMetadata {
+            id: self.id,
+            authority: self
+                .commitee
+                .get_authority_info_by_key(
+                    &PeerId::from_str("12D3KooWD8jmgJT19beox9Gsjs4uKhjM6dEtLhRrPky41mmuRwYF")
+                        .unwrap(),
+                )
+                .context("Invalid authority key")
+                .unwrap()
+                .clone(),
+        };
+
         let worker_network_hadle = WorkerNetwork::spawn(
+            worker_metadata,
             network_rx,
             received_ack_tx,
             received_batches_tx,
@@ -139,7 +163,7 @@ impl BaseAgent for Worker {
         let quorum_waiter_handle = QuorumWaiter::spawn(
             quorum_waiter_batches_rx,
             received_ack_rx,
-            digest_tx,
+            network_tx.clone(),
             Arc::clone(&self.db),
             QUORUM_TRESHOLD,
             QUORUM_TIMEOUT,
