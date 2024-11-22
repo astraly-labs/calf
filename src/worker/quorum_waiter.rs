@@ -124,7 +124,7 @@ impl QuorumWaiter {
                     };
                 }
                 else => {
-                    tracing::error!("all senders dropped");
+                    tracing::error!("all senders dropped: quorum waiter");
                     break Err(anyhow::anyhow!("all senders dropped"));
                 }
             }
