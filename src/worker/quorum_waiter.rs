@@ -35,7 +35,7 @@ pub struct QuorumWaiter {
     batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
     acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
     quorum_threshold: u32,
-    digest_tx: tokio::sync::mpsc::Sender<Digest>,
+    network_tx: tokio::sync::mpsc::Sender<NetworkRequest>,
     db: Arc<Db>,
     quorum_timeout: u128,
 }
@@ -45,7 +45,7 @@ impl QuorumWaiter {
     pub fn spawn(
         batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
         acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
-        digest_tx: tokio::sync::mpsc::Sender<Digest>,
+        network_tx: tokio::sync::mpsc::Sender<NetworkRequest>,
         db: Arc<Db>,
         quorum_threshold: u32,
         quorum_timeout: u128,
@@ -58,7 +58,7 @@ impl QuorumWaiter {
                         batches_rx,
                         acknowledgments_rx,
                         quorum_threshold,
-                        digest_tx,
+                        network_tx,
                         db,
                         quorum_timeout,
                     }
@@ -120,7 +120,7 @@ impl QuorumWaiter {
                                     tracing::warn!("Duplicate acknowledgment from peer: {:?}", sender);
                                 }
                                 if batch.acknowledgers.len() as u32 >= self.quorum_threshold {
-                                    self.digest_tx.send(batch.digest.into()).await?;
+                                    self.network_tx.send(NetworkRequest::SendToPrimary(RequestPayload::Digest(*batch.digest.as_bytes()))).await?;
                                     let _ = self.insert_batch_in_db(batches.remove(batch_index));
                                 }
                         },
@@ -160,13 +160,15 @@ mod test {
     use super::QuorumWaiter;
     use crate::{
         db::Db,
-        types::{Digest, ReceivedAcknowledgment, Transaction, TxBatch},
+        types::{
+            Digest, NetworkRequest, ReceivedAcknowledgment, RequestPayload, Transaction, TxBatch,
+        },
     };
 
     type QuorumWaiterFixture = (
         tokio::sync::broadcast::Sender<TxBatch>,
         tokio::sync::mpsc::Sender<ReceivedAcknowledgment>,
-        tokio::sync::mpsc::Receiver<Digest>,
+        tokio::sync::mpsc::Receiver<NetworkRequest>,
         tokio_util::sync::CancellationToken,
         Arc<Db>,
         tokio::task::JoinHandle<()>,
@@ -179,7 +181,7 @@ mod test {
             .try_init();
         let (batches_tx, batches_rx) = tokio::sync::broadcast::channel(100);
         let (acknowledgments_tx, acknowledgments_rx) = tokio::sync::mpsc::channel(100);
-        let (digest_tx, digest_rx) = tokio::sync::mpsc::channel(100);
+        let (network_tx, network_rx) = tokio::sync::mpsc::channel(100);
         let db = Db::new(db_path.into()).expect("failed to open db");
         let quorum_threshold = 2;
         let quorum_timeout = 1000;
@@ -190,7 +192,7 @@ mod test {
         let handle = QuorumWaiter::spawn(
             batches_rx,
             acknowledgments_rx,
-            digest_tx,
+            network_tx,
             db_waiter,
             quorum_threshold,
             quorum_timeout,
@@ -199,7 +201,7 @@ mod test {
         (
             batches_tx,
             acknowledgments_tx,
-            digest_rx,
+            network_rx,
             cancellation_token,
             db_test,
             handle,
@@ -234,7 +236,10 @@ mod test {
                 .expect("failed to send ack");
         }
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
-        assert!(res.unwrap().unwrap() == *digest.as_bytes());
+        assert!(
+            res.unwrap().unwrap()
+                == NetworkRequest::SendToPrimary(RequestPayload::Digest(*digest.as_bytes()))
+        );
         token.cancel();
         handle.await.expect("failed to await handle");
     }
@@ -260,7 +265,10 @@ mod test {
                 .expect("failed to send ack");
         }
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
-        assert!(res.unwrap().unwrap() == *digest.as_bytes());
+        assert!(
+            res.unwrap().unwrap()
+                == NetworkRequest::SendToPrimary(RequestPayload::Digest(*digest.as_bytes()))
+        );
 
         for _ in 0..3 {
             acknowledgments_tx
@@ -309,7 +317,7 @@ mod test {
             .unwrap()
             .unwrap();
 
-        assert!(res == digest);
+        assert!(res == NetworkRequest::SendToPrimary(RequestPayload::Digest(digest)));
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
 
         assert!(res.is_err());

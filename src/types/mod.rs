@@ -27,6 +27,7 @@ impl Transaction {
 pub enum NetworkRequest {
     Broadcast(RequestPayload),
     SendTo(PeerId, RequestPayload),
+    SendToPrimary(RequestPayload),
 }
 
 pub type BatchAcknowledgement = Vec<u8>;

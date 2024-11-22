@@ -1,14 +1,14 @@
-pub mod batch_acknowledger;
 pub mod batch_broadcaster;
 pub mod batch_maker;
+pub mod batch_receiver;
 pub mod network;
 pub mod quorum_waiter;
 pub mod transaction_event_listener;
 
 use anyhow::{bail, Context};
-use batch_acknowledger::BatchAcknowledger;
 use batch_broadcaster::BatchBroadcaster;
 use batch_maker::BatchMaker;
+use batch_receiver::BatchReceiver;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use libp2p::{identity::Keypair, PeerId};
@@ -171,8 +171,12 @@ impl BaseAgent for Worker {
             cancellation_token.clone(),
         );
 
-        let batch_acknowledger_handle =
-            BatchAcknowledger::spawn(received_batches_rx, network_tx, cancellation_token.clone());
+        let batch_acknowledger_handle = BatchReceiver::spawn(
+            received_batches_rx,
+            network_tx,
+            Arc::clone(&self.db),
+            cancellation_token.clone(),
+        );
 
         let res = tokio::try_join!(
             batchmaker_handle,

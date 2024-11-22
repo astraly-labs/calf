@@ -150,7 +150,8 @@ impl Network {
                         },
                         NetworkRequest::SendTo(peer_id, message) => {
                             self.send(peer_id, message).unwrap();
-                        }
+                        },
+                        _ => {},
                     }
                 }
             }

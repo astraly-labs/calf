@@ -1,18 +1,25 @@
+use std::sync::Arc;
+
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use crate::types::{NetworkRequest, ReceivedBatch, RequestPayload};
+use crate::{
+    db::{self, Db},
+    types::{NetworkRequest, ReceivedBatch, RequestPayload},
+};
 
-pub struct BatchAcknowledger {
+pub struct BatchReceiver {
     batches_rx: mpsc::Receiver<ReceivedBatch>,
-    resquests_tx: mpsc::Sender<NetworkRequest>,
+    requests_tx: mpsc::Sender<NetworkRequest>,
+    db: Arc<Db>,
 }
 
-impl BatchAcknowledger {
+impl BatchReceiver {
     #[must_use]
     pub fn spawn(
         batches_rx: mpsc::Receiver<ReceivedBatch>,
-        resquests_tx: mpsc::Sender<NetworkRequest>,
+        requests_tx: mpsc::Sender<NetworkRequest>,
+        db: Arc<Db>,
         cancellation_token: CancellationToken,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
@@ -20,7 +27,8 @@ impl BatchAcknowledger {
                 .run_until_cancelled(
                     Self {
                         batches_rx,
-                        resquests_tx,
+                        requests_tx,
+                        db,
                     }
                     .run(),
                 )
@@ -49,12 +57,19 @@ impl BatchAcknowledger {
         while let Some(batch) = self.batches_rx.recv().await {
             tracing::info!("Received batch from {}", batch.sender);
             let digest = blake3::hash(&bincode::serialize(&batch.batch)?);
-            self.resquests_tx
+            self.requests_tx
                 .send(NetworkRequest::SendTo(
                     batch.sender,
                     RequestPayload::Acknoledgment(digest.as_bytes().to_vec()),
                 ))
                 .await?;
+            self.requests_tx
+                .send(NetworkRequest::SendToPrimary(RequestPayload::Digest(
+                    *digest.as_bytes(),
+                )))
+                .await?;
+            self.db
+                .insert(db::Column::Batches, &digest.to_string(), &batch.batch)?;
         }
         Ok(())
     }
@@ -62,34 +77,32 @@ impl BatchAcknowledger {
 
 #[cfg(test)]
 mod test {
-    use std::thread::JoinHandle;
+    use std::sync::Arc;
 
-    use libp2p::PeerId;
-    use rstest::fixture;
-
+    use super::BatchReceiver;
     use crate::types::{NetworkRequest, ReceivedBatch, RequestPayload, TxBatch};
+    use libp2p::PeerId;
 
-    use super::BatchAcknowledger;
-
-    type BatchAcknowledgerFixture = (
+    type BatchReceiverFixture = (
         tokio::sync::mpsc::Sender<ReceivedBatch>,
         tokio::sync::mpsc::Receiver<NetworkRequest>,
         tokio::task::JoinHandle<()>,
         tokio_util::sync::CancellationToken,
     );
 
-    fn launch_batch_maker() -> BatchAcknowledgerFixture {
+    fn launch_batch_receiver(db_path: &str) -> BatchReceiverFixture {
         let (batches_tx, batches_rx) = tokio::sync::mpsc::channel(100);
         let (requests_tx, requests_rx) = tokio::sync::mpsc::channel(100);
+        let db = Arc::new(crate::db::Db::new(db_path.into()).expect("failed to open db"));
         let token = tokio_util::sync::CancellationToken::new();
-        let handle = BatchAcknowledger::spawn(batches_rx, requests_tx, token.clone());
+        let handle = BatchReceiver::spawn(batches_rx, requests_tx, db, token.clone());
         (batches_tx, requests_rx, handle, token)
     }
 
     #[rstest::rstest]
     #[tokio::test]
     async fn test_single_batch_acknowledgement() {
-        let (batches_tx, mut requests_rx, _, _) = launch_batch_maker();
+        let (batches_tx, mut requests_rx, _, _) = launch_batch_receiver("/tmp/test_db_7");
 
         let batch = ReceivedBatch {
             sender: PeerId::random(),
@@ -112,7 +125,7 @@ mod test {
     #[rstest::rstest]
     #[tokio::test]
     async fn test_cancelled() {
-        let (_, _, handle, token) = launch_batch_maker();
+        let (_, _, handle, token) = launch_batch_receiver("/tmp/test_db_8");
         token.cancel();
         handle.await.expect("failed to await handle");
     }
