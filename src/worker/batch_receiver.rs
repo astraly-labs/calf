@@ -5,7 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::{self, Db},
-    types::{NetworkRequest, ReceivedBatch, RequestPayload},
+    types::{Hash, NetworkRequest, ReceivedBatch, RequestPayload},
 };
 
 pub struct BatchReceiver {
@@ -56,20 +56,26 @@ impl BatchReceiver {
     pub async fn run(mut self) -> anyhow::Result<()> {
         while let Some(batch) = self.batches_rx.recv().await {
             tracing::info!("Received batch from {}", batch.sender);
-            let digest = blake3::hash(&bincode::serialize(&batch.batch)?);
+            let digest = match batch.batch.digest() {
+                Ok(digest) => digest,
+                Err(e) => {
+                    tracing::warn!("Failed to compute digest for a received batch: {:?}", e);
+                    continue;
+                }
+            };
             self.requests_tx
                 .send(NetworkRequest::SendTo(
                     batch.sender,
-                    RequestPayload::Acknoledgment(digest.as_bytes().to_vec()),
+                    RequestPayload::Acknoledgment(digest),
                 ))
                 .await?;
             self.requests_tx
                 .send(NetworkRequest::SendToPrimary(RequestPayload::Digest(
-                    *digest.as_bytes(),
+                    digest,
                 )))
                 .await?;
             self.db
-                .insert(db::Column::Batches, &digest.to_string(), &batch.batch)?;
+                .insert(db::Column::Batches, &hex::encode(&digest), &batch.batch)?;
         }
         Ok(())
     }
@@ -80,7 +86,7 @@ mod test {
     use std::sync::Arc;
 
     use super::BatchReceiver;
-    use crate::types::{NetworkRequest, ReceivedBatch, RequestPayload, TxBatch};
+    use crate::types::{Hash, NetworkRequest, ReceivedBatch, RequestPayload, TxBatch};
     use libp2p::PeerId;
 
     type BatchReceiverFixture = (
@@ -111,11 +117,7 @@ mod test {
 
         let expected_request = NetworkRequest::SendTo(
             batch.sender,
-            RequestPayload::Acknoledgment(
-                blake3::hash(&bincode::serialize(&batch.batch).expect("failed to serialize batch"))
-                    .as_bytes()
-                    .to_vec(),
-            ),
+            RequestPayload::Acknoledgment(batch.batch.digest().expect("failed to compute digest")),
         );
         batches_tx.send(batch).await.expect("failed to send batch");
         let res = requests_rx.recv().await.expect("failed to receive request");

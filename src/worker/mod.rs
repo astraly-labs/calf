@@ -5,13 +5,13 @@ pub mod network;
 pub mod quorum_waiter;
 pub mod transaction_event_listener;
 
-use anyhow::{bail, Context};
+use anyhow::Context;
 use batch_broadcaster::BatchBroadcaster;
 use batch_maker::BatchMaker;
 use batch_receiver::BatchReceiver;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
-use libp2p::{identity::Keypair, PeerId};
+use libp2p::PeerId;
 use network::Network as WorkerNetwork;
 use quorum_waiter::QuorumWaiter;
 use std::{path::PathBuf, str::FromStr, sync::Arc};
@@ -36,7 +36,7 @@ const BATCH_SIZE: usize = 10;
 const QUORUM_TIMEOUT: u128 = 1000;
 
 // Wrapper
-struct WorkerMetadata {
+pub struct WorkerMetadata {
     pub id: u32,
     pub authority: AuthorityInfo,
 }
@@ -121,7 +121,6 @@ impl BaseAgent for Worker {
         let (received_ack_tx, received_ack_rx) = mpsc::channel::<ReceivedAcknowledgment>(100);
         let (received_batches_tx, received_batches_rx) = mpsc::channel(100);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
-        let (digest_tx, digest_rx) = tokio::sync::mpsc::channel(100);
 
         let cancellation_token = CancellationToken::new();
 
@@ -164,7 +163,7 @@ impl BaseAgent for Worker {
         let quorum_waiter_handle = QuorumWaiter::spawn(
             quorum_waiter_batches_rx,
             received_ack_rx,
-            digest_tx,
+            network_tx.clone(),
             Arc::clone(&self.db),
             QUORUM_TRESHOLD,
             QUORUM_TIMEOUT,

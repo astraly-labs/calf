@@ -16,13 +16,11 @@ impl Transaction {
     pub fn new(data: Vec<u8>) -> Self {
         Self { data }
     }
-}
-
-impl Transaction {
-    pub fn as_bytes(&self) -> Vec<u8> {
-        todo!()
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.data
     }
 }
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum NetworkRequest {
     Broadcast(RequestPayload),
@@ -30,12 +28,10 @@ pub enum NetworkRequest {
     SendToPrimary(RequestPayload),
 }
 
-pub type BatchAcknowledgement = Vec<u8>;
-
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum RequestPayload {
     Batch(TxBatch),
-    Acknoledgment(BatchAcknowledgement),
+    Acknoledgment(Digest),
     Digest(Digest),
     Header(SignedBlockHeader),
     Vote(Vote),
@@ -48,7 +44,7 @@ pub struct ReceivedBatch {
 
 #[derive(Debug, Clone)]
 pub struct ReceivedAcknowledgment {
-    pub acknoledgement: BatchAcknowledgement,
+    pub acknoledgement: Digest,
     pub sender: PeerId,
 }
 
@@ -106,3 +102,14 @@ impl Vote {
 pub type SignedBlockHeader = SignedType<BlockHeader>;
 
 pub type Dag = HashMap<Round, (PeerId, Certificate)>;
+
+pub trait Hash {
+    fn digest(&self) -> anyhow::Result<Digest>;
+}
+
+impl Hash for TxBatch {
+    fn digest(&self) -> anyhow::Result<Digest> {
+        let ser = bincode::serialize(&self)?;
+        Ok(*blake3::hash(&ser).as_bytes())
+    }
+}

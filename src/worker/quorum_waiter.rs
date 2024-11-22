@@ -1,31 +1,27 @@
 use libp2p::PeerId;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::Db,
-    types::{Digest, NetworkRequest, ReceivedAcknowledgment, RequestPayload, TxBatch},
+    types::{Digest, Hash, NetworkRequest, ReceivedAcknowledgment, RequestPayload, TxBatch},
 };
 
 #[derive(Debug)]
 struct WaitingBatch {
     acknowledgers: HashSet<PeerId>,
     batch: TxBatch,
-    digest: blake3::Hash,
+    digest: Digest,
     timestamp: tokio::time::Instant,
 }
 
 impl WaitingBatch {
     fn new(batch: TxBatch) -> anyhow::Result<Self> {
-        let digest = blake3::hash(&bincode::serialize(&batch)?);
         Ok(Self {
             acknowledgers: HashSet::new(),
+            digest: batch.digest()?,
             batch,
-            digest,
             timestamp: tokio::time::Instant::now(),
         })
     }
@@ -97,7 +93,7 @@ impl QuorumWaiter {
                         }
                     };
                     if !batches.iter().any(|elm: &WaitingBatch| {
-                        elm.digest.as_bytes() == waiting_batch.digest.as_bytes()
+                        elm.digest == waiting_batch.digest
                     }) {
                         batches.push(waiting_batch);
                         tracing::debug!("Received new batch");
@@ -113,14 +109,14 @@ impl QuorumWaiter {
                 },
                 Some(ack) = self.acknowledgments_rx.recv() => {
                     let (ack, sender) = (ack.acknoledgement, ack.sender);
-                    match batches.iter().position(|b| b.digest.as_bytes() == ack.as_slice()) {
+                    match batches.iter().position(|b| b.digest == ack) {
                         Some(batch_index) => {
                             let batch = &mut batches[batch_index];
                                 if !batch.acknowledgers.insert(sender) {
                                     tracing::warn!("Duplicate acknowledgment from peer: {:?}", sender);
                                 }
                                 if batch.acknowledgers.len() as u32 >= self.quorum_threshold {
-                                    self.network_tx.send(NetworkRequest::SendToPrimary(RequestPayload::Digest(*batch.digest.as_bytes()))).await?;
+                                    self.network_tx.send(NetworkRequest::SendToPrimary(RequestPayload::Digest(batch.digest))).await?;
                                     let _ = self.insert_batch_in_db(batches.remove(batch_index));
                                 }
                         },
@@ -138,7 +134,7 @@ impl QuorumWaiter {
     fn insert_batch_in_db(&mut self, batch: WaitingBatch) -> anyhow::Result<()> {
         match self.db.insert(
             crate::db::Column::Batches,
-            &batch.digest.to_string(),
+            &hex::encode(batch.digest),
             &batch.batch,
         ) {
             Ok(_) => {
@@ -155,13 +151,13 @@ impl QuorumWaiter {
 
 #[cfg(test)]
 mod test {
-    use std::{str::FromStr, sync::Arc, time::Duration};
+    use std::{sync::Arc, time::Duration};
 
     use super::QuorumWaiter;
     use crate::{
         db::Db,
         types::{
-            Digest, NetworkRequest, ReceivedAcknowledgment, RequestPayload, Transaction, TxBatch,
+            Hash, NetworkRequest, ReceivedAcknowledgment, RequestPayload, Transaction, TxBatch,
         },
     };
 
@@ -223,13 +219,13 @@ mod test {
             lauch_quorum_waiter("/tmp/test_db_1");
 
         let batch = TxBatch::default();
-        let digest = blake3::hash(&bincode::serialize(&batch).expect("failed to serialize batch"));
+        let digest = batch.digest().expect("failed to digest batch");
         batches_tx.send(batch).expect("failed to send batch");
         tokio::time::sleep(Duration::from_millis(1)).await;
         for _ in 0..3 {
             acknowledgments_tx
                 .send(ReceivedAcknowledgment {
-                    acknoledgement: digest.as_bytes().to_vec(),
+                    acknoledgement: digest,
                     sender: libp2p::PeerId::random(),
                 })
                 .await
@@ -237,8 +233,7 @@ mod test {
         }
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
         assert!(
-            res.unwrap().unwrap()
-                == NetworkRequest::SendToPrimary(RequestPayload::Digest(*digest.as_bytes()))
+            res.unwrap().unwrap() == NetworkRequest::SendToPrimary(RequestPayload::Digest(digest))
         );
         token.cancel();
         handle.await.expect("failed to await handle");
@@ -251,14 +246,14 @@ mod test {
             lauch_quorum_waiter("/tmp/test_db_2");
 
         let batch = TxBatch::default();
-        let digest = blake3::hash(&bincode::serialize(&batch).expect("failed to serialize batch"));
+        let digest = batch.digest().expect("failed to serialize batch");
 
         batches_tx.send(batch).expect("failed to send batch");
         tokio::time::sleep(Duration::from_millis(1)).await;
         for _ in 0..3 {
             acknowledgments_tx
                 .send(ReceivedAcknowledgment {
-                    acknoledgement: digest.as_bytes().to_vec(),
+                    acknoledgement: digest,
                     sender: libp2p::PeerId::random(),
                 })
                 .await
@@ -266,14 +261,13 @@ mod test {
         }
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
         assert!(
-            res.unwrap().unwrap()
-                == NetworkRequest::SendToPrimary(RequestPayload::Digest(*digest.as_bytes()))
+            res.unwrap().unwrap() == NetworkRequest::SendToPrimary(RequestPayload::Digest(digest))
         );
 
         for _ in 0..3 {
             acknowledgments_tx
                 .send(ReceivedAcknowledgment {
-                    acknoledgement: digest.as_bytes().to_vec(),
+                    acknoledgement: digest,
                     sender: libp2p::PeerId::random(),
                 })
                 .await
@@ -295,9 +289,7 @@ mod test {
         let batches = (0..30)
             .map(|n| vec![Transaction { data: vec![n; 100] }; 100])
             .collect::<Vec<TxBatch>>();
-        let digest =
-            *blake3::hash(&bincode::serialize(&batches[9]).expect("failed to serialize batch"))
-                .as_bytes();
+        let digest = batches[9].digest().expect("failed to digest batch");
         for batch in batches {
             batches_tx.send(batch).expect("failed to send batch");
             tokio::time::sleep(Duration::from_millis(1)).await;
@@ -342,12 +334,9 @@ mod test {
         }
         for _ in 0..3 {
             for batch in &batches {
-                let digest =
-                    blake3::hash(&bincode::serialize(&batch).expect("failed to serialize batch"))
-                        .as_bytes()
-                        .to_vec();
+                let digest = batch.digest().expect("failed to digest batch");
                 let ack = ReceivedAcknowledgment {
-                    acknoledgement: digest.clone(),
+                    acknoledgement: digest,
                     sender: libp2p::PeerId::random(),
                 };
                 acknowledgments_tx
@@ -371,9 +360,9 @@ mod test {
             lauch_quorum_waiter("/tmp/test_db_6");
 
         let batch = TxBatch::default();
-        let digest = blake3::hash(&bincode::serialize(&batch).expect("failed to serialize batch"));
+        let digest = batch.digest().expect("failed to disgest batch");
         let ack = ReceivedAcknowledgment {
-            acknoledgement: digest.as_bytes().to_vec(),
+            acknoledgement: digest,
             sender: libp2p::PeerId::random(),
         };
         batches_tx.send(batch).expect("failed to send batch");
