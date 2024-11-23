@@ -73,7 +73,7 @@ impl HeaderProcessor {
 
                     // Checks
                     // 1. is the header built by an authority
-                    if self.commitee.has_authority_key(&header.value.author) {
+                    if /*self.commitee.has_authority_key(&header.value.author)*/ todo!(){
                         // 2. is the header the first one they see for this round
                         if !self.has_seen_header_for_round(header.value.round)? {
                             // Then

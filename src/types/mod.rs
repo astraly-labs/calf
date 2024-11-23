@@ -113,3 +113,22 @@ impl Hash for TxBatch {
         Ok(*blake3::hash(&ser).as_bytes())
     }
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum IdentifyInfo {
+    Worker(WorkerId),
+    Primary(PrimaryInfo),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkerInfo {
+    pub id: WorkerId,
+    pub signature: SignedType<PeerId>,
+    pub authority_pubkey: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PrimaryInfo {
+    pub signature: SignedType<PeerId>,
+    pub authority_pubkey: String,
+}

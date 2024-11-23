@@ -1,7 +1,6 @@
 pub mod batch_broadcaster;
 pub mod batch_maker;
 pub mod batch_receiver;
-pub mod network;
 pub mod quorum_waiter;
 pub mod transaction_event_listener;
 
@@ -12,7 +11,6 @@ use batch_receiver::BatchReceiver;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use libp2p::PeerId;
-use network::Network as WorkerNetwork;
 use quorum_waiter::QuorumWaiter;
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
@@ -21,10 +19,14 @@ use transaction_event_listener::TransactionEventListener;
 
 use crate::{
     db,
+    network::{
+        worker::{WorkerConnector, WorkerPeers},
+        Network, WorkerNetwork,
+    },
     settings::parser::{AuthorityInfo, Committee, FileLoader as _},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
-        ReceivedAcknowledgment,
+        IdentifyInfo, ReceivedAcknowledgment, WorkerInfo,
     },
     utils,
 };
@@ -66,6 +68,7 @@ pub struct WorkerSettings {
     #[deref]
     #[deref_mut]
     pub base: Settings,
+    pub id: u32,
 }
 
 impl LoadableFromSettings for WorkerSettings {
@@ -79,6 +82,7 @@ impl LoadableFromSettings for WorkerSettings {
                 keypair_path: cli.keypair_path,
                 validator_keypair_path: cli.validator_keypair_path,
             },
+            id: cli.id,
         })
     }
 }
@@ -99,7 +103,13 @@ impl BaseAgent for Worker {
 
     async fn from_settings(settings: Self::Settings) -> anyhow::Result<Self> {
         let db = Arc::new(db::Db::new(settings.base.db_path)?);
-        let commitee = Committee::load_from_file(".config.json")?;
+        let commitee = match Committee::load_from_file(".config.json") {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("Failed to load committee from file: {:?}", e);
+                return Err(e);
+            }
+        };
         let keypair = utils::read_keypair_from_file(&settings.base.keypair_path)
             .context("Failed to read keypair from file")?;
         let validator_keypair =
@@ -117,10 +127,9 @@ impl BaseAgent for Worker {
     async fn run(mut self) {
         let (batches_tx, batches_rx) = broadcast::channel(100);
         let (transactions_tx, transactions_rx) = mpsc::channel(100);
-        let (network_tx, network_rx) = mpsc::channel(100);
-        let (received_ack_tx, received_ack_rx) = mpsc::channel::<ReceivedAcknowledgment>(100);
-        let (received_batches_tx, received_batches_rx) = mpsc::channel(100);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
+        let (network_tx, network_rx) = mpsc::channel(100);
+        let (p2p_connector, acks_rx, received_batches_rx) = WorkerConnector::new(100);
 
         let cancellation_token = CancellationToken::new();
 
@@ -137,32 +146,24 @@ impl BaseAgent for Worker {
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
 
-        let worker_metadata = WorkerMetadata {
-            id: self.id,
-            authority: self
-                .commitee
-                .get_authority_info_by_key(
-                    &PeerId::from_str("12D3KooWD8jmgJT19beox9Gsjs4uKhjM6dEtLhRrPky41mmuRwYF")
-                        .unwrap(),
-                )
-                .context("Invalid authority key")
-                .unwrap()
-                .clone(),
+        let peers = WorkerPeers {
+            primary: (PeerId::random(), "/ip4/".parse().unwrap()),
+            wokers: Default::default(),
         };
 
-        let worker_network_hadle = WorkerNetwork::spawn(
-            worker_metadata,
-            network_rx,
-            received_ack_tx,
-            received_batches_tx,
-            self.keypair,
+        let worker_network_handle = Network::<WorkerNetwork, WorkerConnector, WorkerPeers>::spawn(
+            self.commitee,
+            p2p_connector,
             self.validator_keypair,
+            self.keypair,
+            peers,
+            network_rx,
             cancellation_token.clone(),
         );
 
         let quorum_waiter_handle = QuorumWaiter::spawn(
             quorum_waiter_batches_rx,
-            received_ack_rx,
+            acks_rx,
             network_tx.clone(),
             Arc::clone(&self.db),
             QUORUM_TRESHOLD,
@@ -181,7 +182,7 @@ impl BaseAgent for Worker {
             batchmaker_handle,
             batch_broadcaster_handle,
             transaction_event_listener_handle,
-            worker_network_hadle,
+            worker_network_handle,
             quorum_waiter_handle,
             batch_acknowledger_handle,
         );

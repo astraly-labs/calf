@@ -1,9 +1,12 @@
 use clap::{Args, Parser, Subcommand};
 use primary::{Primary, PrimaryArgs, PrimarySettings};
+use settings::parser::{AuthorityInfo, Committee, FileLoader};
 use types::agents::{agent_main, LoadableFromSettings, Settings};
+use utils::generate_keypair_and_write_to_file;
 use worker::{Worker, WorkerArgs, WorkerSettings};
 
 pub mod db;
+pub mod network;
 pub mod primary;
 pub mod settings;
 pub mod types;
@@ -115,6 +118,7 @@ async fn main() -> anyhow::Result<()> {
                 };
                 let worker_settings = WorkerSettings {
                     base: base_settings,
+                    id: args.id,
                 };
 
                 agent_main::<Worker>(worker_settings).await?;

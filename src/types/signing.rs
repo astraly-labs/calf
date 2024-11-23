@@ -4,6 +4,7 @@ use std::fmt::Formatter;
 use async_trait::async_trait;
 use bincode::ErrorKind;
 use libp2p::identity::{Keypair, SigningError};
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
 pub type Signature = Vec<u8>;
@@ -52,5 +53,12 @@ impl<T: Signable + Debug> Debug for SignedType<T> {
             "SignedType {{ value: {:?}, signature: 0x{:?} }}",
             self.value, self.signature
         )
+    }
+}
+
+impl Signable for PeerId {
+    fn sign(&self, keypair: &Keypair) -> Result<Signature, SignError> {
+        let msg = self.to_bytes();
+        keypair.sign(&msg).map_err(SignError::Sign)
     }
 }

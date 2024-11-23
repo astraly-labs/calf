@@ -30,44 +30,24 @@ impl<T: Serialize + for<'a> Deserialize<'a>> FileLoader for T {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Committee {
-    authorities: BTreeMap<PeerId, AuthorityInfo>,
+    pub authorities: Vec<AuthorityInfo>,
 }
 
+// TODO: reparer
 impl Committee {
-    pub fn has_authority_key(&self, key: &PeerId) -> bool {
-        self.authorities.contains_key(key)
-    }
-
-    pub fn quorum_threshold(&self) -> usize {
-        self.authorities.keys().len() * 2 / 3 + 1
-    }
-
-    pub fn get_authority_info_by_key(&self, key: &PeerId) -> Option<&AuthorityInfo> {
-        self.authorities.get(key)
+    pub fn quorum_threshold(&self) -> u32 {
+        ((self.authorities.len() / 3) * 2 + 1) as u32
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorityInfo {
-    pub primary: PrimaryAddresses,
+    pub authority_pubkey: String,
+    pub primary_address: String,
     pub stake: Stake,
-    pub workers: HashMap<WorkerId, WorkerAddresses>,
+    pub workers_addresses: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PrimaryAddresses {
-    pub primary_to_primary: String,
-    pub worker_to_primary: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct WorkerAddresses {
-    pub primary_to_worker: String,
-    pub transactions: String,
-    pub worker_to_worker: String,
-}
-
-// Instance specific configurations
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum InstanceConfig {
     Primary(PrimaryConfig),
@@ -95,21 +75,4 @@ pub struct PrimaryConfig {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PrimaryInfo {
     pub address: String,
-}
-
-// Examples of usage:
-impl Committee {
-    pub fn get_primary_address(&self, authority_key: &PeerId) -> Option<&String> {
-        self.authorities
-            .get(authority_key)
-            .map(|auth| &auth.primary.primary_to_primary)
-    }
-
-    pub fn get_worker_address(
-        &self,
-        authority_key: &PeerId,
-        worker_id: WorkerId,
-    ) -> Option<&WorkerAddresses> {
-        self.authorities.get(authority_key)?.workers.get(&worker_id)
-    }
 }

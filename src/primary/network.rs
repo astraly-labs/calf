@@ -39,7 +39,7 @@ const VALIDATOR_KEY: &str = "/key/11111";
 struct PrimaryBehaviour {
     identify: identify::Behaviour,
     mdns: mdns::tokio::Behaviour,
-    request_response: request_response::cbor::Behaviour<Vec<u8>, ()>,
+    request_response: request_response::cbor::Behaviour<RequestPayload, ()>,
 }
 
 pub(crate) struct Network {
@@ -90,7 +90,7 @@ impl Network {
                 },
                 request_response: {
                     let cfg = request_response::Config::default().with_max_concurrent_streams(10);
-                    request_response::cbor::Behaviour::<Vec<u8>, ()>::new(
+                    request_response::cbor::Behaviour::<RequestPayload, ()>::new(
                         [
                             (StreamProtocol::new(MAIN_PROTOCOL), ProtocolSupport::Full),
                             (
@@ -169,11 +169,10 @@ impl Network {
 
     /// Sends a message to a specific peer.
     pub fn send(&mut self, peer_id: PeerId, message: RequestPayload) -> anyhow::Result<()> {
-        let serialized = bincode::serialize(&message)?;
         self.swarm
             .behaviour_mut()
             .request_response
-            .send_request(&peer_id, serialized);
+            .send_request(&peer_id, message);
         Ok(())
     }
 
@@ -225,11 +224,8 @@ impl Network {
                     request, channel, ..
                 } => {
                     let peer_id = peer;
-                    let req: Vec<u8> = request;
-                    tracing::info!("request from {peer_id}: \"{:#?}\"", req);
-                    let decoded = bincode::deserialize::<RequestPayload>(&req)?;
-                    tracing::info!("decoded request: {:#?}", decoded);
-                    match decoded {
+                    tracing::info!("request from {peer_id}: \"{:#?}\"", request);
+                    match request {
                         RequestPayload::Digest(batch_digest) => {
                             self.digest_tx.send(batch_digest)?;
                         }
