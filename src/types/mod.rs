@@ -31,7 +31,7 @@ pub enum NetworkRequest {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum RequestPayload {
     Batch(TxBatch),
-    Acknoledgment(Digest),
+    Acknowledgment(Digest),
     Digest(Digest),
     Header(SignedBlockHeader),
     Vote(Vote),
@@ -44,7 +44,7 @@ pub struct ReceivedBatch {
 
 #[derive(Debug, Clone)]
 pub struct ReceivedAcknowledgment {
-    pub acknoledgement: Digest,
+    pub acknowledgement: Digest,
     pub sender: PeerId,
 }
 

@@ -108,7 +108,7 @@ impl QuorumWaiter {
                     }
                 },
                 Some(ack) = self.acknowledgments_rx.recv() => {
-                    let (ack, sender) = (ack.acknoledgement, ack.sender);
+                    let (ack, sender) = (ack.acknowledgement, ack.sender);
                     match batches.iter().position(|b| b.digest == ack) {
                         Some(batch_index) => {
                             let batch = &mut batches[batch_index];
@@ -225,7 +225,7 @@ mod test {
         for _ in 0..3 {
             acknowledgments_tx
                 .send(ReceivedAcknowledgment {
-                    acknoledgement: digest,
+                    acknowledgement: digest,
                     sender: libp2p::PeerId::random(),
                 })
                 .await
@@ -253,7 +253,7 @@ mod test {
         for _ in 0..3 {
             acknowledgments_tx
                 .send(ReceivedAcknowledgment {
-                    acknoledgement: digest,
+                    acknowledgement: digest,
                     sender: libp2p::PeerId::random(),
                 })
                 .await
@@ -267,7 +267,7 @@ mod test {
         for _ in 0..3 {
             acknowledgments_tx
                 .send(ReceivedAcknowledgment {
-                    acknoledgement: digest,
+                    acknowledgement: digest,
                     sender: libp2p::PeerId::random(),
                 })
                 .await
@@ -297,7 +297,7 @@ mod test {
         for _ in 0..3 {
             acknowledgments_tx
                 .send(ReceivedAcknowledgment {
-                    acknoledgement: digest.clone().into(),
+                    acknowledgement: digest.clone().into(),
                     sender: libp2p::PeerId::random(),
                 })
                 .await
@@ -336,7 +336,7 @@ mod test {
             for batch in &batches {
                 let digest = batch.digest().expect("failed to digest batch");
                 let ack = ReceivedAcknowledgment {
-                    acknoledgement: digest,
+                    acknowledgement: digest,
                     sender: libp2p::PeerId::random(),
                 };
                 acknowledgments_tx
@@ -362,7 +362,7 @@ mod test {
         let batch = TxBatch::default();
         let digest = batch.digest().expect("failed to disgest batch");
         let ack = ReceivedAcknowledgment {
-            acknoledgement: digest,
+            acknowledgement: digest,
             sender: libp2p::PeerId::random(),
         };
         batches_tx.send(batch).expect("failed to send batch");

@@ -66,7 +66,7 @@ impl BatchReceiver {
             self.requests_tx
                 .send(NetworkRequest::SendTo(
                     batch.sender,
-                    RequestPayload::Acknoledgment(digest),
+                    RequestPayload::Acknowledgment(digest),
                 ))
                 .await?;
             self.requests_tx
@@ -117,7 +117,7 @@ mod test {
 
         let expected_request = NetworkRequest::SendTo(
             batch.sender,
-            RequestPayload::Acknoledgment(batch.batch.digest().expect("failed to compute digest")),
+            RequestPayload::Acknowledgment(batch.batch.digest().expect("failed to compute digest")),
         );
         batches_tx.send(batch).await.expect("failed to send batch");
         let res = requests_rx.recv().await.expect("failed to receive request");

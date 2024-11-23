@@ -39,9 +39,9 @@ impl Committee {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorityInfo {
     pub authority_pubkey: String,
-    pub primary_address: String,
+    pub primary_address: (String, String),
     pub stake: Stake,
-    pub workers_addresses: Vec<String>,
+    pub workers_addresses: Vec<(String, String)>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

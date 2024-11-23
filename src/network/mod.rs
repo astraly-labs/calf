@@ -10,9 +10,14 @@ use libp2p::{
     identity::Keypair,
     mdns,
     request_response::{self, ProtocolSupport},
-    swarm::{NetworkBehaviour, SwarmEvent},
+    swarm::{
+        self,
+        dial_opts::{DialOpts, PeerCondition},
+        DialError, NetworkBehaviour, SwarmEvent,
+    },
     PeerId, StreamProtocol, Swarm,
 };
+use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, time::Duration};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -32,41 +37,58 @@ pub struct CalfBehavior {
     request_response: request_response::cbor::Behaviour<RequestPayload, ()>,
 }
 
-pub trait Relay {
-    fn get_broadcast_peers(&self) -> Vec<(PeerId, Multiaddr)>;
-    fn get_send_peer(&self) -> Option<(PeerId, Multiaddr)>;
-    fn get_primary_peer(&self) -> Option<(PeerId, Multiaddr)>;
+pub enum Peer {
+    Primary(PeerId, Multiaddr),
+    Worker(PeerId, Multiaddr),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum PeerIdentifyInfos {
+    //ID, ValidatorPubkey
+    Worker(u32, String),
+    //ValidatorPubkey
+    Primary(String),
 }
 
 pub trait ManagePeers {
-    fn add_peer(&mut self, id: PeerId, addr: Multiaddr) -> bool;
+    fn add_peer(&mut self, id: Peer) -> bool;
     fn remove_peer(&mut self, id: PeerId) -> bool;
+    fn contains_peer(&self, id: PeerId) -> bool;
+    fn identify(&self) -> PeerIdentifyInfos;
+    fn get_broadcast_peers(&self) -> Vec<(PeerId, Multiaddr)>;
+    fn get_send_peer(&self, id: PeerId) -> Option<(PeerId, Multiaddr)>;
+    fn get_to_dial_peers(&self, committee: Committee) -> Vec<(PeerId, Multiaddr)>;
 }
 
 #[async_trait]
 pub trait Connect {
-    async fn dispatch(&self, payload: RequestPayload) -> anyhow::Result<()>;
+    async fn dispatch(&self, payload: RequestPayload, sender: PeerId) -> anyhow::Result<()>;
 }
 
 #[async_trait]
-pub trait HandleEvent {
-    async fn handle_event<P: ManagePeers, C: Connect>(
+pub trait HandleEvent<P, C>
+where
+    P: ManagePeers + Send,
+    C: Connect + Send,
+{
+    async fn handle_event(
         event: SwarmEvent<CalfBehaviorEvent>,
         swarm: &mut Swarm<CalfBehavior>,
         peers: &mut P,
         connector: &mut C,
     ) -> anyhow::Result<()>;
-    async fn handle_request(
+    fn handle_request(
         swarm: &mut Swarm<CalfBehavior>,
         request: NetworkRequest,
+        peers: &P,
     ) -> anyhow::Result<()>;
 }
 
 pub(crate) struct Network<A, C, P>
 where
-    A: HandleEvent,
-    C: Connect,
-    P: Relay + ManagePeers,
+    C: Connect + Send,
+    P: ManagePeers + Send,
+    A: HandleEvent<P, C>,
 {
     committee: Committee,
     swarm: libp2p::Swarm<CalfBehavior>,
@@ -80,9 +102,9 @@ where
 
 impl<A, C, P> Network<A, C, P>
 where
-    A: HandleEvent + Send,
     C: Connect + Send + 'static,
-    P: Relay + ManagePeers + Send + 'static,
+    P: ManagePeers + Send + 'static,
+    A: HandleEvent<P, C> + Send,
 {
     pub fn spawn(
         committee: Committee,
@@ -94,6 +116,8 @@ where
         cancellation_token: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
+            let identify_infos = serde_json::to_string(&peers.identify())
+                .expect("serialization error: is it possible ?");
             let mdns = match mdns::tokio::Behaviour::new(
                 mdns::Config::default(),
                 keypair.public().to_peer_id(),
@@ -107,7 +131,7 @@ where
             };
 
             let identify_config = identify::Config::new(MAIN_PROTOCOL.into(), keypair.public())
-                .with_agent_version("TODO".into())
+                .with_agent_version(identify_infos)
                 .with_push_listen_addr_updates(true);
 
             let swarm = libp2p::SwarmBuilder::with_existing_identity(keypair.clone())
@@ -163,32 +187,58 @@ where
     }
 
     async fn run(&mut self) -> anyhow::Result<()> {
+        //TODO: committee
+        self.swarm
+            .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
+
         loop {
             tokio::select! {
                 event = self.swarm.select_next_some() => {
                     A::handle_event(event, &mut self.swarm, &mut self.peers, &mut self.connector).await?;
                 },
                 Some(message) = self.requests_rx.recv() => {
-                    A::handle_request(&mut self.swarm, message).await?;
+                    A::handle_request(&mut self.swarm, message, &self.peers)?;
                 }
             }
         }
     }
-    /// Sends a message to a specific peer.
-    pub fn send(&mut self, peer_id: PeerId, message: RequestPayload) -> anyhow::Result<()> {
-        self.swarm
-            .behaviour_mut()
-            .request_response
-            .send_request(&peer_id, message);
-        Ok(())
-    }
+}
 
-    /// Broadcasts a message to all connected peers.
-    pub fn broadcast(&mut self, message: RequestPayload) -> anyhow::Result<()> {
-        let peers = self.peers.get_broadcast_peers();
-        for (id, _) in peers {
-            self.send(id, message.clone())?;
-        }
-        Ok(())
+/// Sends a message to a specific peer.
+pub fn send(
+    swarm: &mut Swarm<CalfBehavior>,
+    peer_id: PeerId,
+    message: RequestPayload,
+) -> anyhow::Result<()> {
+    swarm
+        .behaviour_mut()
+        .request_response
+        .send_request(&peer_id, message);
+    Ok(())
+}
+
+/// Broadcasts a message to all connected peers.
+pub fn broadcast<P: ManagePeers + Send>(
+    swarm: &mut Swarm<CalfBehavior>,
+    peers: &P,
+    message: RequestPayload,
+) -> anyhow::Result<()> {
+    let peers = peers.get_broadcast_peers();
+    for (id, _) in peers {
+        send(swarm, id, message.clone())?;
     }
+    Ok(())
+}
+
+fn dial_peer(
+    swarm: &mut Swarm<CalfBehavior>,
+    peer_id: PeerId,
+    multiaddr: Multiaddr,
+) -> Result<(), DialError> {
+    let dial_opts = DialOpts::peer_id(peer_id)
+        .condition(PeerCondition::DisconnectedAndNotDialing)
+        .addresses(vec![multiaddr.clone()])
+        .build();
+    tracing::info!("Dialing -> {peer_id}");
+    swarm.dial(dial_opts)
 }
