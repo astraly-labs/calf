@@ -3,7 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use libp2p::identity::{Keypair, PublicKey, SigningError};
+use libp2p::identity::Keypair;
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -11,10 +11,10 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    db::{Column, Db},
+    db::Db,
     types::{
-        signing::{sign_with_keypair, Signable as _, Signature},
-        BlockHeader, Digest, NetworkRequest, RequestPayload, Round, SignedBlockHeader,
+        signing::sign_with_keypair, BlockHeader, Digest, NetworkRequest, RequestPayload, Round,
+        SignedBlockHeader,
     },
 };
 

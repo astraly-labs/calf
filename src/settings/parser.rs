@@ -1,9 +1,5 @@
-use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::Path,
-};
+use std::path::Path;
 
 use crate::types::{PublicKey, Stake, WorkerId};
 

@@ -23,7 +23,7 @@ use tokio::{
 
 use crate::{
     settings::parser::Committee,
-    types::{BlockHeader, Digest, NetworkRequest, RequestPayload, SignedBlockHeader, Vote},
+    types::{Digest, NetworkRequest, RequestPayload, SignedBlockHeader, Vote},
 };
 
 /// Agent version
@@ -220,9 +220,7 @@ impl Network {
             SwarmEvent::Behaviour(PrimaryBehaviourEvent::RequestResponse(
                 request_response::Event::Message { peer, message },
             )) => match message {
-                request_response::Message::Request {
-                    request, channel, ..
-                } => {
+                request_response::Message::Request { request, .. } => {
                     let peer_id = peer;
                     tracing::info!("request from {peer_id}: \"{:#?}\"", request);
                     match request {

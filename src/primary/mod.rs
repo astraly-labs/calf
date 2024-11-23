@@ -19,7 +19,7 @@ use vote_aggregator::VoteAggregator;
 
 use crate::{
     db,
-    settings::parser::{Committee, FileLoader as _, InstanceConfig, PrimaryConfig},
+    settings::parser::{Committee, FileLoader as _},
     types::agents::{BaseAgent, LoadableFromSettings, Settings},
     utils,
 };

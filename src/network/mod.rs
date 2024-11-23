@@ -1,31 +1,19 @@
 use crate::{
     settings::parser::Committee,
-    types::{
-        Digest, NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload,
-        SignedBlockHeader, Vote,
-    },
-    worker::Worker,
+    types::{NetworkRequest, RequestPayload},
 };
 use async_trait::async_trait;
 use futures::StreamExt;
 use libp2p::{
-    core::{multiaddr::Multiaddr, ConnectedPoint},
+    core::multiaddr::Multiaddr,
     identify::{self},
     identity::Keypair,
     mdns,
-    multiaddr::Protocol,
     request_response::{self, ProtocolSupport},
-    swarm::{
-        behaviour,
-        dial_opts::{DialOpts, PeerCondition},
-        DialError, NetworkBehaviour, SwarmEvent,
-    },
+    swarm::{NetworkBehaviour, SwarmEvent},
     PeerId, StreamProtocol, Swarm,
 };
-use std::{
-    any, collections::BTreeMap, future::Future, marker::PhantomData, ops::Mul, thread::JoinHandle,
-    time::Duration,
-};
+use std::{marker::PhantomData, time::Duration};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -38,7 +26,7 @@ pub struct PrimaryNetwork;
 const MAIN_PROTOCOL: &str = "/calf/0/";
 
 #[derive(NetworkBehaviour)]
-struct CalfBehavior {
+pub struct CalfBehavior {
     identify: identify::Behaviour,
     mdns: mdns::tokio::Behaviour,
     request_response: request_response::cbor::Behaviour<RequestPayload, ()>,
@@ -74,11 +62,12 @@ pub trait HandleEvent {
     ) -> anyhow::Result<()>;
 }
 
-pub(crate) struct Network<
+pub(crate) struct Network<A, C, P>
+where
     A: HandleEvent,
     C: Connect,
     P: Relay + ManagePeers,
-> {
+{
     committee: Committee,
     swarm: libp2p::Swarm<CalfBehavior>,
     peers: P,
@@ -89,11 +78,11 @@ pub(crate) struct Network<
     _role: PhantomData<A>,
 }
 
-impl<
-        A: HandleEvent + Send,
-        C: Connect + Send + 'static,
-        P: Relay + ManagePeers + Send + 'static,
-    > Network<A, C, P>
+impl<A, C, P> Network<A, C, P>
+where
+    A: HandleEvent + Send,
+    C: Connect + Send + 'static,
+    P: Relay + ManagePeers + Send + 'static,
 {
     pub fn spawn(
         committee: Committee,
@@ -105,7 +94,6 @@ impl<
         cancellation_token: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            let local_peer_id = PeerId::from(keypair.public());
             let mdns = match mdns::tokio::Behaviour::new(
                 mdns::Config::default(),
                 keypair.public().to_peer_id(),
@@ -181,7 +169,7 @@ impl<
                     A::handle_event(event, &mut self.swarm, &mut self.peers, &mut self.connector).await?;
                 },
                 Some(message) = self.requests_rx.recv() => {
-                    A::handle_request(&mut self.swarm, message).await;
+                    A::handle_request(&mut self.swarm, message).await?;
                 }
             }
         }
@@ -199,7 +187,7 @@ impl<
     pub fn broadcast(&mut self, message: RequestPayload) -> anyhow::Result<()> {
         let peers = self.peers.get_broadcast_peers();
         for (id, _) in peers {
-            self.send(id, message.clone());
+            self.send(id, message.clone())?;
         }
         Ok(())
     }

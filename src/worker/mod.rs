@@ -12,7 +12,7 @@ use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use libp2p::PeerId;
 use quorum_waiter::QuorumWaiter;
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 use transaction_event_listener::TransactionEventListener;
@@ -24,10 +24,7 @@ use crate::{
         Network, WorkerNetwork,
     },
     settings::parser::{AuthorityInfo, Committee, FileLoader as _},
-    types::{
-        agents::{BaseAgent, LoadableFromSettings, Settings},
-        IdentifyInfo, ReceivedAcknowledgment, WorkerInfo,
-    },
+    types::agents::{BaseAgent, LoadableFromSettings, Settings},
     utils,
 };
 
