@@ -61,8 +61,8 @@ pub trait Connect {
 }
 
 #[async_trait]
-pub trait HandleEvent: Send + Sync {
-    async fn handle_event<P: ManagePeers + Send + 'static, C: Connect + Send + 'static>(
+pub trait HandleEvent {
+    async fn handle_event<P: ManagePeers, C: Connect>(
         event: SwarmEvent<CalfBehaviorEvent>,
         swarm: &mut Swarm<CalfBehavior>,
         peers: &mut P,
@@ -75,9 +75,9 @@ pub trait HandleEvent: Send + Sync {
 }
 
 pub(crate) struct Network<
-    A: HandleEvent + Send + 'static,
-    C: Connect + Send + 'static,
-    P: Relay + ManagePeers + Send + 'static,
+    A: HandleEvent,
+    C: Connect,
+    P: Relay + ManagePeers,
 > {
     committee: Committee,
     swarm: libp2p::Swarm<CalfBehavior>,
@@ -90,7 +90,7 @@ pub(crate) struct Network<
 }
 
 impl<
-        A: HandleEvent + Send + 'static,
+        A: HandleEvent + Send,
         C: Connect + Send + 'static,
         P: Relay + ManagePeers + Send + 'static,
     > Network<A, C, P>

@@ -1,4 +1,5 @@
 use crate::types::{Digest, NetworkRequest, RequestPayload, SignedBlockHeader, Vote};
+use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId};
 use std::{collections::HashMap, future::Future};
 use tokio::sync::mpsc;
@@ -16,6 +17,7 @@ pub struct PrimaryPeers {
     pub primaries: HashMap<PeerId, Multiaddr>,
 }
 
+#[async_trait]
 impl Connect for PrimaryConnector {
     async fn dispatch(&self, payload: RequestPayload) -> anyhow::Result<()> {
         todo!()
@@ -34,6 +36,7 @@ impl Relay for PrimaryPeers {
     }
 }
 
+#[async_trait]
 impl HandleEvent for PrimaryNetwork {
     async fn handle_event<P: ManagePeers, C: Connect>(
         event: libp2p::swarm::SwarmEvent<super::CalfBehaviorEvent>,

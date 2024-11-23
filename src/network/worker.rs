@@ -1,6 +1,7 @@
 use std::{collections::HashMap, future::Future};
 
 use crate::types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload};
+use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId};
 use tokio::sync::mpsc;
 
@@ -37,6 +38,7 @@ pub struct WorkerPeers {
     pub wokers: HashMap<PeerId, Multiaddr>,
 }
 
+#[async_trait]
 impl Connect for WorkerConnector {
     async fn dispatch(&self, payload: RequestPayload) -> anyhow::Result<()> {
         todo!()
@@ -55,6 +57,7 @@ impl Relay for WorkerPeers {
     }
 }
 
+#[async_trait]
 impl HandleEvent for WorkerPeers {
     async fn handle_event<P: super::ManagePeers, C: Connect>(
         event: libp2p::swarm::SwarmEvent<super::CalfBehaviorEvent>,
@@ -72,6 +75,7 @@ impl HandleEvent for WorkerPeers {
     }
 }
 
+#[async_trait]
 impl HandleEvent for WorkerNetwork {
     async fn handle_event<P: super::ManagePeers, C: Connect>(
         event: libp2p::swarm::SwarmEvent<super::CalfBehaviorEvent>,
