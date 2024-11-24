@@ -105,9 +105,7 @@ impl ManagePeers for PrimaryPeers {
             .collect()
     }
     fn get_send_peer(&self, id: PeerId) -> Option<(PeerId, Multiaddr)> {
-        self.primaries
-            .get(&id)
-            .map(|addr| (id.clone(), addr.clone()))
+        self.primaries.get(&id).map(|addr| (id, addr.clone()))
     }
     fn contains_peer(&self, id: PeerId) -> bool {
         self.primaries.contains_key(&id) || self.workers.iter().any(|(peer_id, _)| peer_id == &id)

@@ -10,8 +10,7 @@ use libp2p::{Multiaddr, PeerId, Swarm};
 use tokio::sync::mpsc;
 
 use super::{
-    broadcast, send, CalfBehavior, Connect, HandleEvent, ManagePeers,
-    Peer, WorkerNetwork,
+    broadcast, send, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, WorkerNetwork,
 };
 
 pub struct WorkerConnector {
@@ -135,12 +134,12 @@ impl ManagePeers for WorkerPeers {
         if let Some(primary) = &self.primary {
             if primary.0 == peer {
                 self.primary = None;
-                return true;
+                true
             } else {
-                return self.workers.remove(&peer).is_some();
+                self.workers.remove(&peer).is_some()
             }
         } else {
-            return self.workers.remove(&peer).is_some();
+            self.workers.remove(&peer).is_some()
         }
     }
     fn identify(&self) -> PeerIdentifyInfos {
@@ -154,10 +153,7 @@ impl ManagePeers for WorkerPeers {
     }
 
     fn get_send_peer(&self, id: PeerId) -> Option<(PeerId, Multiaddr)> {
-        match self.workers.get(&id) {
-            Some(addr) => Some((id.clone(), addr.clone())),
-            None => None,
-        }
+        self.workers.get(&id).map(|addr| (id, addr.clone()))
     }
     fn contains_peer(&self, id: PeerId) -> bool {
         self.workers.contains_key(&id)

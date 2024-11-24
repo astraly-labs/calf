@@ -110,18 +110,15 @@ impl QuorumWaiter {
                 Some(ack) = self.acknowledgments_rx.recv() => {
                     tracing::info!("Received acknowledgment: {:?}", ack.acknowledgement);
                     let (ack, sender) = (ack.acknowledgement, ack.sender);
-                    match batches.iter().position(|b| b.digest == ack) {
-                        Some(batch_index) => {
-                            let batch = &mut batches[batch_index];
-                                if !batch.acknowledgers.insert(sender) {
-                                    tracing::warn!("Duplicate acknowledgment from peer: {:?}", sender);
-                                }
-                                if batch.acknowledgers.len() as u32 >= self.quorum_threshold {
-                                    self.network_tx.send(NetworkRequest::SendToPrimary(RequestPayload::Digest(batch.digest))).await?;
-                                    let _ = self.insert_batch_in_db(batches.remove(batch_index));
-                                }
-                        },
-                        _ => {}
+                    if let Some(batch_index) = batches.iter().position(|b| b.digest == ack) {
+                        let batch = &mut batches[batch_index];
+                            if !batch.acknowledgers.insert(sender) {
+                                tracing::warn!("Duplicate acknowledgment from peer: {:?}", sender);
+                            }
+                            if batch.acknowledgers.len() as u32 >= self.quorum_threshold {
+                                self.network_tx.send(NetworkRequest::SendToPrimary(RequestPayload::Digest(batch.digest))).await?;
+                                let _ = self.insert_batch_in_db(batches.remove(batch_index));
+                            }
                     };
                 }
                 else => {
@@ -298,7 +295,7 @@ mod test {
         for _ in 0..3 {
             acknowledgments_tx
                 .send(ReceivedAcknowledgment {
-                    acknowledgement: digest.clone().into(),
+                    acknowledgement: digest,
                     sender: libp2p::PeerId::random(),
                 })
                 .await

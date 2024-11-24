@@ -122,28 +122,24 @@ impl VoteAggregator {
             },
             Ok(vote) = self.votes_rx.recv() => {
                 // Check if we have a corresponding header waiting for votes
-                match waiting_headers.iter().position(|b| b.header.value == *vote.header()) {
-                    Some(header_index) => {
-                        let waiting_header = &mut waiting_headers[header_index];
-                        waiting_header.votes.push(*vote.peer_id());
-                        waiting_header.ack_number += 1;
-                        if waiting_header.ack_number >= self.commitee.quorum_threshold().try_into()? {
-                            tracing::info!("✅ Quorum Reached for round : {:?}", waiting_header.header.value.round);
-                            let signed_authorities = waiting_header.votes.clone();
-                            let header_value = waiting_header.header.value.clone();
-                            let round_number = header_value.round;
+                if let Some(header_index) = waiting_headers.iter().position(|b| b.header.value == *vote.header()) {
+                    let waiting_header = &mut waiting_headers[header_index];
+                    waiting_header.votes.push(*vote.peer_id());
+                    waiting_header.ack_number += 1;
+                    if waiting_header.ack_number >= self.commitee.quorum_threshold().try_into()? {
+                        tracing::info!("✅ Quorum Reached for round : {:?}", waiting_header.header.value.round);
+                        let signed_authorities = waiting_header.votes.clone();
+                        let header_value = waiting_header.header.value.clone();
+                        let round_number = header_value.round;
 
-                            // Create certificate
-                            let certificate = Certificate::new(signed_authorities, header_value);
+                        // Create certificate
+                        let certificate = Certificate::new(signed_authorities, header_value);
 
-                            // Add it to my local DAG
-                            self.dag.lock().unwrap().insert(round_number, (self.local_keypair.public().to_peer_id(),certificate));
+                        // Add it to my local DAG
+                        self.dag.lock().unwrap().insert(round_number, (self.local_keypair.public().to_peer_id(),certificate));
 
-                            tracing::info!("💚 DAG Updated");
-                            waiting_headers.remove(header_index);
-                        }
-                    },
-                    _ => {
+                        tracing::info!("💚 DAG Updated");
+                        waiting_headers.remove(header_index);
                     }
                 };
             }

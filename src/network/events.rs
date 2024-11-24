@@ -17,12 +17,11 @@ where
     match event {
         SwarmEvent::Behaviour(CalfBehaviorEvent::RequestResponse(
             request_response::Event::Message { peer, message },
-        )) => match message {
-            request_response::Message::Request { request, .. } => {
+        )) => {
+            if let request_response::Message::Request { request, .. } = message {
                 connector.dispatch(request, peer).await?;
             }
-            _ => {}
-        },
+        }
         SwarmEvent::ConnectionClosed { peer_id, .. } => {
             peers.remove_peer(peer_id);
             tracing::info!("connection to {peer_id} closed");
@@ -77,8 +76,8 @@ where
                 }
             }
         }
-        SwarmEvent::Behaviour(CalfBehaviorEvent::Mdns(event)) => match event {
-            mdns::Event::Discovered(list) => {
+        SwarmEvent::Behaviour(CalfBehaviorEvent::Mdns(event)) => {
+            if let mdns::Event::Discovered(list) = event {
                 tracing::info!("Discovered peers: {:?}", list);
                 let to_dial = list
                     .into_iter()
@@ -88,8 +87,7 @@ where
                     let _res = dial_peer(swarm, id, addr);
                 });
             }
-            _ => {}
-        },
+        }
         _ => {}
     };
     Ok(())

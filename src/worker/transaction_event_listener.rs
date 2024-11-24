@@ -21,20 +21,14 @@ impl TransactionEventListener {
                 .run_until_cancelled(Self { tx }.run())
                 .await;
 
-            match res {
-                Some(res) => {
-                    match res {
-                        Ok(_) => tracing::info!("TransactionEventListener terminated successfully"),
-                        Err(e) => {
-                            tracing::error!(
-                                "TransactionEventListener terminated with error: {:?}",
-                                e
-                            );
-                        }
-                    };
-                    cancellation_token.cancel();
-                }
-                None => {}
+            if let Some(res) = res {
+                match res {
+                    Ok(_) => tracing::info!("TransactionEventListener terminated successfully"),
+                    Err(e) => {
+                        tracing::error!("TransactionEventListener terminated with error: {:?}", e);
+                    }
+                };
+                cancellation_token.cancel();
             };
         })
     }

@@ -75,7 +75,7 @@ impl BatchReceiver {
                 )))
                 .await?;
             self.db
-                .insert(db::Column::Batches, &hex::encode(&digest), &batch.batch)?;
+                .insert(db::Column::Batches, &hex::encode(digest), &batch.batch)?;
         }
         Ok(())
     }

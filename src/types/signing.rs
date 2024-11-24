@@ -41,7 +41,7 @@ pub fn sign_with_keypair<T: Signable + Send>(
     keypair: &Keypair,
     value: T,
 ) -> Result<SignedType<T>, SignError> {
-    let signature = value.sign(&keypair)?;
+    let signature = value.sign(keypair)?;
 
     Ok(SignedType { value, signature })
 }

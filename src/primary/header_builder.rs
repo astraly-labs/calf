@@ -116,14 +116,12 @@ impl HeaderBuilder {
 
         let peer_id = self.local_keypair.public().to_peer_id();
 
-        let header = BlockHeader {
+        BlockHeader {
             round: current_round,
             author: peer_id,
             timestamp_ms: now,
             digests: batch.clone(),
-        };
-
-        header
+        }
     }
 
     /// Broadcasts the block header to the other primaries
