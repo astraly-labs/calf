@@ -63,7 +63,7 @@ where
                             if peers
                                 .add_peer(Peer::Primary(peer_id, addr.clone()), authority_pubkey)
                             {
-                                tracing::info!("worker added to peers");
+                                tracing::info!("primary added to peers");
                             }
                         }
                     }

@@ -28,7 +28,7 @@ use crate::{
 };
 
 // ARBITRAIRE !!!
-const QUORUM_TRESHOLD: u32 = 3;
+const QUORUM_TRESHOLD: u32 = 1;
 const TIMEOUT: u64 = 1000;
 const BATCH_SIZE: usize = 10;
 const QUORUM_TIMEOUT: u128 = 1000;
@@ -145,6 +145,11 @@ impl BaseAgent for Worker {
         let peers = WorkerPeers::new(
             self.id,
             hex::encode(self.validator_keypair.public().encode_protobuf()),
+        );
+
+        tracing::info!(
+            "launched with validator keypair: {}",
+            hex::encode(self.validator_keypair.public().encode_protobuf())
         );
 
         let worker_network_handle = Network::<WorkerNetwork, WorkerConnector, WorkerPeers>::spawn(

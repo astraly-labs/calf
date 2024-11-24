@@ -45,7 +45,7 @@ impl PrimaryConnector {
 }
 
 pub struct PrimaryPeers {
-    pub authority_publey: String,
+    pub authority_pubkey: String,
     pub workers: Vec<(PeerId, Multiaddr)>,
     pub primaries: HashMap<PeerId, Multiaddr>,
     pub established: HashMap<PeerId, Multiaddr>,
@@ -56,6 +56,7 @@ impl Connect for PrimaryConnector {
     async fn dispatch(&self, payload: RequestPayload, _sender: PeerId) -> anyhow::Result<()> {
         match payload {
             RequestPayload::Digest(digest) => {
+                tracing::info!("received batch digest: {:?}", digest);
                 self.digest_tx.send(digest)?;
             }
             RequestPayload::Header(header) => {
@@ -75,7 +76,7 @@ impl ManagePeers for PrimaryPeers {
         match id {
             Peer::Primary(id, addr) => self.primaries.insert(id, addr).is_none(),
             Peer::Worker(id, addr, index) => {
-                if authority_pubkey == self.authority_publey {
+                if authority_pubkey == self.authority_pubkey {
                     self.workers.push((id, addr));
                     true
                 } else {
@@ -96,7 +97,7 @@ impl ManagePeers for PrimaryPeers {
         }
     }
     fn identify(&self) -> PeerIdentifyInfos {
-        PeerIdentifyInfos::Primary(self.authority_publey.clone())
+        PeerIdentifyInfos::Primary(self.authority_pubkey.clone())
     }
     fn get_broadcast_peers(&self) -> Vec<(PeerId, Multiaddr)> {
         self.primaries

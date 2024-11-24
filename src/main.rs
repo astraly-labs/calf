@@ -1,6 +1,7 @@
 use clap::{Args, Parser, Subcommand};
 use primary::{Primary, PrimaryArgs, PrimarySettings};
 use types::agents::{agent_main, LoadableFromSettings, Settings};
+use utils::generate_keypair_and_write_to_file;
 use worker::{Worker, WorkerArgs, WorkerSettings};
 
 pub mod db;

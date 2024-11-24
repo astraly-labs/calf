@@ -71,6 +71,7 @@ impl LoadableFromSettings for PrimarySettings {
 pub(crate) struct Primary {
     commitee: Committee,
     keypair: libp2p::identity::Keypair,
+    validator_keypair: libp2p::identity::Keypair,
     db: Arc<db::Db>,
 }
 
@@ -84,11 +85,15 @@ impl BaseAgent for Primary {
         let commitee = Committee::load_from_file(".config.json")?;
         let keypair = utils::read_keypair_from_file(&settings.base.keypair_path)
             .context("Failed to read keypair from file")?;
+        let validator_keypair =
+            utils::read_keypair_from_file(&settings.base.validator_keypair_path)
+                .context("Failed to read keypair from file")?;
 
         Ok(Self {
             commitee,
             db,
             keypair,
+            validator_keypair,
         })
     }
 
@@ -98,11 +103,16 @@ impl BaseAgent for Primary {
         let (connector, digest_rx, header_rx, vote_rx) = PrimaryConnector::new(100);
 
         let peers = PrimaryPeers {
-            authority_publey: hex::encode(self.keypair.public().encode_protobuf()),
+            authority_pubkey: hex::encode(self.validator_keypair.public().encode_protobuf()),
             workers: vec![],
             primaries: HashMap::new(),
             established: HashMap::new(),
         };
+
+        tracing::info!(
+            "launched with validator keypair: {}",
+            hex::encode(self.validator_keypair.public().encode_protobuf())
+        );
 
         let network_handle = Network::<PrimaryNetwork, PrimaryConnector, PrimaryPeers>::spawn(
             self.commitee.clone(),

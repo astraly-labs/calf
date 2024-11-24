@@ -148,7 +148,7 @@ where
                     },
                 })
                 .unwrap()
-                .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(15)))
+                .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(120)))
                 .build();
 
             let mut this = Self {
