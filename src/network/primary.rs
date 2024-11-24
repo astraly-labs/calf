@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use tokio::sync::broadcast;
 
 use super::{
-    broadcast, send, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, PeerIdentifyInfos,
+    swarm_actions, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, PeerIdentifyInfos,
     PrimaryNetwork,
 };
 
@@ -130,10 +130,10 @@ impl HandleEvent<PrimaryPeers, PrimaryConnector> for PrimaryNetwork {
     ) -> anyhow::Result<()> {
         match request {
             NetworkRequest::Broadcast(req) => {
-                broadcast(swarm, peers, req)?;
+                swarm_actions::broadcast(swarm, peers, req)?;
             }
             NetworkRequest::SendTo(id, req) => {
-                send(swarm, id, req)?;
+                swarm_actions::send(swarm, id, req)?;
             }
             _ => {}
         };

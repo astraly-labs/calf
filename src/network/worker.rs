@@ -9,9 +9,7 @@ use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId, Swarm};
 use tokio::sync::mpsc;
 
-use super::{
-    broadcast, send, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, WorkerNetwork,
-};
+use super::{swarm_actions, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, WorkerNetwork};
 
 pub struct WorkerConnector {
     acks_tx: mpsc::Sender<ReceivedAcknowledgment>,
@@ -89,14 +87,14 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
     ) -> anyhow::Result<()> {
         match request {
             NetworkRequest::Broadcast(req) => {
-                broadcast(swarm, peers, req)?;
+                swarm_actions::broadcast(swarm, peers, req)?;
             }
             NetworkRequest::SendTo(id, req) => {
-                send(swarm, id, req)?;
+                swarm_actions::send(swarm, id, req)?;
             }
             NetworkRequest::SendToPrimary(req) => match peers.primary {
                 Some((id, _)) => {
-                    send(swarm, id, req)?;
+                    swarm_actions::send(swarm, id, req)?;
                 }
                 None => {
                     tracing::error!("No primary peer, unable to send request");

@@ -1,6 +1,6 @@
 use libp2p::{core::ConnectedPoint, identify, mdns, request_response, swarm::SwarmEvent};
 
-use crate::network::{dial_peer, Peer, PeerIdentifyInfos, MAIN_PROTOCOL};
+use crate::network::{swarm_actions, Peer, PeerIdentifyInfos, MAIN_PROTOCOL};
 
 use super::{CalfBehavior, CalfBehaviorEvent, Connect, ManagePeers};
 
@@ -84,7 +84,7 @@ where
                     .filter(|(peer_id, _)| !peers.contains_peer(*peer_id));
                 to_dial.for_each(|(id, addr)| {
                     //TODO: handle error ?
-                    let _res = dial_peer(swarm, id, addr);
+                    let _res = swarm_actions::dial_peer(swarm, id, addr);
                 });
             }
         }

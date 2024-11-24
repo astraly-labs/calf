@@ -1,5 +1,5 @@
 [package]
-name = "narwhal-rs"
+name = "calf"
 version = "0.1.0"
 edition = "2021"
 

@@ -145,7 +145,7 @@ impl BaseAgent for Primary {
         );
 
         let res = tokio::try_join!(
-            //network_handle,
+            network_handle,
             header_builder,
             header_processor,
             vote_aggregator
