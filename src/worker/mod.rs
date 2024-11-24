@@ -143,13 +143,16 @@ impl BaseAgent for Worker {
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
 
-        let peers = WorkerPeers::new(self.id, "0xPubkey".into());
+        let peers = WorkerPeers::new(
+            self.id,
+            hex::encode(self.validator_keypair.public().encode_protobuf()),
+        );
 
         let worker_network_handle = Network::<WorkerNetwork, WorkerConnector, WorkerPeers>::spawn(
             self.commitee,
             p2p_connector,
-            Keypair::generate_ed25519(),
-            Keypair::generate_ed25519(),
+            self.validator_keypair,
+            self.keypair,
             peers,
             network_rx,
             cancellation_token.clone(),

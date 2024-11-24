@@ -6,11 +6,7 @@ use crate::{
     types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload},
 };
 use async_trait::async_trait;
-use blake3::Hash;
-use libp2p::{
-    core::ConnectedPoint, identify, mdns, request_response, swarm::SwarmEvent, Multiaddr, PeerId,
-    Swarm,
-};
+use libp2p::{Multiaddr, PeerId, Swarm};
 use tokio::sync::mpsc;
 
 use super::{
@@ -87,89 +83,6 @@ impl Connect for WorkerConnector {
 
 #[async_trait]
 impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
-    async fn handle_event(
-        event: libp2p::swarm::SwarmEvent<CalfBehaviorEvent>,
-        swarm: &mut libp2p::Swarm<super::CalfBehavior>,
-        peers: &mut WorkerPeers,
-        connector: &mut WorkerConnector,
-    ) -> anyhow::Result<()> {
-        match event {
-            SwarmEvent::Behaviour(CalfBehaviorEvent::RequestResponse(
-                request_response::Event::Message { peer, message },
-            )) => match message {
-                request_response::Message::Request { request, .. } => {
-                    connector.dispatch(request, peer).await?;
-                }
-                _ => {}
-            },
-            SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                peers.remove_peer(peer_id);
-                tracing::info!("connection to {peer_id} closed");
-            }
-            SwarmEvent::ConnectionEstablished {
-                peer_id, endpoint, ..
-            } => {
-                match endpoint {
-                    ConnectedPoint::Dialer { address, .. } => {
-                        tracing::info!("dialed to {peer_id}: {address}");
-                        peers.established.insert(peer_id, address);
-                    }
-                    ConnectedPoint::Listener { send_back_addr, .. } => {
-                        tracing::info!("received dial from {peer_id}: {send_back_addr}");
-                    }
-                };
-            }
-            SwarmEvent::Behaviour(CalfBehaviorEvent::Identify(identify::Event::Received {
-                peer_id,
-                info,
-            })) => {
-                tracing::info!("received identify info from {peer_id}");
-                if info.protocol_version != MAIN_PROTOCOL {
-                    tracing::info!("{peer_id} doesn't speak our protocol")
-                }
-                match serde_json::from_str::<PeerIdentifyInfos>(&info.agent_version) {
-                    Ok(infos) => match infos {
-                        PeerIdentifyInfos::Worker(id, pubkey) => {
-                            tracing::info!("Identified {peer_id} as worker {id}");
-                            if id == peers.this_id.0 {
-                                if let Some(addr) = peers.established.get(&peer_id) {
-                                    peers.add_peer(Peer::Worker(peer_id, addr.clone()));
-                                    tracing::info!("worker added to peers");
-                                }
-                            }
-                        }
-                        PeerIdentifyInfos::Primary(authority_pubkey) => {
-                            tracing::info!("Identified {peer_id} as primary {authority_pubkey}");
-                        }
-                    },
-                    Err(_) => {
-                        tracing::warn!(
-                            "Failed to parse identify infos for {peer_id}, disconnecting"
-                        );
-                        swarm
-                            .disconnect_peer_id(peer_id)
-                            .map_err(|_| anyhow::anyhow!("failed to disconned from peer"))?;
-                    }
-                }
-            }
-            SwarmEvent::Behaviour(CalfBehaviorEvent::Mdns(event)) => match event {
-                mdns::Event::Discovered(list) => {
-                    tracing::info!("Discovered peers: {:?}", list);
-                    let to_dial = list
-                        .into_iter()
-                        .filter(|(peer_id, _)| !peers.contains_peer(*peer_id));
-                    to_dial.for_each(|(id, addr)| {
-                        //TODO: handle error ?
-                        let _res = dial_peer(swarm, id, addr);
-                    });
-                }
-                _ => {}
-            },
-            _ => {}
-        };
-        Ok(())
-    }
-
     fn handle_request(
         swarm: &mut Swarm<CalfBehavior>,
         request: NetworkRequest,
@@ -196,14 +109,24 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
 }
 
 impl ManagePeers for WorkerPeers {
-    fn add_peer(&mut self, peer: Peer) -> bool {
+    fn add_peer(&mut self, peer: Peer, pubkey: String) -> bool {
         match peer {
-            Peer::Worker(id, addr) => self.workers.insert(id, addr).is_none(),
+            Peer::Worker(id, addr, index) => {
+                if pubkey != self.this_id.1 && index == self.this_id.0 {
+                    self.workers.insert(id, addr).is_none()
+                } else {
+                    false
+                }
+            }
             Peer::Primary(id, addr) => match self.primary {
                 Some(_) => false,
                 None => {
-                    self.primary = Some((id, addr));
-                    true
+                    if pubkey == self.this_id.1 {
+                        self.primary = Some((id, addr));
+                        true
+                    } else {
+                        false
+                    }
                 }
             },
         }
@@ -244,7 +167,13 @@ impl ManagePeers for WorkerPeers {
                 .map(|(pid, _)| pid == id)
                 .unwrap_or(false)
     }
-    fn get_to_dial_peers(&self, committee: Committee) -> Vec<(PeerId, Multiaddr)> {
+    fn get_to_dial_peers(committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
         todo!()
+    }
+    fn add_established(&mut self, id: PeerId, addr: Multiaddr) {
+        self.established.insert(id, addr);
+    }
+    fn established(&self) -> &HashMap<PeerId, Multiaddr> {
+        &self.established
     }
 }

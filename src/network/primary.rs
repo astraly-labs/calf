@@ -1,40 +1,86 @@
-use crate::types::{Digest, NetworkRequest, RequestPayload, SignedBlockHeader, Vote};
+use crate::{
+    settings::parser::Committee,
+    types::{Digest, NetworkRequest, RequestPayload, SignedBlockHeader, Vote},
+};
 use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId, Swarm};
 use std::collections::HashMap;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 use super::{
-    CalfBehavior, CalfBehaviorEvent, Connect, HandleEvent, ManagePeers, Peer, PeerIdentifyInfos,
+    broadcast, send, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, PeerIdentifyInfos,
     PrimaryNetwork,
 };
 
 pub struct PrimaryConnector {
-    digest_tx: mpsc::Sender<Digest>,
-    headers_tx: mpsc::Sender<SignedBlockHeader>,
-    vote_tx: mpsc::Sender<Vote>,
+    digest_tx: broadcast::Sender<Digest>,
+    headers_tx: broadcast::Sender<SignedBlockHeader>,
+    vote_tx: broadcast::Sender<Vote>,
 }
 
-struct PrimaryPeers {
+impl PrimaryConnector {
+    pub fn new(
+        buffer: usize,
+    ) -> (
+        Self,
+        broadcast::Receiver<Digest>,
+        broadcast::Receiver<SignedBlockHeader>,
+        broadcast::Receiver<Vote>,
+    ) {
+        let (digest_tx, digest_rx) = broadcast::channel(buffer);
+        let (headers_tx, headers_rx) = broadcast::channel(buffer);
+        let (vote_tx, vote_rx) = broadcast::channel(buffer);
+
+        (
+            Self {
+                digest_tx,
+                headers_tx,
+                vote_tx,
+            },
+            digest_rx,
+            headers_rx,
+            vote_rx,
+        )
+    }
+}
+
+pub struct PrimaryPeers {
     pub authority_publey: String,
     pub workers: Vec<(PeerId, Multiaddr)>,
     pub primaries: HashMap<PeerId, Multiaddr>,
+    pub established: HashMap<PeerId, Multiaddr>,
 }
 
 #[async_trait]
 impl Connect for PrimaryConnector {
-    async fn dispatch(&self, payload: RequestPayload, sender: PeerId) -> anyhow::Result<()> {
-        todo!()
+    async fn dispatch(&self, payload: RequestPayload, _sender: PeerId) -> anyhow::Result<()> {
+        match payload {
+            RequestPayload::Digest(digest) => {
+                self.digest_tx.send(digest)?;
+            }
+            RequestPayload::Header(header) => {
+                self.headers_tx.send(header)?;
+            }
+            RequestPayload::Vote(vote) => {
+                self.vote_tx.send(vote)?;
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }
 
 impl ManagePeers for PrimaryPeers {
-    fn add_peer(&mut self, id: Peer) -> bool {
+    fn add_peer(&mut self, id: Peer, authority_pubkey: String) -> bool {
         match id {
             Peer::Primary(id, addr) => self.primaries.insert(id, addr).is_none(),
-            Peer::Worker(id, addr) => {
-                self.workers.push((id, addr));
-                true
+            Peer::Worker(id, addr, index) => {
+                if authority_pubkey == self.authority_publey {
+                    self.workers.push((id, addr));
+                    true
+                } else {
+                    false
+                }
             }
         }
     }
@@ -66,29 +112,33 @@ impl ManagePeers for PrimaryPeers {
     fn contains_peer(&self, id: PeerId) -> bool {
         self.primaries.contains_key(&id) || self.workers.iter().any(|(peer_id, _)| peer_id == &id)
     }
-    fn get_to_dial_peers(
-        &self,
-        committee: crate::settings::parser::Committee,
-    ) -> Vec<(PeerId, Multiaddr)> {
+    fn get_to_dial_peers(committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
         todo!()
+    }
+    fn add_established(&mut self, id: PeerId, addr: Multiaddr) {
+        self.established.insert(id, addr);
+    }
+    fn established(&self) -> &HashMap<PeerId, Multiaddr> {
+        &self.established
     }
 }
 
 #[async_trait]
 impl HandleEvent<PrimaryPeers, PrimaryConnector> for PrimaryNetwork {
-    async fn handle_event(
-        event: libp2p::swarm::SwarmEvent<CalfBehaviorEvent>,
-        swarm: &mut libp2p::Swarm<CalfBehavior>,
-        peers: &mut PrimaryPeers,
-        connector: &mut PrimaryConnector,
-    ) -> anyhow::Result<()> {
-        todo!()
-    }
     fn handle_request(
         swarm: &mut Swarm<CalfBehavior>,
         request: NetworkRequest,
         peers: &PrimaryPeers,
     ) -> anyhow::Result<()> {
-        todo!()
+        match request {
+            NetworkRequest::Broadcast(req) => {
+                broadcast(swarm, peers, req)?;
+            }
+            NetworkRequest::SendTo(id, req) => {
+                send(swarm, id, req)?;
+            }
+            _ => {}
+        };
+        Ok(())
     }
 }

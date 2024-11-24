@@ -8,6 +8,7 @@ use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use header_builder::HeaderBuilder;
 use header_processor::HeaderProcessor;
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -17,6 +18,10 @@ use vote_aggregator::VoteAggregator;
 
 use crate::{
     db,
+    network::{
+        primary::{PrimaryConnector, PrimaryPeers},
+        Network, PrimaryNetwork,
+    },
     settings::parser::{Committee, FileLoader as _},
     types::agents::{BaseAgent, LoadableFromSettings, Settings},
     utils,
@@ -89,20 +94,25 @@ impl BaseAgent for Primary {
 
     async fn run(mut self) {
         let (network_tx, network_rx) = mpsc::channel(100);
-        let (digest_tx, digest_rx) = broadcast::channel(100);
-        let (header_tx, header_rx) = broadcast::channel(100);
-        let (votes_tx, votes_rx) = broadcast::channel(100);
-
         let dag = Arc::new(Mutex::new(Default::default()));
+        let (connector, digest_rx, header_rx, vote_rx) = PrimaryConnector::new(100);
 
-        // let network_handle = Ne::spawn(
-        //     network_rx,
-        //     self.keypair.clone(),
-        //     digest_tx,
-        //     header_tx.clone(),
-        //     votes_tx,
-        //     self.commitee.clone(),
-        // );
+        let peers = PrimaryPeers {
+            authority_publey: hex::encode(self.keypair.public().encode_protobuf()),
+            workers: vec![],
+            primaries: HashMap::new(),
+            established: HashMap::new(),
+        };
+
+        let network_handle = Network::<PrimaryNetwork, PrimaryConnector, PrimaryPeers>::spawn(
+            self.commitee.clone(),
+            connector,
+            self.keypair.clone(),
+            self.keypair.clone(),
+            peers,
+            network_rx,
+            CancellationToken::new(),
+        );
 
         let cancellation_token = CancellationToken::new();
 
@@ -116,7 +126,7 @@ impl BaseAgent for Primary {
 
         let header_processor = HeaderProcessor::spawn(
             self.commitee.clone(),
-            header_rx,
+            header_rx.resubscribe(),
             network_tx.clone(),
             cancellation_token.clone(),
             self.db.clone(),
@@ -125,9 +135,9 @@ impl BaseAgent for Primary {
 
         let vote_aggregator = VoteAggregator::spawn(
             self.commitee,
-            votes_rx,
+            vote_rx,
             network_tx,
-            header_tx.subscribe(),
+            header_rx,
             cancellation_token,
             self.db,
             dag,

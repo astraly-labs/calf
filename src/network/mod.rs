@@ -5,23 +5,23 @@ use crate::{
 use async_trait::async_trait;
 use futures::StreamExt;
 use libp2p::{
-    core::multiaddr::Multiaddr,
+    core::{multiaddr::Multiaddr, ConnectedPoint},
     identify::{self},
     identity::Keypair,
     mdns,
     request_response::{self, ProtocolSupport},
     swarm::{
-        self,
         dial_opts::{DialOpts, PeerCondition},
-        DialError, NetworkBehaviour, SwarmEvent,
+        DialError, NetworkBehaviour,
     },
     PeerId, StreamProtocol, Swarm,
 };
 use serde::{Deserialize, Serialize};
-use std::{marker::PhantomData, time::Duration};
+use std::{collections::HashMap, marker::PhantomData, time::Duration};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+pub mod events;
 pub mod primary;
 pub mod worker;
 
@@ -39,7 +39,7 @@ pub struct CalfBehavior {
 
 pub enum Peer {
     Primary(PeerId, Multiaddr),
-    Worker(PeerId, Multiaddr),
+    Worker(PeerId, Multiaddr, u32),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,13 +51,15 @@ pub enum PeerIdentifyInfos {
 }
 
 pub trait ManagePeers {
-    fn add_peer(&mut self, id: Peer) -> bool;
+    fn add_peer(&mut self, id: Peer, authority_pubkey: String) -> bool;
     fn remove_peer(&mut self, id: PeerId) -> bool;
+    fn add_established(&mut self, id: PeerId, addr: Multiaddr);
+    fn established(&self) -> &HashMap<PeerId, Multiaddr>;
     fn contains_peer(&self, id: PeerId) -> bool;
     fn identify(&self) -> PeerIdentifyInfos;
     fn get_broadcast_peers(&self) -> Vec<(PeerId, Multiaddr)>;
     fn get_send_peer(&self, id: PeerId) -> Option<(PeerId, Multiaddr)>;
-    fn get_to_dial_peers(&self, committee: Committee) -> Vec<(PeerId, Multiaddr)>;
+    fn get_to_dial_peers(committee: &Committee) -> Vec<(PeerId, Multiaddr)>;
 }
 
 #[async_trait]
@@ -71,12 +73,6 @@ where
     P: ManagePeers + Send,
     C: Connect + Send,
 {
-    async fn handle_event(
-        event: SwarmEvent<CalfBehaviorEvent>,
-        swarm: &mut Swarm<CalfBehavior>,
-        peers: &mut P,
-        connector: &mut C,
-    ) -> anyhow::Result<()>;
     fn handle_request(
         swarm: &mut Swarm<CalfBehavior>,
         request: NetworkRequest,
@@ -194,7 +190,7 @@ where
         loop {
             tokio::select! {
                 event = self.swarm.select_next_some() => {
-                    A::handle_event(event, &mut self.swarm, &mut self.peers, &mut self.connector).await?;
+                    events::handle_event(event, &mut self.swarm, &mut self.peers, &mut self.connector).await?;
                 },
                 Some(message) = self.requests_rx.recv() => {
                     A::handle_request(&mut self.swarm, message, &self.peers)?;
