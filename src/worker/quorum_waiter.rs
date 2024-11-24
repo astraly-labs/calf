@@ -108,6 +108,7 @@ impl QuorumWaiter {
                     }
                 },
                 Some(ack) = self.acknowledgments_rx.recv() => {
+                    tracing::info!("Received acknowledgment: {:?}", ack.acknowledgement);
                     let (ack, sender) = (ack.acknowledgement, ack.sender);
                     match batches.iter().position(|b| b.digest == ack) {
                         Some(batch_index) => {

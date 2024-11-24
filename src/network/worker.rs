@@ -1,4 +1,4 @@
-use std::{collections::HashMap, default};
+use std::collections::HashMap;
 
 use crate::{
     network::PeerIdentifyInfos,
@@ -6,9 +6,10 @@ use crate::{
     types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload},
 };
 use async_trait::async_trait;
+use blake3::Hash;
 use libp2p::{
-    core::ConnectedPoint, identify, identity::ed25519::PublicKey, mdns, request_response,
-    swarm::SwarmEvent, Multiaddr, PeerId, Swarm,
+    core::ConnectedPoint, identify, mdns, request_response, swarm::SwarmEvent, Multiaddr, PeerId,
+    Swarm,
 };
 use tokio::sync::mpsc;
 
@@ -47,6 +48,7 @@ pub struct WorkerPeers {
     pub this_id: (u32, String),
     pub primary: Option<(PeerId, Multiaddr)>,
     pub workers: HashMap<PeerId, Multiaddr>,
+    pub established: HashMap<PeerId, Multiaddr>,
 }
 
 impl WorkerPeers {
@@ -55,6 +57,7 @@ impl WorkerPeers {
             this_id: (id, pubkey),
             primary: None,
             workers: HashMap::new(),
+            established: HashMap::new(),
         }
     }
 }
@@ -109,6 +112,7 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
                 match endpoint {
                     ConnectedPoint::Dialer { address, .. } => {
                         tracing::info!("dialed to {peer_id}: {address}");
+                        peers.established.insert(peer_id, address);
                     }
                     ConnectedPoint::Listener { send_back_addr, .. } => {
                         tracing::info!("received dial from {peer_id}: {send_back_addr}");
@@ -125,8 +129,18 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
                 }
                 match serde_json::from_str::<PeerIdentifyInfos>(&info.agent_version) {
                     Ok(infos) => match infos {
-                        PeerIdentifyInfos::Worker(id, pubkey) => {}
-                        PeerIdentifyInfos::Primary(signature) => {}
+                        PeerIdentifyInfos::Worker(id, pubkey) => {
+                            tracing::info!("Identified {peer_id} as worker {id}");
+                            if id == peers.this_id.0 {
+                                if let Some(addr) = peers.established.get(&peer_id) {
+                                    peers.add_peer(Peer::Worker(peer_id, addr.clone()));
+                                    tracing::info!("worker added to peers");
+                                }
+                            }
+                        }
+                        PeerIdentifyInfos::Primary(authority_pubkey) => {
+                            tracing::info!("Identified {peer_id} as primary {authority_pubkey}");
+                        }
                     },
                     Err(_) => {
                         tracing::warn!(

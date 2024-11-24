@@ -10,7 +10,7 @@ use batch_maker::BatchMaker;
 use batch_receiver::BatchReceiver;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
-use libp2p::PeerId;
+use libp2p::{identity::Keypair, PeerId};
 use quorum_waiter::QuorumWaiter;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
@@ -113,7 +113,7 @@ impl BaseAgent for Worker {
             utils::read_keypair_from_file(&settings.base.validator_keypair_path)
                 .context("Failed to read keypair from file")?;
         Ok(Self {
-            id: 0,
+            id: settings.id,
             commitee,
             db,
             keypair,
@@ -148,8 +148,8 @@ impl BaseAgent for Worker {
         let worker_network_handle = Network::<WorkerNetwork, WorkerConnector, WorkerPeers>::spawn(
             self.commitee,
             p2p_connector,
-            self.validator_keypair,
-            self.keypair,
+            Keypair::generate_ed25519(),
+            Keypair::generate_ed25519(),
             peers,
             network_rx,
             cancellation_token.clone(),

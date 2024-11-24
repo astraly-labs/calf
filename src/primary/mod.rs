@@ -1,6 +1,5 @@
 pub mod header_builder;
 pub mod header_processor;
-pub mod network;
 pub mod vote_aggregator;
 
 use anyhow::Context;
@@ -8,7 +7,6 @@ use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use header_builder::HeaderBuilder;
 use header_processor::HeaderProcessor;
-use network::Network as PrimaryNetwork;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -97,14 +95,14 @@ impl BaseAgent for Primary {
 
         let dag = Arc::new(Mutex::new(Default::default()));
 
-        let network_handle = PrimaryNetwork::spawn(
-            network_rx,
-            self.keypair.clone(),
-            digest_tx,
-            header_tx.clone(),
-            votes_tx,
-            self.commitee.clone(),
-        );
+        // let network_handle = Ne::spawn(
+        //     network_rx,
+        //     self.keypair.clone(),
+        //     digest_tx,
+        //     header_tx.clone(),
+        //     votes_tx,
+        //     self.commitee.clone(),
+        // );
 
         let cancellation_token = CancellationToken::new();
 
@@ -137,7 +135,7 @@ impl BaseAgent for Primary {
         );
 
         let res = tokio::try_join!(
-            network_handle,
+            //network_handle,
             header_builder,
             header_processor,
             vote_aggregator
