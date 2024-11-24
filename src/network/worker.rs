@@ -10,8 +10,8 @@ use libp2p::{Multiaddr, PeerId, Swarm};
 use tokio::sync::mpsc;
 
 use super::{
-    broadcast, dial_peer, send, CalfBehavior, CalfBehaviorEvent, Connect, HandleEvent, ManagePeers,
-    Peer, WorkerNetwork, MAIN_PROTOCOL,
+    broadcast, send, CalfBehavior, Connect, HandleEvent, ManagePeers,
+    Peer, WorkerNetwork,
 };
 
 pub struct WorkerConnector {

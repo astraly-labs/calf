@@ -5,7 +5,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::StreamExt;
 use libp2p::{
-    core::{multiaddr::Multiaddr, ConnectedPoint},
+    core::multiaddr::Multiaddr,
     identify::{self},
     identity::Keypair,
     mdns,

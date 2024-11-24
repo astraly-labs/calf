@@ -5,7 +5,7 @@ use crate::{
 use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId, Swarm};
 use std::collections::HashMap;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 
 use super::{
     broadcast, send, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, PeerIdentifyInfos,
