@@ -1,4 +1,5 @@
 import os
+import sys
 import libp2p
 import json
 import argparse
@@ -53,32 +54,28 @@ def generate_keypair(path):
         json.dump(export, file, indent=4)
 
 def create_validator_env(path, workers_number, executable_path, committee_path):
-    logging.info("Generating keypairs for a validator...")
     os.makedirs(path, exist_ok=True)
     generate_keypair(f"{path}/validator-keypair.json")
-    logging.info("Validator keypair generated")
     for i in range(workers_number):
         os.makedirs(f"{path}/worker_{i}", exist_ok=True)
         shutil.copy(f"{executable_path}", f"{path}/worker_{i}")
         shutil.copy(f"{path}/validator-keypair.json", f"{path}/worker_{i}")
         shutil.copy(f"{committee_path}", f"{path}/worker_{i}/committee.json")
         generate_keypair(f"{path}/worker_{i}/keypair.json")
-        logging.info(f"Worker {i} env created")
     os.makedirs(f"{path}/primary", exist_ok=True)
     shutil.copy(f"{path}/validator-keypair.json", f"{path}/primary")
     shutil.copy(f"{executable_path}", f"{path}/primary")
     shutil.copy(f"{committee_path}", f"{path}/primary/committee.json")
     generate_keypair(f"{path}/primary/keypair.json")
-    logging.info("Primary env generated")
 
 def create_env(validators_number, workers_number, test_id, executable_path, committee_path):
-    logging.info("Creating environment for {validators_number} validators, {workers_number} workers / validator...")
+    logging.info(f"Creating environment for {validators_number} validators, {workers_number} workers / validator...")
     os.makedirs(test_id, exist_ok=True)
     for i in range(validators_number):
         os.makedirs(f"{test_id}/validator_{i}", exist_ok=True)
         create_validator_env(f"{test_id}/validator_{i}", workers_number, executable_path, committee_path)
         logging.info(f"Validator {i} environment created")
-    logging.info("Environment created")
+    logging.info("test environment created")
 
 def primaries_processes_output(n_validators, base_path):
     return [f"{base_path}/validator_{i}/primary/output.log" for i in range(n_validators)]

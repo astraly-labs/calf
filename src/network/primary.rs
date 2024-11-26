@@ -56,7 +56,7 @@ impl Connect for PrimaryConnector {
     async fn dispatch(&self, payload: RequestPayload, _sender: PeerId) -> anyhow::Result<()> {
         match payload {
             RequestPayload::Digest(digest) => {
-                tracing::info!("received batch digest: {:?}", digest);
+                tracing::info!("received batch digest: {}", hex::encode(digest));
                 self.digest_tx.send(digest)?;
             }
             RequestPayload::Header(header) => {
@@ -74,10 +74,19 @@ impl Connect for PrimaryConnector {
 impl ManagePeers for PrimaryPeers {
     fn add_peer(&mut self, id: Peer, authority_pubkey: String) -> bool {
         match id {
-            Peer::Primary(id, addr) => self.primaries.insert(id, addr).is_none(),
+            Peer::Primary(id, addr) => {
+                if !self.primaries.contains_key(&id) {
+                    self.primaries.insert(id, addr);
+                    tracing::info!("primary {id} added to peers");
+                }
+                true
+            }
             Peer::Worker(id, addr, index) => {
                 if authority_pubkey == self.authority_pubkey {
-                    self.workers.push((id, addr));
+                    if !self.workers.iter().any(|(peer_id, _)| peer_id == &id) {
+                        self.workers.push((id, addr));
+                        tracing::info!("worker {id} added to peers");
+                    }
                     true
                 } else {
                     false
@@ -90,6 +99,7 @@ impl ManagePeers for PrimaryPeers {
             let index = self.workers.iter().position(|(peer_id, _)| peer_id == &id);
             if let Some(index) = index {
                 self.workers.remove(index);
+                tracing::info!("worker {id} removed from peers");
                 true
             } else {
                 false
@@ -109,7 +119,9 @@ impl ManagePeers for PrimaryPeers {
         self.primaries.get(&id).map(|addr| (id, addr.clone()))
     }
     fn contains_peer(&self, id: PeerId) -> bool {
-        self.primaries.contains_key(&id) || self.workers.iter().any(|(peer_id, _)| peer_id == &id)
+        self.primaries.contains_key(&id)
+            || self.workers.iter().any(|(peer_id, _)| peer_id == &id)
+            || self.established.contains_key(&id)
     }
     fn get_to_dial_peers(committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
         todo!()

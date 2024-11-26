@@ -109,8 +109,13 @@ impl ManagePeers for WorkerPeers {
     fn add_peer(&mut self, peer: Peer, pubkey: String) -> bool {
         match peer {
             Peer::Worker(id, addr, index) => {
-                if pubkey != self.this_id.1 && index == self.this_id.0 {
-                    self.workers.insert(id, addr).is_none()
+                if pubkey != self.this_id.1
+                    && index == self.this_id.0
+                    && !self.workers.contains_key(&id)
+                {
+                    self.workers.insert(id, addr);
+                    tracing::info!("worker {id} added to peers");
+                    true
                 } else {
                     false
                 }
@@ -118,8 +123,9 @@ impl ManagePeers for WorkerPeers {
             Peer::Primary(id, addr) => match self.primary {
                 Some(_) => false,
                 None => {
-                    if pubkey == self.this_id.1 {
+                    if pubkey == self.this_id.1 && self.primary.is_none() {
                         self.primary = Some((id, addr));
+                        tracing::info!("primary {id} added to peers");
                         true
                     } else {
                         false
@@ -160,6 +166,7 @@ impl ManagePeers for WorkerPeers {
                 .clone()
                 .map(|(pid, _)| pid == id)
                 .unwrap_or(false)
+            || self.established.contains_key(&id)
     }
     fn get_to_dial_peers(committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
         todo!()

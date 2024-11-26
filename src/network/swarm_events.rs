@@ -31,39 +31,40 @@ where
         } => {
             match endpoint {
                 ConnectedPoint::Dialer { address, .. } => {
-                    tracing::info!("dialed to {peer_id}: {address}");
+                    tracing::debug!("dialed to {peer_id}: {address}");
                     peers.add_established(peer_id, address);
                 }
                 ConnectedPoint::Listener { send_back_addr, .. } => {
-                    tracing::info!("received dial from {peer_id}: {send_back_addr}");
+                    peers.add_established(peer_id, send_back_addr);
                 }
             };
+            tracing::info!("connection to {peer_id} established");
         }
         SwarmEvent::Behaviour(CalfBehaviorEvent::Identify(identify::Event::Received {
             peer_id,
             info,
         })) => {
-            tracing::info!("received identify info from {peer_id}");
+            tracing::debug!("received identify info from {peer_id}");
             if info.protocol_version != MAIN_PROTOCOL {
                 tracing::info!("{peer_id} doesn't speak our protocol")
             }
             match serde_json::from_str::<PeerIdentifyInfos>(&info.agent_version) {
                 Ok(infos) => match infos {
                     PeerIdentifyInfos::Worker(id, pubkey) => {
-                        tracing::info!("Identified {peer_id} as worker {id}");
+                        tracing::debug!("Identified {peer_id} as worker {id}");
                         if let Some(addr) = peers.established().get(&peer_id) {
-                            if peers.add_peer(Peer::Worker(peer_id, addr.clone(), id), pubkey) {
-                                tracing::info!("worker added to peers");
+                            if !peers.add_peer(Peer::Worker(peer_id, addr.clone(), id), pubkey) {
+                                tracing::info!("disconnecting from worker {peer_id}");
                             }
                         }
                     }
                     PeerIdentifyInfos::Primary(authority_pubkey) => {
-                        tracing::info!("Identified {peer_id} as primary {authority_pubkey}");
+                        tracing::debug!("Identified {peer_id} as primary {authority_pubkey}");
                         if let Some(addr) = peers.established().get(&peer_id) {
-                            if peers
+                            if !peers
                                 .add_peer(Peer::Primary(peer_id, addr.clone()), authority_pubkey)
                             {
-                                tracing::info!("primary added to peers");
+                                tracing::info!("disconnecting from primary {peer_id}");
                             }
                         }
                     }
@@ -78,12 +79,11 @@ where
         }
         SwarmEvent::Behaviour(CalfBehaviorEvent::Mdns(event)) => {
             if let mdns::Event::Discovered(list) = event {
-                tracing::info!("Discovered peers: {:?}", list);
                 let to_dial = list
                     .into_iter()
                     .filter(|(peer_id, _)| !peers.contains_peer(*peer_id));
                 to_dial.for_each(|(id, addr)| {
-                    //TODO: handle error ?
+                    //TODO: handle error
                     let _res = swarm_actions::dial_peer(swarm, id, addr);
                 });
             }

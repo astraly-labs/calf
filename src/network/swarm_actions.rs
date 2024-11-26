@@ -45,6 +45,6 @@ pub(crate) fn dial_peer(
         .condition(PeerCondition::DisconnectedAndNotDialing)
         .addresses(vec![multiaddr.clone()])
         .build();
-    tracing::info!("Dialing -> {peer_id}");
+    tracing::info!("trying to connect to {peer_id} / {multiaddr}");
     swarm.dial(dial_opts)
 }
