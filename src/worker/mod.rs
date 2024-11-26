@@ -99,7 +99,7 @@ impl BaseAgent for Worker {
 
     async fn from_settings(settings: Self::Settings) -> anyhow::Result<Self> {
         let db = Arc::new(db::Db::new(settings.base.db_path)?);
-        let commitee = match Committee::load_from_file(".config.json") {
+        let commitee = match Committee::load_from_file("committee.json") {
             Ok(c) => c,
             Err(e) => {
                 tracing::error!("Failed to load committee from file: {:?}", e);

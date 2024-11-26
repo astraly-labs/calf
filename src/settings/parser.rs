@@ -1,3 +1,4 @@
+use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -34,10 +35,15 @@ impl Committee {
     pub fn quorum_threshold(&self) -> u32 {
         ((self.authorities.len() / 3) * 2 + 1) as u32
     }
+    pub fn has_authority_id(&self, peer_id: &PeerId) -> bool {
+        self.authorities.iter().any(|a| &a.authority_id == peer_id)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorityInfo {
+    //Primary peer id
+    pub authority_id: PeerId,
     pub authority_pubkey: String,
     pub primary_address: (String, String),
     pub stake: Stake,

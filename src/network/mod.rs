@@ -10,10 +10,7 @@ use libp2p::{
     identity::Keypair,
     mdns,
     request_response::{self, ProtocolSupport},
-    swarm::{
-        dial_opts::{DialOpts, PeerCondition},
-        DialError, NetworkBehaviour,
-    },
+    swarm::NetworkBehaviour,
     PeerId, StreamProtocol, Swarm,
 };
 use serde::{Deserialize, Serialize};
@@ -30,6 +27,8 @@ pub struct WorkerNetwork;
 pub struct PrimaryNetwork;
 
 const MAIN_PROTOCOL: &str = "/calf/0/";
+const MAX_CONCURENT_STREAMS: usize = 10;
+const CONNECTION_TIMEOUT: u64 = 1000;
 
 #[derive(NetworkBehaviour)]
 pub struct CalfBehavior {
@@ -92,8 +91,8 @@ where
     peers: P,
     connector: C,
     requests_rx: mpsc::Receiver<NetworkRequest>,
-    authority_keypair: Keypair,
-    keypair: Keypair,
+    _authority_keypair: Keypair,
+    _keypair: Keypair,
     _role: PhantomData<A>,
 }
 
@@ -138,8 +137,8 @@ where
                     identify: identify::Behaviour::new(identify_config),
                     mdns,
                     request_response: {
-                        let cfg =
-                            request_response::Config::default().with_max_concurrent_streams(10);
+                        let cfg = request_response::Config::default()
+                            .with_max_concurrent_streams(MAX_CONCURENT_STREAMS);
 
                         request_response::cbor::Behaviour::<RequestPayload, ()>::new(
                             [(StreamProtocol::new(MAIN_PROTOCOL), ProtocolSupport::Full)],
@@ -148,7 +147,9 @@ where
                     },
                 })
                 .unwrap()
-                .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(120)))
+                .with_swarm_config(|c| {
+                    c.with_idle_connection_timeout(Duration::from_secs(CONNECTION_TIMEOUT))
+                })
                 .build();
 
             let mut this = Self {
@@ -157,8 +158,8 @@ where
                 peers,
                 connector,
                 requests_rx,
-                authority_keypair,
-                keypair,
+                _authority_keypair: authority_keypair,
+                _keypair: keypair,
                 _role: PhantomData,
             };
             let run = this.run();

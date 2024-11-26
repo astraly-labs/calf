@@ -82,7 +82,7 @@ impl BaseAgent for Primary {
 
     async fn from_settings(settings: Self::Settings) -> anyhow::Result<Self> {
         let db = Arc::new(db::Db::new(settings.base.db_path)?);
-        let commitee = Committee::load_from_file(".config.json")?;
+        let commitee = Committee::load_from_file("committee.json")?;
         let keypair = utils::read_keypair_from_file(&settings.base.keypair_path)
             .context("Failed to read keypair from file")?;
         let validator_keypair =
