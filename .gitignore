@@ -30,3 +30,6 @@ db/*
 # Generated files
 .*.json
 key*.json
+*.json
+
+/calf-test-env

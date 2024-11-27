@@ -114,7 +114,7 @@ mod test {
     use rstest::*;
     use tokio::{sync::mpsc, time};
 
-    const MAX_BATCH_SIZE: usize = 200; // Size in bytes
+    const MAX_BATCH_SIZE: usize = 1000; // Size in bytes
     const TIMEOUT: u64 = 100; // 100ms
     const CHANNEL_CAPACITY: usize = 1000;
 

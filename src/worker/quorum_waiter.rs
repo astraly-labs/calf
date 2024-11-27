@@ -99,13 +99,14 @@ impl QuorumWaiter {
                         tracing::debug!("Received new batch");
                     }
                     let now = tokio::time::Instant::now();
-                    //perfectible ? rayon ? une "liste de timers" ?
-                    for i in 0..batches.len() {
-                        if now.duration_since(batches[i].timestamp).as_millis() > self.quorum_timeout {
-                            tracing::debug!("Batch timed out: {:?}", batches[i].digest);
-                            batches.remove(i);
-                        }
-                    }
+                    //perfectible ? rayon ? une "liste de timers" ? //TODO: reparer: crash
+                    // for i in 0..batches.len() {
+                    //     tracing::warn!("{i} / {}", batches.len());
+                    //     if now.duration_since(batches[i].timestamp).as_millis() > self.quorum_timeout {
+                    //         tracing::debug!("Batch timed out: {:?}", batches[i].digest);
+                    //         batches.remove(i);
+                    //     }
+                    // }
                 },
                 Some(ack) = self.acknowledgments_rx.recv() => {
                     tracing::info!("Received acknowledgment: {:?}", ack.acknowledgement);

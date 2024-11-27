@@ -23,7 +23,10 @@ use crate::{
         Network, WorkerNetwork,
     },
     settings::parser::{AuthorityInfo, Committee, FileLoader as _},
-    types::agents::{BaseAgent, LoadableFromSettings, Settings},
+    types::{
+        agents::{BaseAgent, LoadableFromSettings, Settings},
+        Transaction,
+    },
     utils,
 };
 
@@ -55,6 +58,8 @@ pub struct WorkerArgs {
     /// Path to the database directory
     #[arg(short, long)]
     pub id: u32,
+    #[arg(long, default_value = "false")]
+    pub txs_producer: bool,
 }
 
 #[derive(Debug, AsRef, AsMut, Deref, DerefMut)]
@@ -65,6 +70,7 @@ pub struct WorkerSettings {
     #[deref_mut]
     pub base: Settings,
     pub id: u32,
+    pub txs_producer: bool,
 }
 
 impl LoadableFromSettings for WorkerSettings {
@@ -79,6 +85,7 @@ impl LoadableFromSettings for WorkerSettings {
                 validator_keypair_path: cli.validator_keypair_path,
             },
             id: cli.id,
+            txs_producer: cli.txs_producer,
         })
     }
 }
@@ -90,6 +97,7 @@ pub(crate) struct Worker {
     keypair: libp2p::identity::Keypair,
     validator_keypair: libp2p::identity::Keypair,
     db: Arc<db::Db>,
+    txs_producer: bool,
 }
 
 #[async_trait::async_trait]
@@ -117,6 +125,7 @@ impl BaseAgent for Worker {
             db,
             keypair,
             validator_keypair,
+            txs_producer: settings.txs_producer,
         })
     }
 
@@ -139,6 +148,10 @@ impl BaseAgent for Worker {
 
         let batch_broadcaster_handle =
             BatchBroadcaster::spawn(batches_rx, network_tx.clone(), cancellation_token.clone());
+
+        let tx_producer_handle =
+            tx_producer_task(transactions_tx.clone(), 10, 1000, self.txs_producer);
+
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
 
@@ -186,6 +199,7 @@ impl BaseAgent for Worker {
             worker_network_handle,
             quorum_waiter_handle,
             batch_acknowledger_handle,
+            tx_producer_handle,
         );
 
         match res {
@@ -193,4 +207,21 @@ impl BaseAgent for Worker {
             Err(e) => tracing::error!("Worker exited with error: {:?}", e),
         }
     }
+}
+
+fn tx_producer_task(
+    txs_tx: mpsc::Sender<Transaction>,
+    size: usize,
+    delay: u64,
+    flag: bool,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        if flag {
+            loop {
+                let tx = Transaction::random(size);
+                txs_tx.send(tx).await.unwrap();
+                tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+            }
+        }
+    })
 }

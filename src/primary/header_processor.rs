@@ -73,7 +73,7 @@ impl HeaderProcessor {
 
                     // Checks
                     // 1. is the header built by an authority
-                    if /*self.commitee.has_authority_key(&header.value.author)*/ todo!(){
+                    //if self.commitee.has_authority_key(&header.value.author) {
                         // 2. is the header the first one they see for this round
                         if !self.has_seen_header_for_round(header.value.round)? {
                             // Then
@@ -82,7 +82,7 @@ impl HeaderProcessor {
                             // 2. Store it in db
                             self.db.insert(Column::Headers, &header.value.round.to_string(), header).context("Failed to insert header in db")?;
                         }
-                    }
+                    //}
                 }
             }
         }

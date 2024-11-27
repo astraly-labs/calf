@@ -32,11 +32,11 @@ pub enum DbError {
 }
 
 impl Column {
-    const COUNT: usize = 1;
+    const COUNT: usize = 2;
 
     pub const ALL: &'static [Self] = {
         use Column::*;
-        &[Batches]
+        &[Batches, Headers]
     };
 
     fn iter() -> impl Iterator<Item = Self> {

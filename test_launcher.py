@@ -120,5 +120,6 @@ create_env(n_validators, n_workers, test_id, calf, committee_path)
 commands = worker_processes_commands(n_validators, n_workers, test_id, exec_name) + primary_processes_commands(n_validators, test_id, exec_name)
 output_files = workers_processes_output(n_validators, n_workers, test_id) + primaries_processes_output(n_validators, test_id)
 
+commands[0].append('--txs-producer')
 with multiprocessing.Pool() as pool:
     pool.starmap(run_command, zip(commands, output_files))

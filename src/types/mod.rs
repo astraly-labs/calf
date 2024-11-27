@@ -19,6 +19,11 @@ impl Transaction {
     pub fn as_bytes(&self) -> &[u8] {
         &self.data
     }
+    pub fn random(size: usize) -> Self {
+        Self {
+            data: (0..size).map(|_| rand::random::<u8>()).collect(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
