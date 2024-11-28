@@ -106,20 +106,21 @@ def config():
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-config()
+if __name__ == '__main__':
+    config()
 
-n_validators = get_args().validators
-n_workers = get_args().workers
-test_id = get_args().test_id
-calf = get_args().calf
-committee_path = get_args().committee_path
-exec_name = os.path.basename(calf)
+    n_validators = get_args().validators
+    n_workers = get_args().workers
+    test_id = get_args().test_id
+    calf = get_args().calf
+    committee_path = get_args().committee_path
+    exec_name = os.path.basename(calf)
 
-create_env(n_validators, n_workers, test_id, calf, committee_path)
+    create_env(n_validators, n_workers, test_id, calf, committee_path)
 
-commands = worker_processes_commands(n_validators, n_workers, test_id, exec_name) + primary_processes_commands(n_validators, test_id, exec_name)
-output_files = workers_processes_output(n_validators, n_workers, test_id) + primaries_processes_output(n_validators, test_id)
+    commands = worker_processes_commands(n_validators, n_workers, test_id, exec_name) + primary_processes_commands(n_validators, test_id, exec_name)
+    output_files = workers_processes_output(n_validators, n_workers, test_id) + primaries_processes_output(n_validators, test_id)
 
-commands[0].append('--txs-producer')
-with multiprocessing.Pool() as pool:
-    pool.starmap(run_command, zip(commands, output_files))
+    commands[0].append('--txs-producer')
+    with multiprocessing.Pool() as pool:
+        pool.starmap(run_command, zip(commands, output_files))

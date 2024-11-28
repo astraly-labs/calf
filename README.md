@@ -1,4 +1,4 @@
-# 🐄 calf
+# calf
 
 A smol implementation of [narwhal](https://arxiv.org/pdf/2105.11827) - a mempool narwhal DAG-based consensus mechanism.
 
