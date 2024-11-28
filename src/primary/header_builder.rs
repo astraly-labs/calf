@@ -11,7 +11,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    db::Db,
+    db::{self, Db},
     types::{
         signing::sign_with_keypair, BlockHeader, Digest, NetworkRequest, RequestPayload, Round,
         SignedBlockHeader,
@@ -26,6 +26,7 @@ pub(crate) struct HeaderBuilder {
     network_tx: mpsc::Sender<NetworkRequest>,
     local_keypair: Keypair,
     db: Arc<Db>,
+    round_rx: tokio::sync::watch::Receiver<Round>,
 }
 
 impl HeaderBuilder {
@@ -36,6 +37,7 @@ impl HeaderBuilder {
         network_tx: mpsc::Sender<NetworkRequest>,
         cancellation_token: CancellationToken,
         db: Arc<Db>,
+        round_rx: tokio::sync::watch::Receiver<Round>,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let res = cancellation_token
@@ -45,6 +47,7 @@ impl HeaderBuilder {
                         network_tx,
                         local_keypair,
                         db,
+                        round_rx,
                     }
                     .run(),
                 )
@@ -79,7 +82,7 @@ impl HeaderBuilder {
             tokio::select! {
                 _ = timer.tick() => {
                     if !batch.is_empty() {
-                        let current_round = 0; // TODO: fetch it
+                        let current_round = *self.round_rx.borrow();
                         let block_header = self.build_current_header(&mut batch, current_round);
                         let signed_header = sign_with_keypair(&self.local_keypair, block_header)?;
                         self.broadcast_header(signed_header).await?;
@@ -89,12 +92,12 @@ impl HeaderBuilder {
                 }
                 Ok(digest) = self.digest_rx.recv() => {
                     batch.push(digest);
+                    self.db.insert(db::Column::Digests, &hex::encode(digest), true)?;
                     if batch.len() >= MAX_DIGESTS_IN_HEADER as usize {
-                        let current_round = 0; // TODO: fetch it
+                        let current_round = *self.round_rx.borrow();
                         let block_header = self.build_current_header(&mut batch, current_round);
                         let signed_header = sign_with_keypair(&self.local_keypair, block_header)?;
                         self.broadcast_header(signed_header).await?;
-
                         batch.clear();
                     }
                 }
@@ -126,7 +129,10 @@ impl HeaderBuilder {
 
     /// Broadcasts the block header to the other primaries
     pub async fn broadcast_header(&self, header: SignedBlockHeader) -> anyhow::Result<()> {
-        tracing::info!("🤖 [Batch] Broadcasting header {:?}", header.clone());
+        tracing::info!(
+            "🤖 [Batch] Broadcasting header, signature: {}",
+            hex::encode(header.signature.clone())
+        );
         self.network_tx
             .send(NetworkRequest::Broadcast(RequestPayload::Header(header)))
             .await?;

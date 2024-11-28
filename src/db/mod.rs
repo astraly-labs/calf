@@ -23,6 +23,7 @@ pub enum Error {
 pub enum Column {
     Batches,
     Headers,
+    Digests,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -32,11 +33,11 @@ pub enum DbError {
 }
 
 impl Column {
-    const COUNT: usize = 2;
+    const COUNT: usize = 3;
 
     pub const ALL: &'static [Self] = {
         use Column::*;
-        &[Batches, Headers]
+        &[Batches, Headers, Digests]
     };
 
     fn iter() -> impl Iterator<Item = Self> {
@@ -47,6 +48,7 @@ impl Column {
         match self {
             Column::Batches => "batches",
             Column::Headers => "headers",
+            Column::Digests => "digests",
         }
     }
 

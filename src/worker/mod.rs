@@ -217,10 +217,12 @@ fn tx_producer_task(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         if flag {
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
             loop {
                 let tx = Transaction::random(size);
                 txs_tx.send(tx).await.unwrap();
                 tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+                break;
             }
         }
     })

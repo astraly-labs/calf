@@ -1,12 +1,12 @@
 use crate::{
     db::Db,
     settings::parser::Committee,
-    types::{Certificate, Dag, NetworkRequest, SignedBlockHeader, Vote},
+    types::{Certificate, Dag, NetworkRequest, Round, SignedBlockHeader, Vote},
 };
 use libp2p::{identity::Keypair, PeerId};
 use std::sync::{Arc, Mutex};
 use tokio::{
-    sync::{broadcast, mpsc},
+    sync::{broadcast, mpsc, watch},
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
@@ -36,6 +36,7 @@ pub(crate) struct VoteAggregator {
     network_tx: mpsc::Sender<NetworkRequest>,
     header_rx: broadcast::Receiver<SignedBlockHeader>,
     commitee: Committee,
+    round_tx: watch::Sender<Round>,
     db: Arc<Db>,
     dag: Arc<Mutex<Dag>>,
     local_keypair: Keypair,
@@ -52,6 +53,7 @@ impl VoteAggregator {
         db: Arc<Db>,
         dag: Arc<Mutex<Dag>>,
         local_keypair: Keypair,
+        round_tx: watch::Sender<Round>,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let res = cancellation_token
@@ -64,6 +66,7 @@ impl VoteAggregator {
                         db,
                         dag,
                         local_keypair,
+                        round_tx,
                     }
                     .run(),
                 )
@@ -109,14 +112,14 @@ impl VoteAggregator {
                         waiting_headers.push(waiting_header);
                         tracing::info!("Received new header");
                     }
-                    let now = tokio::time::Instant::now();
-                    //perfectible ? rayon ? une "liste de timers" ?
-                    for i in 0..waiting_headers.len() {
-                        if now.duration_since(waiting_headers[i].timestamp).as_millis() > QUORUM_TIMEOUT {
-                            tracing::warn!("Header timed out: {:?}", waiting_headers[i].header);
-                            waiting_headers.remove(i);
-                        }
-                    }
+                    // let now = tokio::time::Instant::now();
+                    // //perfectible ? rayon ? une "liste de timers" ? //TODO: reparer: out of bounds
+                    // for i in 0..waiting_headers.len() {
+                    //     if now.duration_since(waiting_headers[i].timestamp).as_millis() > QUORUM_TIMEOUT {
+                    //         tracing::warn!("Header timed out: {:?}", waiting_headers[i].header);
+                    //         waiting_headers.remove(i);
+                    //     }
+                    // }
             },
             Ok(vote) = self.votes_rx.recv() => {
                     // Check if we have a corresponding header waiting for votes
@@ -125,15 +128,19 @@ impl VoteAggregator {
                         waiting_header.votes.push(*vote.peer_id());
                         waiting_header.ack_number += 1;
                         if waiting_header.ack_number >= self.commitee.quorum_threshold().try_into()? {
-                            tracing::info!("✅ Quorum Reached for round : {:?}", waiting_header.header.value.round);
+                            tracing::info!("✅ Quorum Reached for round : {}", waiting_header.header.value.round);
                             let signed_authorities = waiting_header.votes.clone();
                             let header_value = waiting_header.header.value.clone();
                             let round_number = header_value.round;
                             // Create certificate
+                            // TODO: must depends on the round r-1 certificates ?
                             let certificate = Certificate::new(signed_authorities, header_value);
                             // Add it to my local DAG
                             self.dag.lock().unwrap().insert(round_number, (self.local_keypair.public().to_peer_id(), certificate));
                             tracing::info!("💚 DAG Updated");
+                            // TODO: Broadcast the certificate
+                            tracing::info!("round updated --> {}", round_number + 1);
+                            self.round_tx.send(round_number + 1)?;
                             waiting_headers.remove(header_index);
                         }
                     };

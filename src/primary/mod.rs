@@ -12,7 +12,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 use vote_aggregator::VoteAggregator;
 
@@ -100,6 +100,7 @@ impl BaseAgent for Primary {
     async fn run(mut self) {
         let (network_tx, network_rx) = mpsc::channel(100);
         let dag = Arc::new(Mutex::new(Default::default()));
+        let (round_tx, round_rx) = watch::channel(0);
         let (connector, digest_rx, header_rx, vote_rx) = PrimaryConnector::new(100);
 
         let peers = PrimaryPeers {
@@ -132,6 +133,7 @@ impl BaseAgent for Primary {
             network_tx.clone(),
             cancellation_token.clone(),
             self.db.clone(),
+            round_rx.clone(),
         );
 
         let header_processor = HeaderProcessor::spawn(
@@ -141,6 +143,7 @@ impl BaseAgent for Primary {
             cancellation_token.clone(),
             self.db.clone(),
             self.keypair.clone(),
+            round_rx.clone(),
         );
 
         let vote_aggregator = VoteAggregator::spawn(
@@ -152,6 +155,7 @@ impl BaseAgent for Primary {
             self.db,
             dag,
             self.keypair,
+            round_tx,
         );
 
         let res = tokio::try_join!(
