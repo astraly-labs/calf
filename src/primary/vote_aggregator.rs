@@ -129,18 +129,15 @@ impl VoteAggregator {
                         waiting_header.ack_number += 1;
                         if waiting_header.ack_number >= self.commitee.quorum_threshold().try_into()? {
                             tracing::info!("✅ Quorum Reached for round : {}", waiting_header.header.value.round);
-                            let signed_authorities = waiting_header.votes.clone();
-                            let header_value = waiting_header.header.value.clone();
-                            let round_number = header_value.round;
                             // Create certificate
                             // TODO: must depends on the round r-1 certificates ?
-                            let certificate = Certificate::new(signed_authorities, header_value);
+                            let certificate = Certificate::new(waiting_header.votes.clone(), waiting_header.header.value.clone());
                             // Add it to my local DAG
-                            self.dag.lock().unwrap().insert(round_number, (self.local_keypair.public().to_peer_id(), certificate));
-                            tracing::info!("💚 DAG Updated");
+                            self.dag.lock().unwrap().insert(waiting_header.header.value.round, (self.local_keypair.public().to_peer_id(), certificate));
+                            tracing::info!("💚 DAG Updated: {:?}", self.dag.lock().unwrap());
                             // TODO: Broadcast the certificate
-                            tracing::info!("round updated --> {}", round_number + 1);
-                            self.round_tx.send(round_number + 1)?;
+                            tracing::info!("round updated --> {}", waiting_header.header.value.round + 1);
+                            self.round_tx.send(waiting_header.header.value.round + 1)?;
                             waiting_headers.remove(header_index);
                         }
                     };

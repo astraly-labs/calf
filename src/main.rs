@@ -80,10 +80,10 @@ async fn main() -> anyhow::Result<()> {
     // Setup logging based on global options
     let subscriber = tracing_subscriber::fmt()
         .compact()
-        .with_file(true)
-        .with_line_number(true)
-        .with_thread_ids(true)
-        .with_target(true)
+        .with_file(false)
+        .with_line_number(false)
+        .with_thread_ids(false)
+        .with_target(false)
         .with_max_level(if app.global_opts.debug {
             tracing::Level::DEBUG
         } else {

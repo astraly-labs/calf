@@ -73,7 +73,7 @@ impl HeaderProcessor {
             tokio::select! {
                 Ok(header) = self.header_rx.recv() => {
                     tracing::info!("🔨 Processing header...");
-                    if !self.has_seen_header_for_round(header.value.round)? && self.has_digests_in_db(&header.value)? {
+                    if self.has_digests_in_db(&header.value)? {
                         // 1. Send back a vote for it
                         self.broadcast_vote(&header).await.context("Failed to broadcast vote")?;
                         // 2. Store it in db
@@ -82,14 +82,6 @@ impl HeaderProcessor {
                 }
             }
         }
-    }
-
-    /// Checks in db if we have a header stored for a given round
-    pub fn has_seen_header_for_round(&self, round: Round) -> anyhow::Result<bool> {
-        let maybe_header = self
-            .db
-            .get::<BlockHeader>(Column::Headers, &round.to_string())?;
-        Ok(maybe_header.is_some())
     }
 
     fn has_digests_in_db(&self, header: &BlockHeader) -> anyhow::Result<bool> {

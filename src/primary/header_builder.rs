@@ -85,6 +85,7 @@ impl HeaderBuilder {
                         let current_round = *self.round_rx.borrow();
                         let block_header = self.build_current_header(&mut batch, current_round);
                         let signed_header = sign_with_keypair(&self.local_keypair, block_header)?;
+                        tracing::info!("broadcasting header for round {current_round}");
                         self.broadcast_header(signed_header).await?;
 
                         batch.clear();
@@ -97,6 +98,7 @@ impl HeaderBuilder {
                         let current_round = *self.round_rx.borrow();
                         let block_header = self.build_current_header(&mut batch, current_round);
                         let signed_header = sign_with_keypair(&self.local_keypair, block_header)?;
+                        tracing::info!("broadcasting header for round {current_round}");
                         self.broadcast_header(signed_header).await?;
                         batch.clear();
                     }
