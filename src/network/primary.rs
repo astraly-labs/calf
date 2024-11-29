@@ -1,6 +1,6 @@
 use crate::{
     settings::parser::Committee,
-    types::{Digest, NetworkRequest, RequestPayload, SignedBlockHeader, Vote},
+    types::{BlockHeader, Digest, NetworkRequest, RequestPayload, SignedBlockHeader, Vote},
 };
 use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId, Swarm};
@@ -14,7 +14,7 @@ use super::{
 
 pub struct PrimaryConnector {
     digest_tx: broadcast::Sender<Digest>,
-    headers_tx: broadcast::Sender<SignedBlockHeader>,
+    headers_tx: broadcast::Sender<BlockHeader>,
     vote_tx: broadcast::Sender<Vote>,
 }
 
@@ -24,7 +24,7 @@ impl PrimaryConnector {
     ) -> (
         Self,
         broadcast::Receiver<Digest>,
-        broadcast::Receiver<SignedBlockHeader>,
+        broadcast::Receiver<BlockHeader>,
         broadcast::Receiver<Vote>,
     ) {
         let (digest_tx, digest_rx) = broadcast::channel(buffer);

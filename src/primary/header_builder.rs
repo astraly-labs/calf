@@ -99,6 +99,7 @@ impl HeaderBuilder {
                     header.clone(),
                 )))
                 .await?;
+            // timeout ?
             let votes = wait_for_quorum(
                 &header,
                 self.committee.quorum_threshold() as usize,
