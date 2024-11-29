@@ -85,7 +85,7 @@ pub type WorkerId = u32;
 pub type Stake = u64;
 pub type Round = u64;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct BlockHeader {
     pub author: PublicKey,
     pub round: Round,
@@ -114,7 +114,7 @@ impl BlockHeader {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct Certificate {
     author: PublicKey,
     votes: Vec<Vote>,
@@ -133,7 +133,7 @@ impl Certificate {
 
 impl Signable for BlockHeader {}
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct Vote {
     authority: PublicKey,
     signature: Signature,

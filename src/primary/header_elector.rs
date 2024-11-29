@@ -9,6 +9,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::{self, Db},
+    settings::parser::Committee,
     types::{BlockHeader, Certificate, Digest, NetworkRequest, ReceivedObject, Round, Vote},
 };
 
@@ -18,6 +19,7 @@ pub(crate) struct HeaderElector {
     round_rx: watch::Receiver<(Round, Vec<Certificate>)>,
     validator_keypair: Keypair,
     db: Arc<Db>,
+    committee: Committee,
 }
 
 impl HeaderElector {
@@ -29,6 +31,7 @@ impl HeaderElector {
         headers_rx: broadcast::Receiver<ReceivedObject<BlockHeader>>,
         network_tx: mpsc::Sender<NetworkRequest>,
         round_rx: watch::Receiver<(Round, Vec<Certificate>)>,
+        committee: Committee,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let res = cancellation_token
@@ -39,6 +42,7 @@ impl HeaderElector {
                         db,
                         headers_rx,
                         round_rx,
+                        committee,
                     }
                     .run(),
                 )
@@ -73,12 +77,12 @@ impl HeaderElector {
                 "📡 received new block header from {}",
                 hex::encode(header.object.author)
             );
-            // Check if all batch digests are available in the database, all certificates are valid, the header is from the current round and if the header author has not already produced a header for the current round
             let (round, certificates) = self.round_rx.borrow().clone();
             if previous_round != round {
                 round_authors.clear();
                 previous_round = round;
             }
+            // Check if all batch digests are available in the database, all certificates are valid, the header is from the current round and if the header author has not already produced a header for the current round
             if round_authors.insert(header.object.author)
                 && header.object.round == round
                 && header.object.digests.iter().all(|digest| {
@@ -86,11 +90,11 @@ impl HeaderElector {
                         .get(db::Column::Digests, &hex::encode(digest))
                         .is_ok_and(|d: Option<Digest>| d.is_some())
                 })
-                && header
-                    .object
-                    .certificates
-                    .iter()
-                    .all(|cert| verify_certificate(cert, &certificates).is_ok_and(|v: bool| v))
+                && verify_certificates(
+                    &header.object.certificates,
+                    &certificates,
+                    self.committee.quorum_threshold(),
+                )?
             {
                 // Send back a vote to the header author
                 self.network_tx
@@ -108,10 +112,16 @@ impl HeaderElector {
     }
 }
 
-// TODO: Implement this function
-fn verify_certificate(
-    certificate: &Certificate,
+// check if all certifcates are available in the DAG (previous round) and if the quorum threshold is met
+fn verify_certificates(
+    certificates: &Vec<Certificate>,
     previous_round_certificates: &Vec<Certificate>,
+    quorum_threshold: u32,
 ) -> anyhow::Result<bool> {
-    Ok(true)
+    Ok(certificates
+        .iter()
+        .filter(|cert| previous_round_certificates.contains(cert))
+        .collect::<HashSet<_>>()
+        .len()
+        >= quorum_threshold as usize)
 }
