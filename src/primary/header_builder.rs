@@ -8,11 +8,11 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    db::{Db},
+    db::Db,
     settings::parser::Committee,
     types::{
-        BlockHeader, Certificate, Digest, Hash, NetworkRequest,
-        RequestPayload, Round, Vote,
+        BlockHeader, Certificate, Digest, Hash, NetworkRequest, ReceivedObject, RequestPayload,
+        Round, Vote,
     },
     utils::CircularBuffer,
 };
@@ -21,9 +21,9 @@ pub(crate) struct HeaderBuilder {
     network_tx: mpsc::Sender<NetworkRequest>,
     certificate_tx: mpsc::Sender<Certificate>,
     keypair: Keypair,
-    db: Arc<Db>,
+    _db: Arc<Db>,
     header_trigger_rx: watch::Receiver<(Round, Vec<Certificate>)>,
-    votes_rx: broadcast::Receiver<Vote>,
+    votes_rx: broadcast::Receiver<ReceivedObject<Vote>>,
     digests_buffer: Arc<Mutex<CircularBuffer<Digest>>>,
     committee: Committee,
 }
@@ -35,9 +35,9 @@ impl HeaderBuilder {
         network_tx: mpsc::Sender<NetworkRequest>,
         certificate_tx: mpsc::Sender<Certificate>,
         cancellation_token: CancellationToken,
-        db: Arc<Db>,
+        _db: Arc<Db>,
         header_trigger_rx: watch::Receiver<(Round, Vec<Certificate>)>,
-        votes_rx: broadcast::Receiver<Vote>,
+        votes_rx: broadcast::Receiver<ReceivedObject<Vote>>,
         digests_buffer: Arc<Mutex<CircularBuffer<Digest>>>,
         committee: Committee,
     ) -> JoinHandle<()> {
@@ -48,7 +48,7 @@ impl HeaderBuilder {
                         network_tx,
                         certificate_tx,
                         keypair,
-                        db,
+                        _db,
                         header_trigger_rx,
                         votes_rx,
                         digests_buffer,
@@ -116,7 +116,7 @@ impl HeaderBuilder {
 pub async fn wait_for_quorum(
     waiting_header: &BlockHeader,
     threshold: usize,
-    votes_rx: &mut broadcast::Receiver<Vote>,
+    votes_rx: &mut broadcast::Receiver<ReceivedObject<Vote>>,
 ) -> anyhow::Result<Vec<Vote>> {
     tracing::info!("⏳ Waiting for quorum for header...");
     let header_hash = waiting_header.digest()?;
@@ -124,8 +124,8 @@ pub async fn wait_for_quorum(
     loop {
         let vote = votes_rx.recv().await?;
         // vote: signed hash of the header
-        if vote.verify(&header_hash)? {
-            votes.push(vote);
+        if vote.object.verify(&header_hash)? {
+            votes.push(vote.object);
         }
         if votes.len() >= threshold {
             break;

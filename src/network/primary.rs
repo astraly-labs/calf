@@ -1,7 +1,7 @@
 use crate::{
     settings::parser::Committee,
     types::{
-        BlockHeader, Certificate, Digest, NetworkRequest, RequestPayload, Vote,
+        BlockHeader, Certificate, Digest, NetworkRequest, ReceivedObject, RequestPayload, Vote,
     },
 };
 use async_trait::async_trait;
@@ -15,10 +15,10 @@ use super::{
 };
 
 pub struct PrimaryConnector {
-    digest_tx: broadcast::Sender<Digest>,
-    headers_tx: broadcast::Sender<BlockHeader>,
-    vote_tx: broadcast::Sender<Vote>,
-    certificates_tx: broadcast::Sender<Certificate>,
+    digest_tx: broadcast::Sender<ReceivedObject<Digest>>,
+    headers_tx: broadcast::Sender<ReceivedObject<BlockHeader>>,
+    vote_tx: broadcast::Sender<ReceivedObject<Vote>>,
+    certificates_tx: broadcast::Sender<ReceivedObject<Certificate>>,
 }
 
 impl PrimaryConnector {
@@ -26,10 +26,10 @@ impl PrimaryConnector {
         buffer: usize,
     ) -> (
         Self,
-        broadcast::Receiver<Digest>,
-        broadcast::Receiver<BlockHeader>,
-        broadcast::Receiver<Vote>,
-        broadcast::Receiver<Certificate>,
+        broadcast::Receiver<ReceivedObject<Digest>>,
+        broadcast::Receiver<ReceivedObject<BlockHeader>>,
+        broadcast::Receiver<ReceivedObject<Vote>>,
+        broadcast::Receiver<ReceivedObject<Certificate>>,
     ) {
         let (digest_tx, digest_rx) = broadcast::channel(buffer);
         let (headers_tx, headers_rx) = broadcast::channel(buffer);
@@ -60,17 +60,17 @@ pub struct PrimaryPeers {
 
 #[async_trait]
 impl Connect for PrimaryConnector {
-    async fn dispatch(&self, payload: RequestPayload, _sender: PeerId) -> anyhow::Result<()> {
+    async fn dispatch(&self, payload: RequestPayload, sender: PeerId) -> anyhow::Result<()> {
         match payload {
             RequestPayload::Digest(digest) => {
                 tracing::info!("received batch digest: {}", hex::encode(digest));
-                self.digest_tx.send(digest)?;
+                self.digest_tx.send(ReceivedObject::new(digest, sender))?;
             }
             RequestPayload::Header(header) => {
-                self.headers_tx.send(header)?;
+                self.headers_tx.send(ReceivedObject::new(header, sender))?;
             }
             RequestPayload::Vote(vote) => {
-                self.vote_tx.send(vote)?;
+                self.vote_tx.send(ReceivedObject::new(vote, sender))?;
             }
             _ => {}
         }

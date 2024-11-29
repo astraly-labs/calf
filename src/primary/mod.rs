@@ -1,11 +1,13 @@
 pub mod digests_receiver;
 pub mod header_builder;
+pub mod header_elector;
 
 use anyhow::Context;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use digests_receiver::DigestReceiver;
 use header_builder::HeaderBuilder;
+use header_elector::HeaderElector;
 use libp2p::identity::ed25519;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc, watch, Mutex};
@@ -137,10 +139,19 @@ impl BaseAgent for Primary {
             certificates_tx,
             cancellation_token.clone(),
             self.db.clone(),
-            round_rx,
+            round_rx.clone(),
             vote_rx,
             digests_buffer.clone(),
             self.commitee.clone(),
+        );
+
+        let header_elector_handle = HeaderElector::spawn(
+            cancellation_token.clone(),
+            self.validator_keypair,
+            self.db.clone(),
+            header_rx,
+            network_tx,
+            round_rx.clone(),
         );
 
         let network_handle = Network::<PrimaryNetwork, PrimaryConnector, PrimaryPeers>::spawn(
@@ -153,7 +164,12 @@ impl BaseAgent for Primary {
             cancellation_token.clone(),
         );
 
-        let res = tokio::try_join!(network_handle, digests_receiver_handle,);
+        let res = tokio::try_join!(
+            network_handle,
+            digests_receiver_handle,
+            header_builder_handle,
+            header_elector_handle
+        );
         match res {
             Ok(_) => tracing::info!("Primary exited successfully"),
             Err(e) => tracing::error!("Primary exited with error: {:?}", e),

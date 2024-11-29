@@ -49,6 +49,24 @@ pub enum RequestPayload {
     Vote(Vote),
 }
 
+#[derive(Clone, Debug)]
+pub struct ReceivedObject<T>
+where
+    T: Clone,
+{
+    pub object: T,
+    pub sender: PeerId,
+}
+
+impl<T> ReceivedObject<T>
+where
+    T: Clone,
+{
+    pub fn new(object: T, sender: PeerId) -> Self {
+        Self { object, sender }
+    }
+}
+
 pub struct ReceivedBatch {
     pub batch: TxBatch,
     pub sender: PeerId,
@@ -121,8 +139,9 @@ pub struct Vote {
     signature: Signature,
 }
 
+// Vote: Signed Hash of the BlockHeader + PublicKey of the authority
 impl Vote {
-    pub fn from_header(keypair: Keypair, header: BlockHeader) -> anyhow::Result<Self> {
+    pub fn from_header(header: BlockHeader, keypair: &Keypair) -> anyhow::Result<Self> {
         let signature = header.sign_with(&keypair)?;
         Ok(Self {
             authority: keypair.public().to_bytes(),
