@@ -94,7 +94,7 @@ impl HeaderElector {
                     &header.object.certificates,
                     &certificates,
                     self.committee.quorum_threshold(),
-                )?
+                )
             {
                 // Send back a vote to the header author
                 self.network_tx
@@ -117,11 +117,11 @@ fn verify_certificates(
     certificates: &Vec<Certificate>,
     previous_round_certificates: &Vec<Certificate>,
     quorum_threshold: u32,
-) -> anyhow::Result<bool> {
-    Ok(certificates
+) -> bool {
+    certificates
         .iter()
         .filter(|cert| previous_round_certificates.contains(cert))
         .collect::<HashSet<_>>()
         .len()
-        >= quorum_threshold as usize)
+        >= quorum_threshold as usize
 }
