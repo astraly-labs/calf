@@ -152,6 +152,7 @@ impl BaseAgent for Primary {
             header_rx,
             network_tx,
             round_rx.clone(),
+            self.commitee.clone(),
         );
 
         let network_handle = Network::<PrimaryNetwork, PrimaryConnector, PrimaryPeers>::spawn(
