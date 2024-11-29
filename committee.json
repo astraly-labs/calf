@@ -1,0 +1,19 @@
+{
+  "authorities": [
+    {
+      "authority_id": "1Aeuyf3MgvL1chKrB84rrggEvUuubt4jegdygD6gEtKxMG",
+      "authority_pubkey": "0xPubkey",
+      "primary_address": [
+        "0.0.0.0",
+        "1010"
+      ],
+      "stake": 9,
+      "workers_addresses": [
+        [
+          "1.1.1.1",
+          "1010"
+        ]
+      ]
+    }
+  ]
+}
