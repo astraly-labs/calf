@@ -27,7 +27,6 @@ use crate::{
 };
 
 const MAX_DIGESTS_IN_HEADER: usize = 10;
-const HEADER_PRODUCTION_INTERVAL_IN_SECS: u64 = 5;
 
 /// CLI arguments for Primary
 #[derive(Parser, Debug)]

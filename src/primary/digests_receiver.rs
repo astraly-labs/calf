@@ -6,7 +6,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{db::Db, types::Digest, utils::CircularBuffer};
+use crate::{db::{self, Db}, types::Digest, utils::CircularBuffer};
 
 pub(crate) struct DigestReceiver {
     pub digest_rx: broadcast::Receiver<Digest>,
@@ -54,8 +54,8 @@ impl DigestReceiver {
     pub async fn run(mut self) -> anyhow::Result<()> {
         loop {
             let digest = self.digest_rx.recv().await?;
-            let mut buffer = self.buffer.lock().await;
-            buffer.push(digest);
+            self.db.insert(db::Column::Digests, &hex::encode(digest), &digest)?;
+            self.buffer.lock().await.push(digest);
         }
     }
 }

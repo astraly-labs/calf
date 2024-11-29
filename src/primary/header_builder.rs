@@ -17,9 +17,6 @@ use crate::{
     utils::CircularBuffer,
 };
 
-const MAX_DIGESTS_IN_HEADER: u64 = 10;
-const HEADER_PRODUCTION_INTERVAL_IN_SECS: u64 = 5;
-
 pub(crate) struct HeaderBuilder {
     network_tx: mpsc::Sender<NetworkRequest>,
     certificate_tx: mpsc::Sender<Certificate>,
