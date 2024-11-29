@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use libp2p::identity::ed25519::Keypair;
 use tokio::{
@@ -64,16 +64,23 @@ impl HeaderElector {
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
+        let mut previous_round = 0;
+        // Authorities that have produced header for the current round
+        let mut round_authors = HashSet::new();
         loop {
             let header = self.headers_rx.recv().await?;
             tracing::info!(
                 "📡 received new block header from {}",
                 hex::encode(header.object.author)
             );
-            // TODO: check if a header from this authority has already been received for the current round
-            // Check if all batch digests are available in the database, all certificates are valid and the header is from the current round
+            // Check if all batch digests are available in the database, all certificates are valid, the header is from the current round and if the header author has not already produced a header for the current round
             let (round, certificates) = self.round_rx.borrow().clone();
-            if header.object.round == round
+            if previous_round != round {
+                round_authors.clear();
+                previous_round = round;
+            }
+            if round_authors.insert(header.object.author)
+                && header.object.round == round
                 && header.object.digests.iter().all(|digest| {
                     self.db
                         .get(db::Column::Digests, &hex::encode(digest))
