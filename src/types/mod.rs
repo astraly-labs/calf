@@ -1,11 +1,19 @@
 pub mod agents;
 pub mod signing;
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use libp2p::PeerId;
+use libp2p::{
+    identity::ed25519::{self, Keypair},
+    PeerId,
+};
 use serde::{Deserialize, Serialize};
-use signing::{Signable, SignedType};
+use signing::{Sign, Signable, Signature, SignedType};
+
+use crate::utils;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Transaction {
@@ -38,7 +46,8 @@ pub enum RequestPayload {
     Batch(TxBatch),
     Acknowledgment(Digest),
     Digest(Digest),
-    Header(SignedBlockHeader),
+    Header(BlockHeader),
+    Certificate(Certificate),
     Vote(Vote),
 }
 
@@ -55,29 +64,52 @@ pub struct ReceivedAcknowledgment {
 
 pub type TxBatch = Vec<Transaction>;
 pub type Digest = [u8; 32];
-pub type PublicKey = Vec<u8>;
+pub type PublicKey = [u8; 32];
 pub type WorkerId = u32;
 pub type Stake = u64;
 pub type Round = u64;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct BlockHeader {
-    pub author: PeerId,
+    pub author: PublicKey,
     pub round: Round,
     pub timestamp_ms: u128,
     pub digests: Vec<Digest>,
+    pub certificates: Vec<Certificate>,
+}
+
+impl BlockHeader {
+    pub fn new(
+        author: PublicKey,
+        digests: Vec<Digest>,
+        certificates: Vec<Certificate>,
+        round: Round,
+    ) -> Self {
+        Self {
+            author,
+            round,
+            timestamp_ms: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("critical error: time is broken")
+                .as_millis(),
+            digests,
+            certificates,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Certificate {
-    signed_authorities: Vec<PeerId>,
+    author: PublicKey,
+    votes: Vec<Vote>,
     header: BlockHeader,
 }
 
 impl Certificate {
-    pub fn new(signed_authorities: Vec<PeerId>, header: BlockHeader) -> Self {
+    pub fn new(votes: Vec<Vote>, header: BlockHeader, author: PublicKey) -> Self {
         Self {
-            signed_authorities,
+            author,
+            votes,
             header,
         }
     }
@@ -87,20 +119,21 @@ impl Signable for BlockHeader {}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Vote {
-    peer_id: PeerId,
-    header: BlockHeader,
+    authority: PublicKey,
+    signature: Signature,
 }
 
 impl Vote {
-    pub fn new(peer_id: PeerId, header: BlockHeader) -> Self {
-        Self { peer_id, header }
+    pub fn from_header(keypair: Keypair, header: BlockHeader) -> anyhow::Result<Self> {
+        let signature = header.sign_with(&keypair)?;
+        Ok(Self {
+            authority: keypair.public().to_bytes(),
+            signature,
+        })
     }
-    pub fn peer_id(&self) -> &PeerId {
-        &self.peer_id
-    }
-
-    pub fn header(&self) -> &BlockHeader {
-        &self.header
+    pub fn verify(&self, header_hash: &Digest) -> anyhow::Result<bool> {
+        let pubkey = ed25519::PublicKey::try_from_bytes(&self.authority)?;
+        Ok(pubkey.verify(header_hash, &self.signature))
     }
 }
 
@@ -112,7 +145,10 @@ pub trait Hash {
     fn digest(&self) -> anyhow::Result<Digest>;
 }
 
-impl Hash for TxBatch {
+impl<T> Hash for T
+where
+    T: Serialize,
+{
     fn digest(&self) -> anyhow::Result<Digest> {
         let ser = bincode::serialize(&self)?;
         Ok(*blake3::hash(&ser).as_bytes())
@@ -136,4 +172,32 @@ pub struct WorkerInfo {
 pub struct PrimaryInfo {
     pub signature: SignedType<PeerId>,
     pub authority_pubkey: String,
+}
+
+pub struct CircularBuffer<T> {
+    buffer: Vec<Option<T>>,
+    size: usize,
+    filled_index: usize,
+}
+
+impl<T: Clone> CircularBuffer<T> {
+    pub fn new(size: usize) -> Self {
+        Self {
+            buffer: vec![None; size],
+            size,
+            filled_index: 0,
+        }
+    }
+    pub fn push(&mut self, item: T) {
+        if self.filled_index == self.size - 1 {
+            self.buffer.rotate_left(1);
+            self.buffer[self.filled_index] = Some(item);
+        } else {
+            self.buffer[self.filled_index + 1] = Some(item);
+            self.filled_index += 1;
+        }
+    }
+    pub fn drain(&mut self) -> Vec<T> {
+        self.buffer.drain(..).flatten().collect()
+    }
 }

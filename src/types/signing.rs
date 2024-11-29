@@ -1,9 +1,10 @@
 use std::fmt::Debug;
 use std::fmt::Formatter;
 
+use crate::types::Hash;
 use async_trait::async_trait;
 use bincode::ErrorKind;
-use libp2p::identity::{Keypair, SigningError};
+use libp2p::identity::{ed25519::Keypair, SigningError};
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +24,7 @@ pub enum SignError {
 pub trait Signable: Sized + Serialize {
     fn sign(&self, keypair: &Keypair) -> Result<Signature, SignError> {
         let msg = bincode::serialize(self).map_err(|e| SignError::Serialize(*e))?;
-        keypair.sign(&msg).map_err(SignError::Sign)
+        Ok(keypair.sign(&msg))
     }
 }
 
@@ -59,6 +60,16 @@ impl<T: Signable + Debug> Debug for SignedType<T> {
 impl Signable for PeerId {
     fn sign(&self, keypair: &Keypair) -> Result<Signature, SignError> {
         let msg = self.to_bytes();
-        keypair.sign(&msg).map_err(SignError::Sign)
+        Ok(keypair.sign(&msg))
+    }
+}
+
+pub trait Sign {
+    fn sign_with(&self, keypair: &Keypair) -> anyhow::Result<Signature>;
+}
+
+impl<T: Hash> Sign for T {
+    fn sign_with(&self, keypair: &Keypair) -> anyhow::Result<Signature> {
+        Ok(keypair.sign(&self.digest()?))
     }
 }

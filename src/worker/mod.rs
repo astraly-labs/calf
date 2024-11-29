@@ -222,7 +222,6 @@ fn tx_producer_task(
                 let tx = Transaction::random(size);
                 txs_tx.send(tx).await.unwrap();
                 tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-                break;
             }
         }
     })

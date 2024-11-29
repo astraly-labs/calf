@@ -1,20 +1,14 @@
+pub mod digests_receiver;
 pub mod header_builder;
-pub mod header_processor;
-pub mod vote_aggregator;
 
 use anyhow::Context;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
-use header_builder::HeaderBuilder;
-use header_processor::HeaderProcessor;
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
-use tokio::sync::{mpsc, watch};
+use digests_receiver::DigestReceiver;
+use libp2p::rendezvous::Namespace;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
-use vote_aggregator::VoteAggregator;
 
 use crate::{
     db,
@@ -23,9 +17,15 @@ use crate::{
         Network, PrimaryNetwork,
     },
     settings::parser::{Committee, FileLoader as _},
-    types::agents::{BaseAgent, LoadableFromSettings, Settings},
-    utils,
+    types::{
+        agents::{BaseAgent, LoadableFromSettings, Settings},
+        CircularBuffer, Digest,
+    },
+    utils, CHANNEL_SIZE,
 };
+
+const MAX_DIGESTS_IN_HEADER: usize = 10;
+const HEADER_PRODUCTION_INTERVAL_IN_SECS: u64 = 5;
 
 /// CLI arguments for Primary
 #[derive(Parser, Debug)]
@@ -98,10 +98,12 @@ impl BaseAgent for Primary {
     }
 
     async fn run(mut self) {
-        let (network_tx, network_rx) = mpsc::channel(100);
-        let dag = Arc::new(Mutex::new(Default::default()));
-        let (round_tx, round_rx) = watch::channel(0);
-        let (connector, digest_rx, header_rx, vote_rx) = PrimaryConnector::new(100);
+        let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
+        let (connector, digests_rx, header_rx, vote_rx) = PrimaryConnector::new(CHANNEL_SIZE);
+        let digests_buffer = Arc::new(Mutex::new(CircularBuffer::<Digest>::new(
+            MAX_DIGESTS_IN_HEADER,
+        )));
+        let cancellation_token = CancellationToken::new();
 
         let peers = PrimaryPeers {
             authority_pubkey: hex::encode(self.validator_keypair.public().encode_protobuf()),
@@ -115,6 +117,13 @@ impl BaseAgent for Primary {
             hex::encode(self.validator_keypair.public().encode_protobuf())
         );
 
+        let digests_receiver_handle = DigestReceiver::spawn(
+            digests_rx,
+            digests_buffer.clone(),
+            self.db.clone(),
+            cancellation_token.clone(),
+        );
+
         let network_handle = Network::<PrimaryNetwork, PrimaryConnector, PrimaryPeers>::spawn(
             self.commitee.clone(),
             connector,
@@ -122,48 +131,10 @@ impl BaseAgent for Primary {
             self.keypair.clone(),
             peers,
             network_rx,
-            CancellationToken::new(),
-        );
-
-        let cancellation_token = CancellationToken::new();
-
-        let header_builder = HeaderBuilder::spawn(
-            self.keypair.clone(),
-            digest_rx,
-            network_tx.clone(),
             cancellation_token.clone(),
-            self.db.clone(),
-            round_rx.clone(),
         );
 
-        let header_processor = HeaderProcessor::spawn(
-            self.commitee.clone(),
-            header_rx.resubscribe(),
-            network_tx.clone(),
-            cancellation_token.clone(),
-            self.db.clone(),
-            self.keypair.clone(),
-            round_rx.clone(),
-        );
-
-        let vote_aggregator = VoteAggregator::spawn(
-            self.commitee,
-            vote_rx,
-            network_tx,
-            header_rx,
-            cancellation_token,
-            self.db,
-            dag,
-            self.keypair,
-            round_tx,
-        );
-
-        let res = tokio::try_join!(
-            network_handle,
-            header_builder,
-            header_processor,
-            vote_aggregator
-        );
+        let res = tokio::try_join!(network_handle, digests_receiver_handle,);
         match res {
             Ok(_) => tracing::info!("Primary exited successfully"),
             Err(e) => tracing::error!("Primary exited with error: {:?}", e),
