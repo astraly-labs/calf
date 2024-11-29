@@ -10,7 +10,7 @@ use batch_maker::BatchMaker;
 use batch_receiver::BatchReceiver;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
-use libp2p::identity::{self, ed25519};
+use libp2p::identity::{ed25519};
 use quorum_waiter::QuorumWaiter;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};

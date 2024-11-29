@@ -6,7 +6,7 @@ use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use digests_receiver::DigestReceiver;
 use header_builder::HeaderBuilder;
-use libp2p::{identity::ed25519, rendezvous::Namespace};
+use libp2p::identity::ed25519;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio_util::sync::CancellationToken;

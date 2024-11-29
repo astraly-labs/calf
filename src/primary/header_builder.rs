@@ -1,9 +1,6 @@
-use std::{
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::sync::Arc;
 
-use libp2p::{identity::ed25519::Keypair, tls::certificate};
+use libp2p::identity::ed25519::Keypair;
 use tokio::{
     sync::{broadcast, mpsc, watch, Mutex},
     task::JoinHandle,
@@ -11,11 +8,11 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    db::{self, Db},
+    db::{Db},
     settings::parser::Committee,
     types::{
-        signing::sign_with_keypair, BlockHeader, Certificate, Digest, Hash, NetworkRequest,
-        RequestPayload, Round, SignedBlockHeader, Vote,
+        BlockHeader, Certificate, Digest, Hash, NetworkRequest,
+        RequestPayload, Round, Vote,
     },
     utils::CircularBuffer,
 };
