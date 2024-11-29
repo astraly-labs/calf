@@ -10,6 +10,7 @@ use batch_maker::BatchMaker;
 use batch_receiver::BatchReceiver;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
+use libp2p::identity::{self, ed25519};
 use quorum_waiter::QuorumWaiter;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
@@ -94,8 +95,8 @@ impl LoadableFromSettings for WorkerSettings {
 pub(crate) struct Worker {
     id: u32,
     commitee: Committee,
-    keypair: libp2p::identity::Keypair,
-    validator_keypair: libp2p::identity::Keypair,
+    keypair: ed25519::Keypair,
+    validator_keypair: ed25519::Keypair,
     db: Arc<db::Db>,
     txs_producer: bool,
 }
@@ -115,10 +116,12 @@ impl BaseAgent for Worker {
             }
         };
         let keypair = utils::read_keypair_from_file(&settings.base.keypair_path)
-            .context("Failed to read keypair from file")?;
+            .context("Failed to read keypair from file")?
+            .try_into_ed25519()?;
         let validator_keypair =
             utils::read_keypair_from_file(&settings.base.validator_keypair_path)
-                .context("Failed to read keypair from file")?;
+                .context("Failed to read keypair from file")?
+                .try_into_ed25519()?;
         Ok(Self {
             id: settings.id,
             commitee,
@@ -157,12 +160,12 @@ impl BaseAgent for Worker {
 
         let peers = WorkerPeers::new(
             self.id,
-            hex::encode(self.validator_keypair.public().encode_protobuf()),
+            hex::encode(self.validator_keypair.public().to_bytes()),
         );
 
         tracing::info!(
             "launched with validator keypair: {}",
-            hex::encode(self.validator_keypair.public().encode_protobuf())
+            hex::encode(self.validator_keypair.public().to_bytes()),
         );
 
         let worker_network_handle = Network::<WorkerNetwork, WorkerConnector, WorkerPeers>::spawn(

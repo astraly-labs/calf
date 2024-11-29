@@ -14,9 +14,10 @@ use crate::{
     db::{self, Db},
     settings::parser::Committee,
     types::{
-        signing::sign_with_keypair, BlockHeader, Certificate, CircularBuffer, Digest, Hash,
-        NetworkRequest, RequestPayload, Round, SignedBlockHeader, Vote,
+        signing::sign_with_keypair, BlockHeader, Certificate, Digest, Hash, NetworkRequest,
+        RequestPayload, Round, SignedBlockHeader, Vote,
     },
+    utils::CircularBuffer,
 };
 
 const MAX_DIGESTS_IN_HEADER: u64 = 10;

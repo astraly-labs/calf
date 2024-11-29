@@ -5,9 +5,10 @@ use anyhow::Context;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use digests_receiver::DigestReceiver;
-use libp2p::rendezvous::Namespace;
+use header_builder::HeaderBuilder;
+use libp2p::{identity::ed25519, rendezvous::Namespace};
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, watch, Mutex};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -19,9 +20,10 @@ use crate::{
     settings::parser::{Committee, FileLoader as _},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
-        CircularBuffer, Digest,
+        Certificate, Digest, Round,
     },
-    utils, CHANNEL_SIZE,
+    utils::{self, CircularBuffer},
+    CHANNEL_SIZE,
 };
 
 const MAX_DIGESTS_IN_HEADER: usize = 10;
@@ -70,8 +72,8 @@ impl LoadableFromSettings for PrimarySettings {
 #[derive(Debug)]
 pub(crate) struct Primary {
     commitee: Committee,
-    keypair: libp2p::identity::Keypair,
-    validator_keypair: libp2p::identity::Keypair,
+    keypair: ed25519::Keypair,
+    validator_keypair: ed25519::Keypair,
     db: Arc<db::Db>,
 }
 
@@ -84,10 +86,12 @@ impl BaseAgent for Primary {
         let db = Arc::new(db::Db::new(settings.base.db_path)?);
         let commitee = Committee::load_from_file("committee.json")?;
         let keypair = utils::read_keypair_from_file(&settings.base.keypair_path)
-            .context("Failed to read keypair from file")?;
+            .context("Failed to read keypair from file")?
+            .try_into_ed25519()?;
         let validator_keypair =
             utils::read_keypair_from_file(&settings.base.validator_keypair_path)
-                .context("Failed to read keypair from file")?;
+                .context("Failed to read keypair from file")?
+                .try_into_ed25519()?;
 
         Ok(Self {
             commitee,
@@ -99,14 +103,18 @@ impl BaseAgent for Primary {
 
     async fn run(mut self) {
         let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
-        let (connector, digests_rx, header_rx, vote_rx) = PrimaryConnector::new(CHANNEL_SIZE);
+        let (round_tx, round_rx) = watch::channel::<(Round, Vec<Certificate>)>((0, vec![]));
+        let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx) =
+            PrimaryConnector::new(CHANNEL_SIZE);
+        let (certificates_tx, certificates_rx) = mpsc::channel(CHANNEL_SIZE);
+
         let digests_buffer = Arc::new(Mutex::new(CircularBuffer::<Digest>::new(
             MAX_DIGESTS_IN_HEADER,
         )));
         let cancellation_token = CancellationToken::new();
 
         let peers = PrimaryPeers {
-            authority_pubkey: hex::encode(self.validator_keypair.public().encode_protobuf()),
+            authority_pubkey: hex::encode(self.validator_keypair.public().to_bytes()),
             workers: vec![],
             primaries: HashMap::new(),
             established: HashMap::new(),
@@ -114,7 +122,7 @@ impl BaseAgent for Primary {
 
         tracing::info!(
             "launched with validator keypair: {}",
-            hex::encode(self.validator_keypair.public().encode_protobuf())
+            hex::encode(self.validator_keypair.public().to_bytes())
         );
 
         let digests_receiver_handle = DigestReceiver::spawn(
@@ -122,6 +130,18 @@ impl BaseAgent for Primary {
             digests_buffer.clone(),
             self.db.clone(),
             cancellation_token.clone(),
+        );
+
+        let header_builder_handle = HeaderBuilder::spawn(
+            self.validator_keypair.clone(),
+            network_tx.clone(),
+            certificates_tx,
+            cancellation_token.clone(),
+            self.db.clone(),
+            round_rx,
+            vote_rx,
+            digests_buffer.clone(),
+            self.commitee.clone(),
         );
 
         let network_handle = Network::<PrimaryNetwork, PrimaryConnector, PrimaryPeers>::spawn(

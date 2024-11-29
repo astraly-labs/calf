@@ -7,7 +7,7 @@ use futures::StreamExt;
 use libp2p::{
     core::multiaddr::Multiaddr,
     identify::{self},
-    identity::Keypair,
+    identity::{ed25519, Keypair},
     mdns,
     request_response::{self, ProtocolSupport},
     swarm::NetworkBehaviour,
@@ -91,8 +91,8 @@ where
     peers: P,
     connector: C,
     requests_rx: mpsc::Receiver<NetworkRequest>,
-    _authority_keypair: Keypair,
-    _keypair: Keypair,
+    _authority_keypair: ed25519::Keypair,
+    _keypair: ed25519::Keypair,
     _role: PhantomData<A>,
 }
 
@@ -105,18 +105,19 @@ where
     pub fn spawn(
         committee: Committee,
         connector: C,
-        authority_keypair: Keypair,
-        keypair: Keypair,
+        authority_keypair: ed25519::Keypair,
+        keypair: ed25519::Keypair,
         peers: P,
         requests_rx: mpsc::Receiver<NetworkRequest>,
         cancellation_token: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
+            let keypair_lib = Keypair::from(keypair.clone());
             let identify_infos = serde_json::to_string(&peers.identify())
                 .expect("serialization error: is it possible ?");
             let mdns = match mdns::tokio::Behaviour::new(
                 mdns::Config::default(),
-                keypair.public().to_peer_id(),
+                keypair_lib.public().to_peer_id(),
             ) {
                 Ok(mdns) => mdns,
                 Err(e) => {
@@ -126,11 +127,11 @@ where
                 }
             };
 
-            let identify_config = identify::Config::new(MAIN_PROTOCOL.into(), keypair.public())
+            let identify_config = identify::Config::new(MAIN_PROTOCOL.into(), keypair_lib.public())
                 .with_agent_version(identify_infos)
                 .with_push_listen_addr_updates(true);
 
-            let swarm = libp2p::SwarmBuilder::with_existing_identity(keypair.clone())
+            let swarm = libp2p::SwarmBuilder::with_existing_identity(keypair_lib.clone())
                 .with_tokio()
                 .with_quic()
                 .with_behaviour(|_| CalfBehavior {

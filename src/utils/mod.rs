@@ -38,3 +38,31 @@ pub fn generate_keypair_and_write_to_file<P: AsRef<Path>>(path: P) -> anyhow::Re
 
     Ok(())
 }
+
+pub struct CircularBuffer<T> {
+    buffer: Vec<Option<T>>,
+    size: usize,
+    filled_index: usize,
+}
+
+impl<T: Clone> CircularBuffer<T> {
+    pub fn new(size: usize) -> Self {
+        Self {
+            buffer: vec![None; size],
+            size,
+            filled_index: 0,
+        }
+    }
+    pub fn push(&mut self, item: T) {
+        if self.filled_index == self.size - 1 {
+            self.buffer.rotate_left(1);
+            self.buffer[self.filled_index] = Some(item);
+        } else {
+            self.buffer[self.filled_index + 1] = Some(item);
+            self.filled_index += 1;
+        }
+    }
+    pub fn drain(&mut self) -> Vec<T> {
+        self.buffer.drain(..).flatten().collect()
+    }
+}

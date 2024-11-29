@@ -6,10 +6,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    db::{self, Db},
-    types::{CircularBuffer, Digest},
-};
+use crate::{db::Db, types::Digest, utils::CircularBuffer};
 
 pub(crate) struct DigestReceiver {
     pub digest_rx: broadcast::Receiver<Digest>,

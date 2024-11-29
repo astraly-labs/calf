@@ -13,8 +13,6 @@ use libp2p::{
 use serde::{Deserialize, Serialize};
 use signing::{Sign, Signable, Signature, SignedType};
 
-use crate::utils;
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Transaction {
     pub data: Vec<u8>,
@@ -141,20 +139,6 @@ pub type SignedBlockHeader = SignedType<BlockHeader>;
 
 pub type Dag = HashMap<Round, (PeerId, Certificate)>;
 
-pub trait Hash {
-    fn digest(&self) -> anyhow::Result<Digest>;
-}
-
-impl<T> Hash for T
-where
-    T: Serialize,
-{
-    fn digest(&self) -> anyhow::Result<Digest> {
-        let ser = bincode::serialize(&self)?;
-        Ok(*blake3::hash(&ser).as_bytes())
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum IdentifyInfo {
     Worker(WorkerId),
@@ -174,30 +158,16 @@ pub struct PrimaryInfo {
     pub authority_pubkey: String,
 }
 
-pub struct CircularBuffer<T> {
-    buffer: Vec<Option<T>>,
-    size: usize,
-    filled_index: usize,
+pub trait Hash {
+    fn digest(&self) -> anyhow::Result<Digest>;
 }
 
-impl<T: Clone> CircularBuffer<T> {
-    pub fn new(size: usize) -> Self {
-        Self {
-            buffer: vec![None; size],
-            size,
-            filled_index: 0,
-        }
-    }
-    pub fn push(&mut self, item: T) {
-        if self.filled_index == self.size - 1 {
-            self.buffer.rotate_left(1);
-            self.buffer[self.filled_index] = Some(item);
-        } else {
-            self.buffer[self.filled_index + 1] = Some(item);
-            self.filled_index += 1;
-        }
-    }
-    pub fn drain(&mut self) -> Vec<T> {
-        self.buffer.drain(..).flatten().collect()
+impl<T> Hash for T
+where
+    T: Serialize,
+{
+    fn digest(&self) -> anyhow::Result<Digest> {
+        let ser = bincode::serialize(&self)?;
+        Ok(*blake3::hash(&ser).as_bytes())
     }
 }
