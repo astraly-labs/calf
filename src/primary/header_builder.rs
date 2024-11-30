@@ -29,8 +29,10 @@ pub(crate) struct HeaderBuilder {
 
 impl HeaderBuilder {
     pub async fn run(mut self) -> anyhow::Result<()> {
+        let mut cancellation_token = CancellationToken::new();
         loop {
             let _trigger = self.header_trigger_rx.changed().await?;
+            cancellation_token.cancel();
             let (round, certificates) = self.header_trigger_rx.borrow().clone();
             let digests = self.digests_buffer.lock().await.drain();
             tracing::info!("🔨 Building Header for round {}", round);
@@ -40,28 +42,44 @@ impl HeaderBuilder {
                 certificates,
                 round,
             );
-            tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()?));
             self.network_tx
                 .send(NetworkRequest::Broadcast(RequestPayload::Header(
                     header.clone(),
                 )))
                 .await?;
-            // timeout ?
-            let votes = wait_for_quorum(
-                &header,
-                self.committee.quorum_threshold() as usize,
-                &mut self.votes_rx,
-            )
-            .await?;
-            let certificate =
-                Certificate::new(round, self.keypair.public().to_bytes(), votes, header);
-            self.certificate_tx.send(certificate.clone()).await?;
-            tracing::info!("🤖 Broadcasting Certificate...");
-            self.network_tx
-                .send(NetworkRequest::Broadcast(RequestPayload::Certificate(
-                    certificate,
-                )))
-                .await?;
+            tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()?));
+            cancellation_token = CancellationToken::new();
+
+            // wait for quorum, build certificate, broadcast certificate. If the quorum is not reached before th enext round, the process will be cancelled
+            {
+                let network_tx = self.network_tx.clone();
+                let certificate_tx = self.certificate_tx.clone();
+                let mut votes_rx = self.votes_rx.resubscribe();
+                let quorum_threshold = self.committee.quorum_threshold();
+                let keypair = self.keypair.clone();
+                let token = cancellation_token.clone();
+
+                tokio::spawn(async move {
+                    let _ = token
+                        .run_until_cancelled(tokio::spawn(async move {
+                            let votes =
+                                wait_for_quorum(&header, quorum_threshold as usize, &mut votes_rx)
+                                    .await
+                                    .unwrap();
+                            let certificate =
+                                Certificate::new(round, keypair.public().to_bytes(), votes, header);
+                            certificate_tx.send(certificate.clone()).await.unwrap();
+                            tracing::info!("🤖 Broadcasting Certificate...");
+                            network_tx
+                                .send(NetworkRequest::Broadcast(RequestPayload::Certificate(
+                                    certificate,
+                                )))
+                                .await
+                                .unwrap();
+                        }))
+                        .await;
+                });
+            }
         }
     }
 }
