@@ -4,10 +4,6 @@ pub mod certificate;
 pub mod dag;
 pub mod signing;
 
-use std::{
-    collections::{HashMap, HashSet},
-    time::{SystemTime, UNIX_EPOCH},
-};
 
 use block_header::BlockHeader;
 use certificate::Certificate;
@@ -16,7 +12,7 @@ use libp2p::{
     PeerId,
 };
 use serde::{Deserialize, Serialize};
-use signing::{Sign, Signable, Signature, SignedType};
+use signing::{Sign, Signature, SignedType};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Transaction {

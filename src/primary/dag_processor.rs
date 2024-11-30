@@ -11,7 +11,7 @@ pub(crate) struct DagProcessor {
 }
 
 impl DagProcessor {
-    pub async fn run(mut self) -> Result<(), anyhow::Error> {
+    pub async fn run(self) -> Result<(), anyhow::Error> {
         todo!()
     }
 }
