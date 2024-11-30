@@ -1,6 +1,6 @@
 use proc_macros::Spawn;
 use std::time::Duration;
-use tokio::{sync::mpsc::Receiver, task::JoinHandle};
+use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::CancellationToken;
 
 use crate::types::{Transaction, TxBatch};
@@ -73,7 +73,7 @@ async fn send_batch(
 mod test {
     use super::*;
     use rstest::*;
-    use tokio::{sync::mpsc, time};
+    use tokio::{sync::mpsc, task::JoinHandle, time};
 
     const MAX_BATCH_SIZE: usize = 1000; // Size in bytes
     const TIMEOUT: u64 = 100; // 100ms

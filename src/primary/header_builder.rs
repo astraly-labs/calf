@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use libp2p::identity::ed25519::Keypair;
 use proc_macros::Spawn;
-use tokio::{
-    sync::{broadcast, mpsc, watch, Mutex},
-    task::JoinHandle,
-};
+use tokio::sync::{broadcast, mpsc, watch, Mutex};
 use tokio_util::sync::CancellationToken;
 
 use crate::{

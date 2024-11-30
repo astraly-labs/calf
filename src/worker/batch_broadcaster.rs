@@ -1,8 +1,5 @@
 use proc_macros::Spawn;
-use tokio::{
-    sync::{broadcast, mpsc},
-    task::JoinHandle,
-};
+use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 
 use crate::types::{NetworkRequest, RequestPayload, TxBatch};

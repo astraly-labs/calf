@@ -2,10 +2,7 @@ use std::{collections::HashSet, sync::Arc};
 
 use libp2p::identity::ed25519::Keypair;
 use proc_macros::Spawn;
-use tokio::{
-    sync::{broadcast, mpsc, watch},
-    task::JoinHandle,
-};
+use tokio::sync::{broadcast, mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
 use crate::{

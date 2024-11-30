@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use proc_macros::Spawn;
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::{

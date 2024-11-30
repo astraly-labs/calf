@@ -1,7 +1,6 @@
 use libp2p::PeerId;
 use proc_macros::Spawn;
 use std::{collections::HashSet, sync::Arc};
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
