@@ -8,7 +8,10 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     db::{self, Db},
     settings::parser::Committee,
-    types::{BlockHeader, Certificate, Digest, NetworkRequest, ReceivedObject, Round, Vote},
+    types::{
+        block_header::BlockHeader, certificate::Certificate, Digest, NetworkRequest,
+        ReceivedObject, Round, Vote,
+    },
 };
 
 #[derive(Spawn)]

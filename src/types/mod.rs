@@ -1,4 +1,6 @@
 pub mod agents;
+pub mod block_header;
+pub mod certificate;
 pub mod dag;
 pub mod signing;
 
@@ -7,7 +9,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use derive_more::derive::Constructor;
+use block_header::BlockHeader;
+use certificate::Certificate;
 use libp2p::{
     identity::ed25519::{self, Keypair},
     PeerId,
@@ -86,62 +89,6 @@ pub type PublicKey = [u8; 32];
 pub type WorkerId = u32;
 pub type Stake = u64;
 pub type Round = u64;
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-pub struct BlockHeader {
-    pub author: PublicKey,
-    pub round: Round,
-    pub timestamp_ms: u128,
-    pub digests: Vec<Digest>,
-    pub certificates: Vec<Certificate>,
-}
-
-impl BlockHeader {
-    pub fn new(
-        author: PublicKey,
-        digests: Vec<Digest>,
-        certificates: Vec<Certificate>,
-        round: Round,
-    ) -> Self {
-        Self {
-            author,
-            round,
-            timestamp_ms: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("critical error: time is broken")
-                .as_millis(),
-            digests,
-            certificates,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Constructor, Hash)]
-pub struct Certificate {
-    round: Round,
-    author: PublicKey,
-    votes: Vec<Vote>,
-    header: BlockHeader,
-}
-
-type CertificateId = Digest;
-
-impl Certificate {
-    //ID = H(author, round)
-    pub fn id(&self) -> CertificateId {
-        let mut data = self.author.to_vec();
-        data.extend_from_slice(&self.round.to_le_bytes());
-        *blake3::hash(&data).as_bytes()
-    }
-    pub fn parents(&self) -> HashSet<&Certificate> {
-        self.header
-            .certificates
-            .iter()
-            .collect::<HashSet<&Certificate>>()
-    }
-}
-
-impl Signable for BlockHeader {}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct Vote {

@@ -1,4 +1,4 @@
-use crate::types::{Certificate, ReceivedObject, Round};
+use crate::types::{certificate::Certificate, ReceivedObject, Round};
 use proc_macros::Spawn;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_util::sync::CancellationToken;

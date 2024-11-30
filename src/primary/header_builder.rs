@@ -9,8 +9,8 @@ use crate::{
     db::Db,
     settings::parser::Committee,
     types::{
-        BlockHeader, Certificate, Digest, Hash, NetworkRequest, ReceivedObject, RequestPayload,
-        Round, Vote,
+        block_header::BlockHeader, certificate::Certificate, Digest, Hash, NetworkRequest,
+        ReceivedObject, RequestPayload, Round, Vote,
     },
     utils::CircularBuffer,
 };

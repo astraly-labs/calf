@@ -23,7 +23,8 @@ use crate::{
     settings::parser::{Committee, FileLoader as _},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
-        Certificate, Digest, Round,
+        certificate::Certificate,
+        Digest, Round,
     },
     utils::{self, CircularBuffer},
     CHANNEL_SIZE,

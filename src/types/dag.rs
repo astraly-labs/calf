@@ -1,18 +1,19 @@
 use derive_more::derive::Constructor;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use super::{Certificate, CertificateId, Digest, PublicKey};
+use super::certificate::{Certificate, CertificateId};
 
+#[derive(Constructor, Serialize, Deserialize, Debug)]
+pub struct Dag(HashMap<CertificateId, Vertex>);
+
+#[derive(Serialize, Deserialize, Debug)]
 struct Vertex {
     certificate: Certificate,
     parents: HashSet<CertificateId>,
 }
 
-#[derive(Default, Constructor)]
-pub struct Dag(HashMap<CertificateId, Vertex>);
-
 impl Dag {
-    // TODO: Fully verify certificate before inserting it
     pub fn insert_certificate(&mut self, certificate: Certificate) -> Result<(), DagError> {
         let certificate_id = certificate.id();
         let parents_ids = certificate

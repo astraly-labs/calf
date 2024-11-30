@@ -1,7 +1,8 @@
 use crate::{
     settings::parser::Committee,
     types::{
-        BlockHeader, Certificate, Digest, NetworkRequest, ReceivedObject, RequestPayload, Vote,
+        block_header::BlockHeader, certificate::Certificate, Digest, NetworkRequest,
+        ReceivedObject, RequestPayload, Vote,
     },
 };
 use async_trait::async_trait;
