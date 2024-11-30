@@ -52,7 +52,8 @@ impl HeaderBuilder {
                 &mut self.votes_rx,
             )
             .await?;
-            let certificate = Certificate::new(votes, header, self.keypair.public().to_bytes());
+            let certificate =
+                Certificate::new(round, self.keypair.public().to_bytes(), votes, header);
             self.certificate_tx.send(certificate.clone()).await?;
             tracing::info!("🤖 Broadcasting Certificate...");
             self.network_tx
