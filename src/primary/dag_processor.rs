@@ -22,7 +22,8 @@ impl DagProcessor {
         let genesis = Certificate::genesis();
         let mut dag = Dag::new(genesis.clone())?;
         let mut round = 1;
-        tokio::time::sleep(Duration::from_secs(20)).await;
+        // sleep for 10 seconds to allow the network to start and find enough peers: only for testing, waiting for the synchroniser to be implemented
+        tokio::time::sleep(Duration::from_secs(10)).await;
         self.rounds_tx.send((1, vec![Certificate::genesis()]))?;
         loop {
             tokio::select! {
