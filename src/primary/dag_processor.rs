@@ -53,6 +53,7 @@ impl DagProcessor {
                     && certificate.parents().contains(&my_previous_certificate)
             });
 
+            // advance a round to r + 1 when we can make 2f + 1 connections between our certificates from r - 1 round and the certificates from r round
             if connections >= self.committee.quorum_threshold() as usize {
                 self.rounds_tx.send((
                     round + 1,
