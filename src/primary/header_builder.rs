@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use libp2p::identity::ed25519::Keypair;
 use proc_macros::Spawn;
@@ -21,7 +21,7 @@ pub(crate) struct HeaderBuilder {
     certificate_tx: mpsc::Sender<Certificate>,
     keypair: Keypair,
     _db: Arc<Db>,
-    header_trigger_rx: watch::Receiver<(Round, Vec<Certificate>)>,
+    header_trigger_rx: watch::Receiver<(Round, HashSet<Certificate>)>,
     votes_rx: broadcast::Receiver<ReceivedObject<Vote>>,
     digests_buffer: Arc<Mutex<CircularBuffer<Digest>>>,
     committee: Committee,
@@ -39,7 +39,7 @@ impl HeaderBuilder {
             let header = BlockHeader::new(
                 self.keypair.public().to_bytes(),
                 digests,
-                certificates,
+                certificates.into_iter().collect(),
                 round,
             );
             self.network_tx
@@ -66,8 +66,12 @@ impl HeaderBuilder {
                                 wait_for_quorum(&header, quorum_threshold as usize, &mut votes_rx)
                                     .await
                                     .unwrap();
-                            let certificate =
-                                Certificate::new(round, keypair.public().to_bytes(), votes, header);
+                            let certificate = Certificate::derived(
+                                round,
+                                keypair.public().to_bytes(),
+                                votes,
+                                header,
+                            );
                             certificate_tx.send(certificate.clone()).await.unwrap();
                             tracing::info!("🤖 Broadcasting Certificate...");
                             network_tx

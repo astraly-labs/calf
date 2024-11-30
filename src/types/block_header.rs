@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashSet,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -31,8 +34,26 @@ impl BlockHeader {
             certificates,
         }
     }
-    pub fn genesis() -> Self {
-        Self::new([0; 32], vec![], vec![], 0)
+    //TODO: fully verify the header
+    pub fn verify_parents(
+        &self,
+        potential_parents: HashSet<Certificate>,
+        quorum_threshold: u32,
+    ) -> bool {
+        if self.round == 1 {
+            match self.certificates.first() {
+                Some(Certificate::Genesis(_)) => true,
+                _ => false,
+            }
+        } else {
+            //TODO: remove the cloned
+            let parents = self
+                .certificates
+                .iter()
+                .cloned()
+                .collect::<HashSet<Certificate>>();
+            parents.intersection(&potential_parents).count() >= quorum_threshold as usize
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use crate::{
     settings::parser::Committee,
@@ -12,19 +12,20 @@ use tokio_util::sync::CancellationToken;
 pub(crate) struct DagProcessor {
     peers_certificates_rx: broadcast::Receiver<ReceivedObject<Certificate>>,
     certificates_rx: mpsc::Receiver<Certificate>,
-    rounds_tx: watch::Sender<(Round, Vec<Certificate>)>,
+    rounds_tx: watch::Sender<(Round, HashSet<Certificate>)>,
     committee: Committee,
 }
 
 impl DagProcessor {
     /// TODO: test, verify cerificates
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
-        let genesis = Certificate::genesis();
+        let genesis = Certificate::genesis([0; 32]);
         let mut dag = Dag::new(genesis.clone())?;
         let mut round = 1;
         // sleep for 10 seconds to allow the network to start and find enough peers: only for testing, waiting for the synchroniser to be implemented
         tokio::time::sleep(Duration::from_secs(10)).await;
-        self.rounds_tx.send((1, vec![Certificate::genesis()]))?;
+        self.rounds_tx
+            .send((1, HashSet::from_iter([genesis].into_iter())))?;
         loop {
             tokio::select! {
                 Some(certificate) = self.certificates_rx.recv() => {
@@ -50,21 +51,10 @@ impl DagProcessor {
                 }
                 else => break,
             }
-            let previous_round_certificates =
-                dag.count_all(|certificate| certificate.round == round);
-            if previous_round_certificates >= self.committee.quorum_threshold() as usize {
-                tracing::info!(
-                    "⚡ quorum reached for current round, advancing to round {}",
-                    round + 1
-                );
-                self.rounds_tx.send((
-                    round + 1,
-                    dag.get_all(|certificate| certificate.round == round)
-                        .into_iter()
-                        .cloned()
-                        .collect(),
-                ))?;
+            if dag.round_certificates_number(round) >= self.committee.quorum_threshold() as usize {
+                let certificates = dag.round_certificates(round);
                 round += 1;
+                self.rounds_tx.send((round, certificates))?;
             }
         }
         Ok(())

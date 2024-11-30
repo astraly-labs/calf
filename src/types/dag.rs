@@ -2,7 +2,10 @@ use derive_more::derive::Constructor;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use super::certificate::{Certificate, CertificateId};
+use super::{
+    certificate::{Certificate, CertificateId},
+    Round,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Dag(HashMap<CertificateId, Vertex>);
@@ -81,6 +84,21 @@ impl Dag {
             .values()
             .filter(|vertex| vertex.parents.contains(&certificate.id()))
             .count()
+    }
+    pub fn round_certificates_number(&self, round: Round) -> usize {
+        self.count_all(|certificate| match certificate {
+            Certificate::Derived(derived) => derived.round == round,
+            Certificate::Genesis(_) => round == 0,
+        })
+    }
+    pub fn round_certificates(&self, round: Round) -> HashSet<Certificate> {
+        self.get_all(|certificate| match certificate {
+            Certificate::Derived(derived) => derived.round == round,
+            Certificate::Genesis(_) => round == 0,
+        })
+        .into_iter()
+        .cloned()
+        .collect()
     }
 }
 

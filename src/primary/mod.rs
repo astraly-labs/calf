@@ -10,7 +10,11 @@ use digests_receiver::DigestReceiver;
 use header_builder::HeaderBuilder;
 use header_elector::HeaderElector;
 use libp2p::identity::ed25519;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+};
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio_util::sync::CancellationToken;
 
@@ -106,7 +110,8 @@ impl BaseAgent for Primary {
 
     async fn run(mut self) {
         let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
-        let (round_tx, round_rx) = watch::channel::<(Round, Vec<Certificate>)>((0, vec![]));
+        let (round_tx, round_rx) =
+            watch::channel::<(Round, HashSet<Certificate>)>((0, HashSet::new()));
         let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx) =
             PrimaryConnector::new(CHANNEL_SIZE);
         let (certificates_tx, certificates_rx) = mpsc::channel(CHANNEL_SIZE);

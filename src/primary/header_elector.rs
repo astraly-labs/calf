@@ -18,7 +18,7 @@ use crate::{
 pub(crate) struct HeaderElector {
     network_tx: mpsc::Sender<NetworkRequest>,
     headers_rx: broadcast::Receiver<ReceivedObject<BlockHeader>>,
-    round_rx: watch::Receiver<(Round, Vec<Certificate>)>,
+    round_rx: watch::Receiver<(Round, HashSet<Certificate>)>,
     validator_keypair: Keypair,
     db: Arc<Db>,
     committee: Committee,
@@ -48,11 +48,9 @@ impl HeaderElector {
                         .get(db::Column::Digests, &hex::encode(digest))
                         .is_ok_and(|d: Option<Digest>| d.is_some())
                 }) || header.object.digests.is_empty())
-                && verify_certificates(
-                    &header.object.certificates,
-                    &certificates,
-                    self.committee.quorum_threshold(),
-                )
+                && header
+                    .object
+                    .verify_parents(certificates, self.committee.quorum_threshold())
             {
                 // Send back a vote to the header author
                 self.network_tx
@@ -66,26 +64,8 @@ impl HeaderElector {
                     .await?;
                 tracing::info!("✨ header accepted, vote sent");
             } else {
-                tracing::warn!("❌ header rejected");
+                tracing::info!("❌ header rejected");
             }
         }
     }
-}
-
-// check if all certifcates are available in the DAG (previous round) and if the quorum threshold is met
-fn verify_certificates(
-    certificates: &Vec<Certificate>,
-    previous_round_certificates: &Vec<Certificate>,
-    quorum_threshold: u32,
-) -> bool {
-    certificates
-        .iter()
-        .filter(|cert| previous_round_certificates.contains(cert))
-        .collect::<HashSet<_>>()
-        .len()
-        >= quorum_threshold as usize
-        || certificates
-            .get(1)
-            .map(|elm| elm.round == 1)
-            .unwrap_or(false)
 }
