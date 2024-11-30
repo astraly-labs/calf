@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{
     settings::parser::Committee,
     types::{certificate::Certificate, dag::Dag, ReceivedObject, Round},
@@ -19,14 +21,12 @@ impl DagProcessor {
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let genesis = Certificate::genesis();
         let mut dag = Dag::new(genesis.clone())?;
-        let mut my_previous_certificate = genesis.clone();
-        let mut my_current_certificate = genesis;
         let mut round = 1;
+        tokio::time::sleep(Duration::from_secs(20)).await;
         self.rounds_tx.send((1, vec![Certificate::genesis()]))?;
         loop {
             tokio::select! {
                 Some(certificate) = self.certificates_rx.recv() => {
-                    my_current_certificate = certificate.clone();
                     match dag.insert_certificate(certificate) {
                         Ok(()) => {
                             tracing::info!("💾 current header certificate inserted in the DAG");
@@ -37,6 +37,7 @@ impl DagProcessor {
                     }
                 }
                 Ok(certificate) = self.peers_certificates_rx.recv() => {
+                    tracing::info!("📡 received new certificate from {}", certificate.sender);
                     match dag.insert_certificate(certificate.object) {
                         Ok(()) => {
                             tracing::info!("💾 certificate from {} inserted in the DAG", certificate.sender);
@@ -48,15 +49,11 @@ impl DagProcessor {
                 }
                 else => break,
             }
-            let connections = dag.count_all(|certificate| {
-                certificate.round == my_previous_certificate.round + 1
-                    && certificate.parents().contains(&my_previous_certificate)
-            });
-
-            // advance a round to r + 1 when we can make 2f + 1 connections between our certificates from r - 1 round and the certificates from r round
-            if connections >= self.committee.quorum_threshold() as usize {
+            let previous_round_certificates =
+                dag.count_all(|certificate| certificate.round == round);
+            if previous_round_certificates >= self.committee.quorum_threshold() as usize {
                 tracing::info!(
-                    "⚡ quorum reached for the previous certificate, advancing to round {}",
+                    "⚡ quorum reached for current round, advancing to round {}",
                     round + 1
                 );
                 self.rounds_tx.send((
@@ -67,7 +64,6 @@ impl DagProcessor {
                         .collect(),
                 ))?;
                 round += 1;
-                my_previous_certificate = my_current_certificate.clone();
             }
         }
         Ok(())

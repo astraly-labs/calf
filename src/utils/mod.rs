@@ -47,6 +47,7 @@ pub struct CircularBuffer<T> {
 
 impl<T: Clone> CircularBuffer<T> {
     pub fn new(size: usize) -> Self {
+        let test: Vec<Option<()>> = vec![None; size];
         Self {
             buffer: vec![None; size],
             size,
@@ -63,6 +64,8 @@ impl<T: Clone> CircularBuffer<T> {
         }
     }
     pub fn drain(&mut self) -> Vec<T> {
-        self.buffer.drain(..).flatten().collect()
+        let data = self.buffer.drain(..).flatten().collect();
+        self.buffer = vec![None; self.size];
+        data
     }
 }

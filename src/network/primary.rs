@@ -73,6 +73,10 @@ impl Connect for PrimaryConnector {
             RequestPayload::Vote(vote) => {
                 self.vote_tx.send(ReceivedObject::new(vote, sender))?;
             }
+            RequestPayload::Certificate(certificate) => {
+                self.certificates_tx
+                    .send(ReceivedObject::new(certificate, sender))?;
+            }
             _ => {}
         }
         Ok(())

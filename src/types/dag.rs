@@ -76,6 +76,12 @@ impl Dag {
             .filter(|vertex| predicate(&vertex.certificate))
             .count()
     }
+    pub fn children_number(&self, certificate: &Certificate) -> usize {
+        self.0
+            .values()
+            .filter(|vertex| vertex.parents.contains(&certificate.id()))
+            .count()
+    }
 }
 
 #[derive(thiserror::Error, Debug)]

@@ -43,11 +43,11 @@ impl HeaderElector {
             // Check if all batch digests are available in the database, all certificates are valid, the header is from the current round and if the header author has not already produced a header for the current round
             if round_authors.insert(header.object.author)
                 && header.object.round == round
-                && header.object.digests.iter().all(|digest| {
+                && (header.object.digests.iter().all(|digest| {
                     self.db
                         .get(db::Column::Digests, &hex::encode(digest))
                         .is_ok_and(|d: Option<Digest>| d.is_some())
-                })
+                }) || header.object.digests.is_empty())
                 && verify_certificates(
                     &header.object.certificates,
                     &certificates,
@@ -65,6 +65,8 @@ impl HeaderElector {
                     ))
                     .await?;
                 tracing::info!("✨ header accepted, vote sent");
+            } else {
+                tracing::warn!("❌ header rejected");
             }
         }
     }
@@ -82,4 +84,8 @@ fn verify_certificates(
         .collect::<HashSet<_>>()
         .len()
         >= quorum_threshold as usize
+        || certificates
+            .get(1)
+            .map(|elm| elm.round == 1)
+            .unwrap_or(false)
 }
