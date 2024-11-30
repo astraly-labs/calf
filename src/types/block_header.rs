@@ -31,6 +31,9 @@ impl BlockHeader {
             certificates,
         }
     }
+    pub fn genesis() -> Self {
+        Self::new(todo!("block header genesis author"), vec![], vec![], 0)
+    }
 }
 
 impl Signable for BlockHeader {}

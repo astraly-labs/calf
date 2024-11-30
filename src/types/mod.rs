@@ -4,7 +4,6 @@ pub mod certificate;
 pub mod dag;
 pub mod signing;
 
-
 use block_header::BlockHeader;
 use certificate::Certificate;
 use libp2p::{

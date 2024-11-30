@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::certificate::{Certificate, CertificateId};
 
-#[derive(Constructor, Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Dag(HashMap<CertificateId, Vertex>);
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -13,7 +13,25 @@ struct Vertex {
     parents: HashSet<CertificateId>,
 }
 
+impl Vertex {
+    pub fn from_certificate(certificate: Certificate) -> Self {
+        Self {
+            parents: certificate
+                .parents()
+                .iter()
+                .map(|parent| parent.id())
+                .collect(),
+            certificate,
+        }
+    }
+}
+
 impl Dag {
+    pub fn new(genesis: Certificate) -> anyhow::Result<Self> {
+        let mut dag = Dag(HashMap::new());
+        dag.insert_certificate(genesis)?;
+        Ok(dag)
+    }
     pub fn insert_certificate(&mut self, certificate: Certificate) -> Result<(), DagError> {
         let certificate_id = certificate.id();
         let parents_ids = certificate

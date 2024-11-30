@@ -28,4 +28,12 @@ impl Certificate {
             .iter()
             .collect::<HashSet<&Certificate>>()
     }
+    pub fn genesis() -> Self {
+        Certificate::new(
+            0,
+            todo!("certificate genesis author"),
+            vec![],
+            BlockHeader::genesis(),
+        )
+    }
 }
