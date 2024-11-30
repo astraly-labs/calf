@@ -1,3 +1,4 @@
+pub mod dag_processor;
 pub mod digests_receiver;
 pub mod header_builder;
 pub mod header_elector;
