@@ -24,7 +24,7 @@ use crate::{
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         certificate::Certificate,
-        Digest, Round,
+        dag, Digest, Round,
     },
     utils::{self, CircularBuffer},
     CHANNEL_SIZE,
@@ -167,11 +167,20 @@ impl BaseAgent for Primary {
             cancellation_token.clone(),
         );
 
+        let dag_processor_handle = dag_processor::DagProcessor::spawn(
+            cancellation_token.clone(),
+            peers_certificates_rx,
+            certificates_rx,
+            round_tx,
+            self.commitee.clone(),
+        );
+
         let res = tokio::try_join!(
             network_handle,
             digests_receiver_handle,
             header_builder_handle,
-            header_elector_handle
+            header_elector_handle,
+            dag_processor_handle,
         );
         match res {
             Ok(_) => tracing::info!("Primary exited successfully"),

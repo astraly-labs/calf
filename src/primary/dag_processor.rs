@@ -29,7 +29,7 @@ impl DagProcessor {
                     my_current_certificate = certificate.clone();
                     match dag.insert_certificate(certificate) {
                         Ok(()) => {
-                            tracing::info!("certificate inserted in the DAG");
+                            tracing::info!("💾 current header certificate inserted in the DAG");
                         },
                         Err(error) => {
                             tracing::warn!("error inserting certificate: {:?}", error);
@@ -39,7 +39,7 @@ impl DagProcessor {
                 Ok(certificate) = self.peers_certificates_rx.recv() => {
                     match dag.insert_certificate(certificate.object) {
                         Ok(()) => {
-                            tracing::info!("certificate from {} inserted in the DAG", certificate.sender);
+                            tracing::info!("💾 certificate from {} inserted in the DAG", certificate.sender);
                         },
                         Err(error) => {
                             tracing::warn!("error inserting certificate from: {}, {:?}", certificate.sender, error);
@@ -55,6 +55,10 @@ impl DagProcessor {
 
             // advance a round to r + 1 when we can make 2f + 1 connections between our certificates from r - 1 round and the certificates from r round
             if connections >= self.committee.quorum_threshold() as usize {
+                tracing::info!(
+                    "⚡ quorum reached for the previous certificate, advancing to round {}",
+                    round + 1
+                );
                 self.rounds_tx.send((
                     round + 1,
                     dag.get_all(|certificate| certificate.round == round)

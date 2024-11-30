@@ -53,20 +53,13 @@ impl QuorumWaiter {
                         elm.digest == waiting_batch.digest
                     }) {
                         batches.push(waiting_batch);
-                        tracing::debug!("Received new batch");
+                        tracing::info!("ℹ️ received a new batch");
                     }
                     let now = tokio::time::Instant::now();
-                    //perfectible ? rayon ? une "liste de timers" ? //TODO: reparer: crash
-                    // for i in 0..batches.len() {
-                    //     tracing::warn!("{i} / {}", batches.len());
-                    //     if now.duration_since(batches[i].timestamp).as_millis() > self.quorum_timeout {
-                    //         tracing::debug!("Batch timed out: {:?}", batches[i].digest);
-                    //         batches.remove(i);
-                    //     }
-                    // }
+                    batches.retain(|batch| now.duration_since(batch.timestamp).as_millis() < self.quorum_timeout);
                 },
                 Some(ack) = self.acknowledgments_rx.recv() => {
-                    tracing::info!("Received acknowledgment: {:?}", ack.acknowledgement);
+                    tracing::info!("✅ received an acknowledgment");
                     let (ack, sender) = (ack.acknowledgement, ack.sender);
                     if let Some(batch_index) = batches.iter().position(|b| b.digest == ack) {
                         let batch = &mut batches[batch_index];
@@ -94,7 +87,7 @@ impl QuorumWaiter {
             &batch.batch,
         ) {
             Ok(_) => {
-                tracing::info!("Batch inserted in DB");
+                tracing::info!("💾 batch inserted in DB");
                 Ok(())
             }
             Err(e) => {

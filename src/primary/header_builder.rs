@@ -33,6 +33,7 @@ impl HeaderBuilder {
             let _trigger = self.header_trigger_rx.changed().await?;
             let (round, certificates) = self.header_trigger_rx.borrow().clone();
             let digests = self.digests_buffer.lock().await.drain();
+            tracing::info!("🔨 Building Header for round {}", round);
             let header = BlockHeader::new(
                 self.keypair.public().to_bytes(),
                 digests,
@@ -70,7 +71,7 @@ pub async fn wait_for_quorum(
     threshold: usize,
     votes_rx: &mut broadcast::Receiver<ReceivedObject<Vote>>,
 ) -> anyhow::Result<Vec<Vote>> {
-    tracing::info!("⏳ Waiting for quorum for header...");
+    tracing::info!("⏳ Waiting quorum for header...");
     let header_hash = waiting_header.digest()?;
     let mut votes = vec![];
     loop {
