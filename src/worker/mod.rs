@@ -142,15 +142,15 @@ impl BaseAgent for Worker {
         let cancellation_token = CancellationToken::new();
 
         let batchmaker_handle = BatchMaker::spawn(
+            cancellation_token.clone(),
             batches_tx,
             transactions_rx,
             TIMEOUT,
             BATCH_SIZE,
-            cancellation_token.clone(),
         );
 
         let batch_broadcaster_handle =
-            BatchBroadcaster::spawn(batches_rx, network_tx.clone(), cancellation_token.clone());
+            BatchBroadcaster::spawn(cancellation_token.clone(), batches_rx, network_tx.clone());
 
         let tx_producer_handle =
             tx_producer_task(transactions_tx.clone(), 10, 1000, self.txs_producer);
@@ -179,20 +179,20 @@ impl BaseAgent for Worker {
         );
 
         let quorum_waiter_handle = QuorumWaiter::spawn(
+            cancellation_token.clone(),
             quorum_waiter_batches_rx,
             acks_rx,
+            QUORUM_TRESHOLD,
             network_tx.clone(),
             Arc::clone(&self.db),
-            QUORUM_TRESHOLD,
             QUORUM_TIMEOUT,
-            cancellation_token.clone(),
         );
 
         let batch_acknowledger_handle = BatchReceiver::spawn(
+            cancellation_token.clone(),
             received_batches_rx,
             network_tx,
             Arc::clone(&self.db),
-            cancellation_token.clone(),
         );
 
         let res = tokio::try_join!(

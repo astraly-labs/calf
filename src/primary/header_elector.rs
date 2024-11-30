@@ -1,6 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use libp2p::identity::ed25519::Keypair;
+use proc_macros::Spawn;
 use tokio::{
     sync::{broadcast, mpsc, watch},
     task::JoinHandle,
@@ -13,6 +14,7 @@ use crate::{
     types::{BlockHeader, Certificate, Digest, NetworkRequest, ReceivedObject, Round, Vote},
 };
 
+#[derive(Spawn)]
 pub(crate) struct HeaderElector {
     network_tx: mpsc::Sender<NetworkRequest>,
     headers_rx: broadcast::Receiver<ReceivedObject<BlockHeader>>,
@@ -23,50 +25,6 @@ pub(crate) struct HeaderElector {
 }
 
 impl HeaderElector {
-    #[must_use]
-    pub fn spawn(
-        cancellation_token: CancellationToken,
-        validator_keypair: Keypair,
-        db: Arc<Db>,
-        headers_rx: broadcast::Receiver<ReceivedObject<BlockHeader>>,
-        network_tx: mpsc::Sender<NetworkRequest>,
-        round_rx: watch::Receiver<(Round, Vec<Certificate>)>,
-        committee: Committee,
-    ) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            let res = cancellation_token
-                .run_until_cancelled(
-                    Self {
-                        network_tx,
-                        validator_keypair,
-                        db,
-                        headers_rx,
-                        round_rx,
-                        committee,
-                    }
-                    .run(),
-                )
-                .await;
-
-            match res {
-                Some(res) => {
-                    match res {
-                        Ok(_) => {
-                            tracing::info!("HeaderElector finnished");
-                        }
-                        Err(e) => {
-                            tracing::error!("HeaderElector finished with Error: {:?}", e);
-                        }
-                    };
-                    cancellation_token.cancel();
-                }
-                None => {
-                    tracing::info!("HeaderElector cancelled");
-                }
-            };
-        })
-    }
-
     pub async fn run(mut self) -> anyhow::Result<()> {
         let mut previous_round = 0;
         // Authorities that have produced header for the current round

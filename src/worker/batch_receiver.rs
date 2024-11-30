@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use proc_macros::Spawn;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
@@ -8,51 +9,14 @@ use crate::{
     types::{Hash, NetworkRequest, ReceivedBatch, RequestPayload},
 };
 
-pub struct BatchReceiver {
+#[derive(Spawn)]
+pub(crate) struct BatchReceiver {
     batches_rx: mpsc::Receiver<ReceivedBatch>,
     requests_tx: mpsc::Sender<NetworkRequest>,
     db: Arc<Db>,
 }
 
 impl BatchReceiver {
-    #[must_use]
-    pub fn spawn(
-        batches_rx: mpsc::Receiver<ReceivedBatch>,
-        requests_tx: mpsc::Sender<NetworkRequest>,
-        db: Arc<Db>,
-        cancellation_token: CancellationToken,
-    ) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            let res = cancellation_token
-                .run_until_cancelled(
-                    Self {
-                        batches_rx,
-                        requests_tx,
-                        db,
-                    }
-                    .run(),
-                )
-                .await;
-
-            match res {
-                Some(res) => {
-                    match res {
-                        Ok(_) => {
-                            tracing::info!("Batch Acknowledger finnished successfully");
-                        }
-                        Err(e) => {
-                            tracing::error!("Batch Acknowledger finished with error: {:?}", e);
-                        }
-                    };
-                    cancellation_token.cancel();
-                }
-                None => {
-                    tracing::info!("Batch Acknowledger cancelled");
-                }
-            }
-        })
-    }
-
     pub async fn run(mut self) -> anyhow::Result<()> {
         while let Some(batch) = self.batches_rx.recv().await {
             tracing::info!("Received batch from {}", batch.sender);
@@ -101,7 +65,7 @@ mod test {
         let (requests_tx, requests_rx) = tokio::sync::mpsc::channel(100);
         let db = Arc::new(crate::db::Db::new(db_path.into()).expect("failed to open db"));
         let token = tokio_util::sync::CancellationToken::new();
-        let handle = BatchReceiver::spawn(batches_rx, requests_tx, db, token.clone());
+        let handle = BatchReceiver::spawn(token.clone(), batches_rx, requests_tx, db);
         (batches_tx, requests_rx, handle, token)
     }
 

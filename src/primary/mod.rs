@@ -127,17 +127,17 @@ impl BaseAgent for Primary {
         );
 
         let digests_receiver_handle = DigestReceiver::spawn(
+            cancellation_token.clone(),
             digests_rx,
             digests_buffer.clone(),
             self.db.clone(),
-            cancellation_token.clone(),
         );
 
         let header_builder_handle = HeaderBuilder::spawn(
-            self.validator_keypair.clone(),
+            cancellation_token.clone(),
             network_tx.clone(),
             certificates_tx,
-            cancellation_token.clone(),
+            self.keypair.clone(),
             self.db.clone(),
             round_rx.clone(),
             vote_rx,
@@ -147,11 +147,11 @@ impl BaseAgent for Primary {
 
         let header_elector_handle = HeaderElector::spawn(
             cancellation_token.clone(),
-            self.validator_keypair,
-            self.db.clone(),
+            network_tx.clone(),
             header_rx,
-            network_tx,
             round_rx.clone(),
+            self.validator_keypair.clone(),
+            self.db.clone(),
             self.commitee.clone(),
         );
 

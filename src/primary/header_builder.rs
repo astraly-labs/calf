@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use libp2p::identity::ed25519::Keypair;
+use proc_macros::Spawn;
 use tokio::{
     sync::{broadcast, mpsc, watch, Mutex},
     task::JoinHandle,
@@ -17,6 +18,7 @@ use crate::{
     utils::CircularBuffer,
 };
 
+#[derive(Spawn)]
 pub(crate) struct HeaderBuilder {
     network_tx: mpsc::Sender<NetworkRequest>,
     certificate_tx: mpsc::Sender<Certificate>,
@@ -29,54 +31,6 @@ pub(crate) struct HeaderBuilder {
 }
 
 impl HeaderBuilder {
-    #[must_use]
-    pub fn spawn(
-        keypair: Keypair,
-        network_tx: mpsc::Sender<NetworkRequest>,
-        certificate_tx: mpsc::Sender<Certificate>,
-        cancellation_token: CancellationToken,
-        _db: Arc<Db>,
-        header_trigger_rx: watch::Receiver<(Round, Vec<Certificate>)>,
-        votes_rx: broadcast::Receiver<ReceivedObject<Vote>>,
-        digests_buffer: Arc<Mutex<CircularBuffer<Digest>>>,
-        committee: Committee,
-    ) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            let res = cancellation_token
-                .run_until_cancelled(
-                    Self {
-                        network_tx,
-                        certificate_tx,
-                        keypair,
-                        _db,
-                        header_trigger_rx,
-                        votes_rx,
-                        digests_buffer,
-                        committee,
-                    }
-                    .run(),
-                )
-                .await;
-
-            match res {
-                Some(res) => {
-                    match res {
-                        Ok(_) => {
-                            tracing::info!("HeaderBuilder finnished");
-                        }
-                        Err(e) => {
-                            tracing::error!("HeaderBuilder finished with Error: {:?}", e);
-                        }
-                    };
-                    cancellation_token.cancel();
-                }
-                None => {
-                    tracing::info!("HeaderBuilder cancelled");
-                }
-            };
-        })
-    }
-
     pub async fn run(mut self) -> anyhow::Result<()> {
         loop {
             let _trigger = self.header_trigger_rx.changed().await?;
