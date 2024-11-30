@@ -32,7 +32,7 @@ impl BlockHeader {
         }
     }
     pub fn genesis() -> Self {
-        Self::new(todo!("block header genesis author"), vec![], vec![], 0)
+        Self::new([0; 32], vec![], vec![], 0)
     }
 }
 

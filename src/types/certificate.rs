@@ -7,10 +7,10 @@ use super::{block_header::BlockHeader, Digest, PublicKey, Round, Vote};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Constructor, Hash)]
 pub struct Certificate {
-    round: Round,
-    author: PublicKey,
-    votes: Vec<Vote>,
-    header: BlockHeader,
+    pub round: Round,
+    pub author: PublicKey,
+    pub votes: Vec<Vote>,
+    pub header: BlockHeader,
 }
 
 pub type CertificateId = Digest;
@@ -29,11 +29,6 @@ impl Certificate {
             .collect::<HashSet<&Certificate>>()
     }
     pub fn genesis() -> Self {
-        Certificate::new(
-            0,
-            todo!("certificate genesis author"),
-            vec![],
-            BlockHeader::genesis(),
-        )
+        Certificate::new(0, [0; 32], vec![], BlockHeader::genesis())
     }
 }

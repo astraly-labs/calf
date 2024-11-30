@@ -61,6 +61,21 @@ impl Dag {
             .map(|_| Err(DagError::CertificateAlreadyExists))
             .unwrap_or(Ok(()))
     }
+    /// Returns references to all certificates that satisfy a given predicate.
+    pub fn get_all(&self, predicate: impl Fn(&Certificate) -> bool) -> HashSet<&Certificate> {
+        self.0
+            .values()
+            .filter(|vertex| predicate(&vertex.certificate))
+            .map(|vertex| &vertex.certificate)
+            .collect()
+    }
+
+    pub fn count_all(&self, predicate: impl Fn(&Certificate) -> bool) -> usize {
+        self.0
+            .values()
+            .filter(|vertex| predicate(&vertex.certificate))
+            .count()
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
