@@ -34,12 +34,6 @@ def get_args():
         default="target/release/calf",
         help="tested executable path"
     )
-    parser.add_argument(
-        "--committee-path",
-        type=str,
-        default="committee.json",
-        help="committee file path"
-    )
 
     return parser.parse_args()
 
@@ -106,6 +100,24 @@ def config():
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
+def generate_authority_info():
+    return {
+        "authority_id": libp2p.peer.id.ID.from_pubkey(libp2p.crypto.ed25519.create_new_key_pair().public_key).to_base58(),
+        "authority_pubkey": "0" * 32,
+        "primary_address": ["0.0.0.0", "0"],
+        "stake": 0,
+        "workers_addresses": [
+            ["0.0.0.0", "0"]
+        ]
+    }
+
+def generate_dummy_committee(num_authorities, path):
+    committee = {
+        "authorities": [generate_authority_info() for _ in range(num_authorities)]
+    }
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(committee, file, indent=4)
+
 if __name__ == '__main__':
     config()
 
@@ -113,9 +125,10 @@ if __name__ == '__main__':
     n_workers = get_args().workers
     test_id = get_args().test_id
     calf = get_args().calf
-    committee_path = get_args().committee_path
+    committee_path = f"committee.json"
     exec_name = os.path.basename(calf)
 
+    generate_dummy_committee(n_validators, committee_path)
     create_env(n_validators, n_workers, test_id, calf, committee_path)
 
     commands = worker_processes_commands(n_validators, n_workers, test_id, exec_name) + primary_processes_commands(n_validators, test_id, exec_name)

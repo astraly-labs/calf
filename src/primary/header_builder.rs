@@ -93,7 +93,7 @@ pub async fn wait_for_quorum(
     threshold: usize,
     votes_rx: &mut broadcast::Receiver<ReceivedObject<Vote>>,
 ) -> anyhow::Result<Vec<Vote>> {
-    tracing::info!("⏳ Waiting quorum for header...");
+    tracing::info!("⏳ Waiting quorum for header... threshold: {}", threshold);
     let header_hash = waiting_header.digest()?;
     let mut votes = vec![];
     loop {

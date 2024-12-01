@@ -55,7 +55,6 @@ python test_launcher.py --validators <number_of_validators> [optional arguments]
 - `--workers`: Number of workers per validator (default: 1)
 - `--test-id`: Test name (default: "test")
 - `--calf`: Path to the executable (default: "target/release/calf")
-- `--committee-path`: Path to committee file (default: "committee.json")
 
 #### File Requirements
 
