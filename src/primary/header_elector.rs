@@ -9,7 +9,7 @@ use crate::{
     db::{self, Db},
     settings::parser::Committee,
     types::{
-        block_header::BlockHeader, certificate::Certificate, Digest, NetworkRequest,
+        block_header::BlockHeader, certificate::Certificate, Digest, NetworkRequest, PublicKey,
         ReceivedObject, Round, Vote,
     },
 };
@@ -28,12 +28,13 @@ impl HeaderElector {
     pub async fn run(mut self) -> anyhow::Result<()> {
         let mut previous_round = 0;
         // Authorities that have produced header for the current round
-        let mut round_authors = HashSet::new();
+        let mut round_authors = HashSet::<PublicKey>::new();
         loop {
             let header = self.headers_rx.recv().await?;
             tracing::info!(
-                "📡 received new block header from {}",
-                hex::encode(header.object.author)
+                "📡 received new block header from {}, round: {}",
+                hex::encode(header.object.author),
+                header.object.round
             );
             let (round, certificates) = self.round_rx.borrow().clone();
             if previous_round != round {
@@ -41,16 +42,12 @@ impl HeaderElector {
                 previous_round = round;
             }
             // Check if all batch digests are available in the database, all certificates are valid, the header is from the current round and if the header author has not already produced a header for the current round
-            if round_authors.insert(header.object.author)
-                && header.object.round == round
-                && (header.object.digests.iter().all(|digest| {
-                    self.db
-                        .get(db::Column::Digests, &hex::encode(digest))
-                        .is_ok_and(|d: Option<Digest>| d.is_some())
-                }) || header.object.digests.is_empty())
+            if header.object.round == round
                 && header
                     .object
                     .verify_parents(certificates, self.committee.quorum_threshold())
+                && header_data_in_storage(&header.object, &self.db)
+                && round_authors.insert(header.object.author)
             {
                 // Send back a vote to the header author
                 self.network_tx
@@ -68,4 +65,11 @@ impl HeaderElector {
             }
         }
     }
+}
+
+fn header_data_in_storage(header: &BlockHeader, db: &Arc<Db>) -> bool {
+    header.digests.iter().all(|digest| {
+        db.get(db::Column::Digests, &hex::encode(digest))
+            .is_ok_and(|d: Option<Digest>| d.is_some())
+    }) || header.digests.is_empty()
 }

@@ -23,7 +23,7 @@ impl DagProcessor {
         let mut dag = Dag::new(genesis.clone())?;
         let mut round = 1;
         // sleep for 10 seconds to allow the network to start and find enough peers: only for testing, waiting for the synchroniser to be implemented
-        tokio::time::sleep(Duration::from_secs(10)).await;
+        tokio::time::sleep(Duration::from_secs(15)).await;
         self.rounds_tx
             .send((1, HashSet::from_iter([genesis].into_iter())))?;
         loop {
