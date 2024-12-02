@@ -8,12 +8,15 @@ use super::{
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Dag(pub HashMap<String, Vertex>);
+pub struct Dag {
+    certificates: HashMap<String, Vertex>,
+    gc_round: Round,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Vertex {
-    pub certificate: Certificate,
-    pub parents: HashSet<String>,
+struct Vertex {
+    certificate: Certificate,
+    parents: HashSet<String>,
 }
 
 impl Vertex {
@@ -31,18 +34,45 @@ impl Vertex {
 
 impl Dag {
     pub fn new(genesis: Certificate) -> anyhow::Result<Self> {
-        let mut dag = Dag(HashMap::new());
+        let mut dag = Dag {
+            certificates: HashMap::new(),
+            gc_round: 0,
+        };
         dag.insert_certificate(genesis)?;
         Ok(dag)
     }
+
+    pub fn update_gc_round(&mut self, new_gc_round: Round) {
+        if new_gc_round > self.gc_round {
+            self.gc_round = new_gc_round;
+            // Remove certificates from rounds before gc_round
+            self.certificates
+                .retain(|_, vertex| match &vertex.certificate {
+                    Certificate::Derived(derived) => derived.round >= self.gc_round,
+                    Certificate::Genesis(_) => true,
+                    Certificate::Dummy => false,
+                });
+            tracing::info!("🗑️ Garbage collected rounds before {}", new_gc_round);
+        }
+    }
+
     pub fn insert_certificate(&mut self, certificate: Certificate) -> Result<(), DagError> {
+        // Check if certificate is from a round that should be garbage collected
+        match &certificate {
+            Certificate::Derived(derived) if derived.round < self.gc_round => {
+                return Err(DagError::InvalidCertificate);
+            }
+            _ => {}
+        }
+
         let certificate_id = hex::encode(certificate.id());
         let parents_ids = certificate
             .parents()
             .iter()
             .map(|parent| hex::encode(parent.id()))
             .collect::<HashSet<String>>();
-        let current_vertices_ids = self.0.keys().collect::<HashSet<&String>>();
+
+        let current_vertices_ids = self.certificates.keys().collect::<HashSet<&String>>();
 
         let missing_parents: HashSet<&String> = parents_ids
             .iter()
@@ -54,19 +84,13 @@ impl Dag {
             ));
         }
 
-        let vertex = Vertex {
-            certificate,
-            parents: parents_ids,
-        };
-
-        self.0
-            .insert(certificate_id, vertex)
-            .map(|_| Err(DagError::CertificateAlreadyExists))
-            .unwrap_or(Ok(()))
+        let vertex = Vertex::from_certificate(certificate);
+        self.certificates.insert(certificate_id, vertex);
+        Ok(())
     }
     /// Returns references to all certificates that satisfy a given predicate.
     pub fn get_all(&self, predicate: impl Fn(&Certificate) -> bool) -> HashSet<&Certificate> {
-        self.0
+        self.certificates
             .values()
             .filter(|vertex| predicate(&vertex.certificate))
             .map(|vertex| &vertex.certificate)
@@ -74,13 +98,13 @@ impl Dag {
     }
 
     pub fn count_all(&self, predicate: impl Fn(&Certificate) -> bool) -> usize {
-        self.0
+        self.certificates
             .values()
             .filter(|vertex| predicate(&vertex.certificate))
             .count()
     }
     pub fn children_number(&self, certificate: &Certificate) -> usize {
-        self.0
+        self.certificates
             .values()
             .filter(|vertex| vertex.parents.contains(&hex::encode(certificate.id())))
             .count()
@@ -103,13 +127,16 @@ impl Dag {
         .collect()
     }
     pub fn simplified(&self) -> Self {
-        let mut simplified = self.0.clone();
-        for key in self.0.keys() {
-            let mut vertex = self.0.get(key).unwrap().clone();
+        let mut simplified = self.certificates.clone();
+        for key in self.certificates.keys() {
+            let mut vertex = self.certificates.get(key).unwrap().clone();
             vertex.certificate = Certificate::Dummy;
             simplified.insert(key.clone(), vertex.clone());
         }
-        Self(simplified)
+        Self {
+            certificates: simplified,
+            gc_round: self.gc_round,
+        }
     }
 }
 
