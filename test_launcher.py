@@ -40,6 +40,11 @@ def get_args():
         default="committee.json",
         help="committee file path"
     )
+    parser.add_argument(
+        "--build",
+        action="store_true",
+        help="Build in release mode before running"
+    )
 
     return parser.parse_args()
 
@@ -112,11 +117,17 @@ def config():
 if __name__ == '__main__':
     config()
 
-    n_validators = get_args().validators
-    n_workers = get_args().workers
-    test_id = get_args().test_id
-    calf = get_args().calf
-    committee_path = get_args().committee_path
+    args = get_args()
+    n_validators = args.validators
+    n_workers = args.workers
+    test_id = args.test_id
+    calf = args.calf
+    committee_path = args.committee_path
+
+    if args.build:
+        logging.info("Building in release mode...")
+        subprocess.run(["cargo", "build", "--release"], check=True)
+
     exec_name = os.path.basename(calf)
 
     create_env(n_validators, n_workers, test_id, calf, committee_path)

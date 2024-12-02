@@ -26,10 +26,6 @@ brew install gmp
 Set up your development environment with these steps:
 
 ```bash
-# Create requirements.txt
-echo "py-libp2p
-argparse" > requirements.txt
-
 # Create and activate venv
 uv venv
 source .venv/bin/activate
