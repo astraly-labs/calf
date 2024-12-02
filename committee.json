@@ -1,7 +1,7 @@
 {
     "authorities": [
         {
-            "authority_id": "12D3KooWPiVpZp2HTVkTFfd2GQ7VasiJNLaBDvAeBj1rwRcY5XoK",
+            "authority_id": "12D3KooWHRt8L6bwXVAeH9dYP1CHcdcZjv1vwErsK7R667i26z99",
             "authority_pubkey": "00000000000000000000000000000000",
             "primary_address": [
                 "0.0.0.0",
@@ -16,7 +16,7 @@
             ]
         },
         {
-            "authority_id": "12D3KooWL8maydAApDbC2VjXNc6ThnE5uRQTRTXEbwQ29Tvpxa2j",
+            "authority_id": "12D3KooWRDgfqsej8CKcX9cxWsAPjZ74J3gSqMQkkPYFeTy7zar3",
             "authority_pubkey": "00000000000000000000000000000000",
             "primary_address": [
                 "0.0.0.0",
@@ -31,7 +31,7 @@
             ]
         },
         {
-            "authority_id": "12D3KooWNEMpo5y7YBoTVtVDmLGgfSi4ybpaVHUE9PM7BFUSWDke",
+            "authority_id": "12D3KooWKpbH5HJCrvuq2Qu1EtgCcmuHEuPfL4NfMBtpVqyevu6R",
             "authority_pubkey": "00000000000000000000000000000000",
             "primary_address": [
                 "0.0.0.0",

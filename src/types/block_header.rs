@@ -40,10 +40,14 @@ impl BlockHeader {
         potential_parents: HashSet<Certificate>,
         quorum_threshold: u32,
     ) -> bool {
+        tracing::info!("verifying parents");
         if self.round == 1 {
             match self.certificates.first() {
                 Some(Certificate::Genesis(_)) => true,
-                _ => false,
+                _ => {
+                    tracing::info!("rejected: Genesis certificate is missing");
+                    false
+                }
             }
         } else {
             //TODO: remove the cloned
@@ -52,7 +56,13 @@ impl BlockHeader {
                 .iter()
                 .cloned()
                 .collect::<HashSet<Certificate>>();
-            parents.intersection(&potential_parents).count() >= quorum_threshold as usize
+            let inter_len = parents.intersection(&potential_parents).count();
+            if inter_len >= quorum_threshold as usize {
+                true
+            } else {
+                tracing::info!("rejected: not enough parents {}", inter_len);
+                false
+            }
         }
     }
 }

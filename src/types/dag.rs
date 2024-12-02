@@ -106,7 +106,7 @@ impl Dag {
 pub enum DagError {
     #[error("Certificate already exists")]
     CertificateAlreadyExists,
-    #[error("Missing parents: {0:?}")]
+    #[error("Missing parents")]
     MissingParents(HashSet<CertificateId>),
     #[error("Invalid certificate")]
     InvalidCertificate,

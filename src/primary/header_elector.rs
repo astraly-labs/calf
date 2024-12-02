@@ -47,7 +47,7 @@ impl HeaderElector {
                     .object
                     .verify_parents(certificates, self.committee.quorum_threshold())
                 && header_data_in_storage(&header.object, &self.db)
-                && round_authors.insert(header.object.author)
+            //&& round_authors.insert(header.object.author) // TODO: if the header produced by a validator is the same as the previous one, it will not be rejected
             {
                 // Send back a vote to the header author
                 self.network_tx

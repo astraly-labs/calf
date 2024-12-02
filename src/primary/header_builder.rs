@@ -1,8 +1,11 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use libp2p::identity::ed25519::Keypair;
 use proc_macros::Spawn;
-use tokio::sync::{broadcast, mpsc, watch, Mutex};
+use tokio::{
+    sync::{broadcast, mpsc, watch, Mutex},
+    time::timeout,
+};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -14,6 +17,8 @@ use crate::{
     },
     utils::CircularBuffer,
 };
+
+const QUORUM_TIMEOUT: u64 = 1000;
 
 #[derive(Spawn)]
 pub(crate) struct HeaderBuilder {
@@ -34,20 +39,15 @@ impl HeaderBuilder {
             let _trigger = self.header_trigger_rx.changed().await?;
             cancellation_token.cancel();
             let (round, certificates) = self.header_trigger_rx.borrow().clone();
-            let digests = self.digests_buffer.lock().await.drain();
             tracing::info!("🔨 Building Header for round {}", round);
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let digests = self.digests_buffer.lock().await.drain();
             let header = BlockHeader::new(
                 self.keypair.public().to_bytes(),
                 digests,
                 certificates.into_iter().collect(),
                 round,
             );
-            self.network_tx
-                .send(NetworkRequest::Broadcast(RequestPayload::Header(
-                    header.clone(),
-                )))
-                .await?;
-            tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()?));
             cancellation_token = CancellationToken::new();
 
             // wait for quorum, build certificate, broadcast certificate. If the quorum is not reached before th enext round, the process will be cancelled
@@ -62,24 +62,43 @@ impl HeaderBuilder {
                 tokio::spawn(async move {
                     let _ = token
                         .run_until_cancelled(tokio::spawn(async move {
-                            let votes =
-                                wait_for_quorum(&header, quorum_threshold as usize, &mut votes_rx)
-                                    .await
-                                    .unwrap();
-                            let certificate = Certificate::derived(
-                                round,
-                                keypair.public().to_bytes(),
-                                votes,
-                                header,
-                            );
-                            certificate_tx.send(certificate.clone()).await.unwrap();
-                            tracing::info!("🤖 Broadcasting Certificate...");
-                            network_tx
-                                .send(NetworkRequest::Broadcast(RequestPayload::Certificate(
-                                    certificate,
-                                )))
-                                .await
-                                .unwrap();
+                            loop {
+                                let _ = broadcast_header(header.clone(), &network_tx).await;
+                                let votes = timeout(
+                                    Duration::from_millis(QUORUM_TIMEOUT),
+                                    wait_for_quorum(
+                                        &header,
+                                        quorum_threshold as usize,
+                                        &mut votes_rx,
+                                    ),
+                                )
+                                .await;
+
+                                match votes {
+                                    Ok(Ok(votes)) => {
+                                        let certificate = Certificate::derived(
+                                            round,
+                                            keypair.public().to_bytes(),
+                                            votes,
+                                            header,
+                                        );
+                                        let _ = broadcast_certificate(
+                                            certificate,
+                                            &network_tx,
+                                            &certificate_tx,
+                                        )
+                                        .await;
+                                        break;
+                                    }
+                                    Ok(Err(e)) => {
+                                        tracing::warn!("Error waiting for quorum: {:?}", e);
+                                        break;
+                                    }
+                                    Err(_) => {
+                                        tracing::warn!("Quorum not reached in time");
+                                    }
+                                }
+                            }
                         }))
                         .await;
                 });
@@ -102,10 +121,38 @@ pub async fn wait_for_quorum(
         if vote.object.verify(&header_hash)? {
             votes.push(vote.object);
         }
-        if votes.len() >= threshold {
+        // we vote for ourself
+        if votes.len() >= threshold - 1 {
             break;
         }
     }
     tracing::info!("✅ Quorum reached for header");
     Ok(votes)
+}
+
+async fn broadcast_certificate(
+    certificate: Certificate,
+    network_tx: &mpsc::Sender<NetworkRequest>,
+    certificate_tx: &mpsc::Sender<Certificate>,
+) -> anyhow::Result<()> {
+    certificate_tx.send(certificate.clone()).await?;
+    network_tx
+        .send(NetworkRequest::Broadcast(RequestPayload::Certificate(
+            certificate,
+        )))
+        .await?;
+
+    tracing::info!("🤖 Broadcasting Certificate...");
+    Ok(())
+}
+
+async fn broadcast_header(
+    header: BlockHeader,
+    network_tx: &mpsc::Sender<NetworkRequest>,
+) -> anyhow::Result<()> {
+    tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()?));
+    network_tx
+        .send(NetworkRequest::Broadcast(RequestPayload::Header(header)))
+        .await?;
+    Ok(())
 }

@@ -42,30 +42,41 @@ pub fn generate_keypair_and_write_to_file<P: AsRef<Path>>(path: P) -> anyhow::Re
 pub struct CircularBuffer<T> {
     buffer: Vec<Option<T>>,
     size: usize,
-    filled_index: usize,
+    head: usize,
+    tail: usize,
+    count: usize,
 }
 
 impl<T: Clone> CircularBuffer<T> {
     pub fn new(size: usize) -> Self {
-        let test: Vec<Option<()>> = vec![None; size];
         Self {
             buffer: vec![None; size],
             size,
-            filled_index: 0,
+            head: 0,
+            tail: 0,
+            count: 0,
         }
     }
+
     pub fn push(&mut self, item: T) {
-        if self.filled_index == self.size - 1 {
-            self.buffer.rotate_left(1);
-            self.buffer[self.filled_index] = Some(item);
+        self.buffer[self.tail] = Some(item);
+        if self.count == self.size {
+            self.head = (self.head + 1) % self.size;
         } else {
-            self.buffer[self.filled_index + 1] = Some(item);
-            self.filled_index += 1;
+            self.count += 1;
         }
+        self.tail = (self.tail + 1) % self.size;
     }
+
     pub fn drain(&mut self) -> Vec<T> {
-        let data = self.buffer.drain(..).flatten().collect();
-        self.buffer = vec![None; self.size];
-        data
+        let mut result = Vec::with_capacity(self.count);
+        while self.count > 0 {
+            if let Some(item) = self.buffer[self.head].take() {
+                result.push(item);
+            }
+            self.head = (self.head + 1) % self.size;
+            self.count -= 1;
+        }
+        result
     }
 }

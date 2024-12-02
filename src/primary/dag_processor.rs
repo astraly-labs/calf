@@ -1,4 +1,4 @@
-use std::{collections::HashSet, time::Duration};
+use std::collections::HashSet;
 
 use crate::{
     settings::parser::Committee,
@@ -17,15 +17,13 @@ pub(crate) struct DagProcessor {
 }
 
 impl DagProcessor {
-    /// TODO: test, verify cerificates
+    /// TODO: verify cerificates, why we stop receiving certificates after round 6 ??? total nonsense, if we go back to 0 when 7 is reached all works fine
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let genesis = Certificate::genesis([0; 32]);
         let mut dag = Dag::new(genesis.clone())?;
         let mut round = 1;
-        // sleep for 10 seconds to allow the network to start and find enough peers: only for testing, waiting for the synchroniser to be implemented
-        tokio::time::sleep(Duration::from_secs(15)).await;
         self.rounds_tx
-            .send((1, HashSet::from_iter([genesis].into_iter())))?;
+            .send((round, HashSet::from_iter([genesis].into_iter())))?;
         loop {
             tokio::select! {
                 Some(certificate) = self.certificates_rx.recv() => {
@@ -34,7 +32,7 @@ impl DagProcessor {
                             tracing::info!("💾 current header certificate inserted in the DAG");
                         },
                         Err(error) => {
-                            tracing::warn!("error inserting certificate: {:?}", error);
+                            tracing::warn!("error inserting certificate: {}", error);
                         }
                     }
                 }
@@ -45,7 +43,7 @@ impl DagProcessor {
                             tracing::info!("💾 certificate from {} inserted in the DAG", certificate.sender);
                         },
                         Err(error) => {
-                            tracing::warn!("error inserting certificate from: {}, {:?}", certificate.sender, error);
+                            tracing::warn!("error inserting certificate from: {}, {}", certificate.sender, error);
                         }
                     }
                 }
@@ -53,6 +51,11 @@ impl DagProcessor {
             }
             if dag.round_certificates_number(round) >= self.committee.quorum_threshold() as usize {
                 let certificates = dag.round_certificates(round);
+                tracing::info!(
+                    "🎉 round {} completed with {} certificates",
+                    round,
+                    certificates.len()
+                );
                 round += 1;
                 self.rounds_tx.send((round, certificates))?;
             }

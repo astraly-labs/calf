@@ -34,7 +34,7 @@ use crate::{
 // ARBITRAIRE !!!
 const QUORUM_TRESHOLD: u32 = 1;
 const TIMEOUT: u64 = 1000;
-const BATCH_SIZE: usize = 10;
+const BATCH_SIZE: usize = 100;
 const QUORUM_TIMEOUT: u128 = 1000;
 
 // Wrapper
@@ -153,7 +153,7 @@ impl BaseAgent for Worker {
             BatchBroadcaster::spawn(cancellation_token.clone(), batches_rx, network_tx.clone());
 
         let tx_producer_handle =
-            tx_producer_task(transactions_tx.clone(), 10, 1000, self.txs_producer);
+            tx_producer_task(transactions_tx.clone(), 100, 100, self.txs_producer);
 
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
@@ -220,7 +220,6 @@ fn tx_producer_task(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         if flag {
-            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
             loop {
                 let tx = Transaction::random(size);
                 txs_tx.send(tx).await.unwrap();
