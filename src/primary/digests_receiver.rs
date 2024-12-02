@@ -21,6 +21,7 @@ impl DigestReceiver {
     pub async fn run(mut self) -> anyhow::Result<()> {
         loop {
             let digest = self.digest_rx.recv().await?;
+            tracing::info!("digest {}: \"I am in the digest receiver\"", hex::encode(&digest.object));
             self.db.insert(
                 db::Column::Digests,
                 &hex::encode(digest.object),

@@ -64,6 +64,7 @@ impl Connect for PrimaryConnector {
     async fn dispatch(&self, payload: RequestPayload, sender: PeerId) -> anyhow::Result<()> {
         match payload {
             RequestPayload::Digest(digest) => {
+                tracing::info!("received digest: {}", hex::encode(digest.clone()));
                 self.digest_tx.send(ReceivedObject::new(digest, sender))?;
             }
             RequestPayload::Header(header) => {
