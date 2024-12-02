@@ -1,10 +1,11 @@
+use proc_macros::Spawn;
 use std::time::Duration;
-use tokio::{sync::mpsc::Receiver, task::JoinHandle};
+use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::CancellationToken;
 
 use crate::types::{Transaction, TxBatch};
 
-#[derive(Debug)]
+#[derive(Spawn)]
 pub(crate) struct BatchMaker {
     batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
     transactions_rx: Receiver<Transaction>,
@@ -13,46 +14,6 @@ pub(crate) struct BatchMaker {
 }
 
 impl BatchMaker {
-    #[must_use]
-    pub fn spawn(
-        batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
-        transactions_rx: Receiver<Transaction>,
-        timeout: u64,
-        max_batch_size: usize,
-        cancellation_token: CancellationToken,
-    ) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            let res = cancellation_token
-                .run_until_cancelled(
-                    Self {
-                        batches_tx,
-                        transactions_rx,
-                        timeout,
-                        max_batch_size,
-                    }
-                    .run(),
-                )
-                .await;
-
-            match res {
-                Some(res) => {
-                    match res {
-                        Ok(_) => {
-                            tracing::info!("Batch Maker finnished");
-                        }
-                        Err(e) => {
-                            tracing::error!("Batch Maker finished with error: {:?}", e);
-                        }
-                    };
-                    cancellation_token.cancel();
-                }
-                None => {
-                    tracing::info!("Batch Maker cancelled");
-                }
-            };
-        })
-    }
-
     pub async fn run(mut self) -> anyhow::Result<()> {
         let mut current_batch: Vec<Transaction> = vec![];
         let mut current_batch_size = 0;
@@ -112,7 +73,7 @@ async fn send_batch(
 mod test {
     use super::*;
     use rstest::*;
-    use tokio::{sync::mpsc, time};
+    use tokio::{sync::mpsc, task::JoinHandle, time};
 
     const MAX_BATCH_SIZE: usize = 1000; // Size in bytes
     const TIMEOUT: u64 = 100; // 100ms
@@ -134,11 +95,11 @@ mod test {
         let (tx, rx) = mpsc::channel(CHANNEL_CAPACITY);
         let (batches_tx, batches_rx) = tokio::sync::broadcast::channel(CHANNEL_CAPACITY);
         let handle = BatchMaker::spawn(
+            CancellationToken::new(),
             batches_tx,
             rx,
             TIMEOUT,
             MAX_BATCH_SIZE,
-            CancellationToken::new(),
         );
 
         (tx, batches_rx, handle)

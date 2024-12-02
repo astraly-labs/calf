@@ -31,5 +31,4 @@ db/*
 .*.json
 key*.json
 *.json
-
-/calf-test-env
+*.gif

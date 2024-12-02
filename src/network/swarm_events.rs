@@ -44,7 +44,7 @@ where
             peer_id,
             info,
         })) => {
-            tracing::debug!("received identify info from {peer_id}");
+            tracing::info!("received identify info from {peer_id}");
             if info.protocol_version != MAIN_PROTOCOL {
                 tracing::info!("{peer_id} doesn't speak our protocol")
             }

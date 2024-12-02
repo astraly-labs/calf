@@ -1,117 +1,108 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use libp2p::identity::ed25519::Keypair;
+use proc_macros::Spawn;
 use tokio::{
     sync::{broadcast, mpsc, watch, Mutex},
-    task::JoinHandle,
+    time::timeout,
 };
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    db::{Db},
+    db::Db,
     settings::parser::Committee,
     types::{
-        BlockHeader, Certificate, Digest, Hash, NetworkRequest,
-        RequestPayload, Round, Vote,
+        block_header::BlockHeader, certificate::Certificate, Digest, Hash, NetworkRequest,
+        ReceivedObject, RequestPayload, Round, Vote,
     },
     utils::CircularBuffer,
 };
 
-const MAX_DIGESTS_IN_HEADER: u64 = 10;
-const HEADER_PRODUCTION_INTERVAL_IN_SECS: u64 = 5;
+const QUORUM_TIMEOUT: u64 = 1000;
 
+#[derive(Spawn)]
 pub(crate) struct HeaderBuilder {
     network_tx: mpsc::Sender<NetworkRequest>,
     certificate_tx: mpsc::Sender<Certificate>,
     keypair: Keypair,
-    db: Arc<Db>,
-    header_trigger_rx: watch::Receiver<(Round, Vec<Certificate>)>,
-    votes_rx: broadcast::Receiver<Vote>,
+    _db: Arc<Db>,
+    header_trigger_rx: watch::Receiver<(Round, HashSet<Certificate>)>,
+    votes_rx: broadcast::Receiver<ReceivedObject<Vote>>,
     digests_buffer: Arc<Mutex<CircularBuffer<Digest>>>,
     committee: Committee,
 }
 
 impl HeaderBuilder {
-    #[must_use]
-    pub fn spawn(
-        keypair: Keypair,
-        network_tx: mpsc::Sender<NetworkRequest>,
-        certificate_tx: mpsc::Sender<Certificate>,
-        cancellation_token: CancellationToken,
-        db: Arc<Db>,
-        header_trigger_rx: watch::Receiver<(Round, Vec<Certificate>)>,
-        votes_rx: broadcast::Receiver<Vote>,
-        digests_buffer: Arc<Mutex<CircularBuffer<Digest>>>,
-        committee: Committee,
-    ) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            let res = cancellation_token
-                .run_until_cancelled(
-                    Self {
-                        network_tx,
-                        certificate_tx,
-                        keypair,
-                        db,
-                        header_trigger_rx,
-                        votes_rx,
-                        digests_buffer,
-                        committee,
-                    }
-                    .run(),
-                )
-                .await;
-
-            match res {
-                Some(res) => {
-                    match res {
-                        Ok(_) => {
-                            tracing::info!("HeaderBuilder finnished");
-                        }
-                        Err(e) => {
-                            tracing::error!("HeaderBuilder finished with Error: {:?}", e);
-                        }
-                    };
-                    cancellation_token.cancel();
-                }
-                None => {
-                    tracing::info!("HeaderBuilder cancelled");
-                }
-            };
-        })
-    }
-
     pub async fn run(mut self) -> anyhow::Result<()> {
+        let mut cancellation_token = CancellationToken::new();
         loop {
             let _trigger = self.header_trigger_rx.changed().await?;
+            cancellation_token.cancel();
             let (round, certificates) = self.header_trigger_rx.borrow().clone();
+            tracing::info!("🔨 Building Header for round {}", round);
+            tokio::time::sleep(Duration::from_secs(1)).await;
             let digests = self.digests_buffer.lock().await.drain();
             let header = BlockHeader::new(
                 self.keypair.public().to_bytes(),
                 digests,
-                certificates,
+                certificates.into_iter().collect(),
                 round,
             );
-            tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()?));
-            self.network_tx
-                .send(NetworkRequest::Broadcast(RequestPayload::Header(
-                    header.clone(),
-                )))
-                .await?;
-            // timeout ?
-            let votes = wait_for_quorum(
-                &header,
-                self.committee.quorum_threshold() as usize,
-                &mut self.votes_rx,
-            )
-            .await?;
-            let certificate = Certificate::new(votes, header, self.keypair.public().to_bytes());
-            self.certificate_tx.send(certificate.clone()).await?;
-            tracing::info!("🤖 Broadcasting Certificate...");
-            self.network_tx
-                .send(NetworkRequest::Broadcast(RequestPayload::Certificate(
-                    certificate,
-                )))
-                .await?;
+            cancellation_token = CancellationToken::new();
+
+            // wait for quorum, build certificate, broadcast certificate. If the quorum is not reached before th enext round, the process will be cancelled
+            {
+                let network_tx = self.network_tx.clone();
+                let certificate_tx = self.certificate_tx.clone();
+                let mut votes_rx = self.votes_rx.resubscribe();
+                let quorum_threshold = self.committee.quorum_threshold();
+                let keypair = self.keypair.clone();
+                let token = cancellation_token.clone();
+
+                tokio::spawn(async move {
+                    let _ = token
+                        .run_until_cancelled(tokio::spawn(async move {
+                            loop {
+                                let _ = broadcast_header(header.clone(), &network_tx).await;
+                                let votes = timeout(
+                                    Duration::from_millis(QUORUM_TIMEOUT),
+                                    wait_for_quorum(
+                                        &header,
+                                        quorum_threshold as usize,
+                                        &mut votes_rx,
+                                    ),
+                                )
+                                .await;
+
+                                match votes {
+                                    Ok(Ok(votes)) => {
+                                        let certificate = Certificate::derived(
+                                            round,
+                                            keypair.public().to_bytes(),
+                                            votes,
+                                            header,
+                                        );
+                                        let _ = broadcast_certificate(
+                                            certificate,
+                                            &network_tx,
+                                            &certificate_tx,
+                                        )
+                                        .await;
+                                        break;
+                                    }
+                                    Ok(Err(e)) => {
+                                        tracing::warn!("Error waiting for quorum: {:?}", e);
+                                        break;
+                                    }
+                                    Err(_) => {
+                                        tracing::warn!("Quorum not reached in time");
+                                    }
+                                }
+                            }
+                        }))
+                        .await;
+                });
+            }
         }
     }
 }
@@ -119,21 +110,49 @@ impl HeaderBuilder {
 pub async fn wait_for_quorum(
     waiting_header: &BlockHeader,
     threshold: usize,
-    votes_rx: &mut broadcast::Receiver<Vote>,
+    votes_rx: &mut broadcast::Receiver<ReceivedObject<Vote>>,
 ) -> anyhow::Result<Vec<Vote>> {
-    tracing::info!("⏳ Waiting for quorum for header...");
+    tracing::info!("⏳ Waiting quorum for header... threshold: {}", threshold);
     let header_hash = waiting_header.digest()?;
     let mut votes = vec![];
     loop {
         let vote = votes_rx.recv().await?;
         // vote: signed hash of the header
-        if vote.verify(&header_hash)? {
-            votes.push(vote);
+        if vote.object.verify(&header_hash)? {
+            votes.push(vote.object);
         }
-        if votes.len() >= threshold {
+        // we vote for ourself
+        if votes.len() >= threshold - 1 {
             break;
         }
     }
     tracing::info!("✅ Quorum reached for header");
     Ok(votes)
+}
+
+async fn broadcast_certificate(
+    certificate: Certificate,
+    network_tx: &mpsc::Sender<NetworkRequest>,
+    certificate_tx: &mpsc::Sender<Certificate>,
+) -> anyhow::Result<()> {
+    certificate_tx.send(certificate.clone()).await?;
+    network_tx
+        .send(NetworkRequest::Broadcast(RequestPayload::Certificate(
+            certificate,
+        )))
+        .await?;
+
+    tracing::info!("🤖 Broadcasting Certificate...");
+    Ok(())
+}
+
+async fn broadcast_header(
+    header: BlockHeader,
+    network_tx: &mpsc::Sender<NetworkRequest>,
+) -> anyhow::Result<()> {
+    tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()?));
+    network_tx
+        .send(NetworkRequest::Broadcast(RequestPayload::Header(header)))
+        .await?;
+    Ok(())
 }

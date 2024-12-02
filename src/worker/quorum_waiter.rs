@@ -1,6 +1,6 @@
 use libp2p::PeerId;
+use proc_macros::Spawn;
 use std::{collections::HashSet, sync::Arc};
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -27,7 +27,8 @@ impl WaitingBatch {
     }
 }
 
-pub struct QuorumWaiter {
+#[derive(Spawn)]
+pub(crate) struct QuorumWaiter {
     batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
     acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
     quorum_threshold: u32,
@@ -37,50 +38,6 @@ pub struct QuorumWaiter {
 }
 
 impl QuorumWaiter {
-    #[must_use]
-    pub fn spawn(
-        batches_rx: tokio::sync::broadcast::Receiver<TxBatch>,
-        acknowledgments_rx: tokio::sync::mpsc::Receiver<ReceivedAcknowledgment>,
-        network_tx: tokio::sync::mpsc::Sender<NetworkRequest>,
-        db: Arc<Db>,
-        quorum_threshold: u32,
-        quorum_timeout: u128,
-        cancellation_token: CancellationToken,
-    ) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            let res = cancellation_token
-                .run_until_cancelled(
-                    Self {
-                        batches_rx,
-                        acknowledgments_rx,
-                        quorum_threshold,
-                        network_tx,
-                        db,
-                        quorum_timeout,
-                    }
-                    .run(),
-                )
-                .await;
-
-            match res {
-                Some(res) => {
-                    match res {
-                        Ok(_) => {
-                            tracing::info!("Quorum Waiter finnished successfully");
-                        }
-                        Err(e) => {
-                            tracing::error!("Quorum Waiter finished with error: {:?}", e);
-                        }
-                    };
-                    cancellation_token.cancel();
-                }
-                None => {
-                    tracing::info!("Quorum Waiter cancelled");
-                }
-            }
-        })
-    }
-
     pub async fn run(mut self) -> anyhow::Result<()> {
         let mut batches = vec![];
         loop {
@@ -96,20 +53,13 @@ impl QuorumWaiter {
                         elm.digest == waiting_batch.digest
                     }) {
                         batches.push(waiting_batch);
-                        tracing::debug!("Received new batch");
+                        tracing::info!("ℹ️ received a new batch");
                     }
                     let now = tokio::time::Instant::now();
-                    //perfectible ? rayon ? une "liste de timers" ? //TODO: reparer: crash
-                    // for i in 0..batches.len() {
-                    //     tracing::warn!("{i} / {}", batches.len());
-                    //     if now.duration_since(batches[i].timestamp).as_millis() > self.quorum_timeout {
-                    //         tracing::debug!("Batch timed out: {:?}", batches[i].digest);
-                    //         batches.remove(i);
-                    //     }
-                    // }
+                    batches.retain(|batch| now.duration_since(batch.timestamp).as_millis() < self.quorum_timeout);
                 },
                 Some(ack) = self.acknowledgments_rx.recv() => {
-                    tracing::info!("Received acknowledgment: {:?}", ack.acknowledgement);
+                    tracing::info!("✅ received an acknowledgment");
                     let (ack, sender) = (ack.acknowledgement, ack.sender);
                     if let Some(batch_index) = batches.iter().position(|b| b.digest == ack) {
                         let batch = &mut batches[batch_index];
@@ -137,7 +87,7 @@ impl QuorumWaiter {
             &batch.batch,
         ) {
             Ok(_) => {
-                tracing::info!("Batch inserted in DB");
+                tracing::info!("💾 batch inserted in DB");
                 Ok(())
             }
             Err(e) => {
@@ -185,13 +135,13 @@ mod test {
         let db_waiter = Arc::new(db);
         let db_test = db_waiter.clone();
         let handle = QuorumWaiter::spawn(
+            cancellation_token_clone,
             batches_rx,
             acknowledgments_rx,
+            quorum_threshold,
             network_tx,
             db_waiter,
-            quorum_threshold,
             quorum_timeout,
-            cancellation_token_clone,
         );
         (
             batches_tx,

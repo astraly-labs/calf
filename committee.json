@@ -1,19 +1,49 @@
 {
-  "authorities": [
-    {
-      "authority_id": "1Aeuyf3MgvL1chKrB84rrggEvUuubt4jegdygD6gEtKxMG",
-      "authority_pubkey": "0xPubkey",
-      "primary_address": [
-        "0.0.0.0",
-        "1010"
-      ],
-      "stake": 9,
-      "workers_addresses": [
-        [
-          "1.1.1.1",
-          "1010"
-        ]
-      ]
-    }
-  ]
+    "authorities": [
+        {
+            "authority_id": "12D3KooWHRt8L6bwXVAeH9dYP1CHcdcZjv1vwErsK7R667i26z99",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWRDgfqsej8CKcX9cxWsAPjZ74J3gSqMQkkPYFeTy7zar3",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWKpbH5HJCrvuq2Qu1EtgCcmuHEuPfL4NfMBtpVqyevu6R",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        }
+    ]
 }

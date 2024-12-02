@@ -1,13 +1,20 @@
+pub mod dag_processor;
 pub mod digests_receiver;
 pub mod header_builder;
+pub mod header_elector;
 
 use anyhow::Context;
 use clap::{command, Parser};
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use digests_receiver::DigestReceiver;
 use header_builder::HeaderBuilder;
+use header_elector::HeaderElector;
 use libp2p::identity::ed25519;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+};
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio_util::sync::CancellationToken;
 
@@ -20,14 +27,14 @@ use crate::{
     settings::parser::{Committee, FileLoader as _},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
-        Certificate, Digest, Round,
+        certificate::Certificate,
+        dag, Digest, Round,
     },
     utils::{self, CircularBuffer},
     CHANNEL_SIZE,
 };
 
 const MAX_DIGESTS_IN_HEADER: usize = 10;
-const HEADER_PRODUCTION_INTERVAL_IN_SECS: u64 = 5;
 
 /// CLI arguments for Primary
 #[derive(Parser, Debug)]
@@ -103,7 +110,8 @@ impl BaseAgent for Primary {
 
     async fn run(mut self) {
         let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
-        let (round_tx, round_rx) = watch::channel::<(Round, Vec<Certificate>)>((0, vec![]));
+        let (round_tx, round_rx) =
+            watch::channel::<(Round, HashSet<Certificate>)>((0, HashSet::new()));
         let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx) =
             PrimaryConnector::new(CHANNEL_SIZE);
         let (certificates_tx, certificates_rx) = mpsc::channel(CHANNEL_SIZE);
@@ -126,21 +134,31 @@ impl BaseAgent for Primary {
         );
 
         let digests_receiver_handle = DigestReceiver::spawn(
+            cancellation_token.clone(),
             digests_rx,
             digests_buffer.clone(),
             self.db.clone(),
-            cancellation_token.clone(),
         );
 
         let header_builder_handle = HeaderBuilder::spawn(
-            self.validator_keypair.clone(),
+            cancellation_token.clone(),
             network_tx.clone(),
             certificates_tx,
-            cancellation_token.clone(),
+            self.keypair.clone(),
             self.db.clone(),
-            round_rx,
+            round_rx.clone(),
             vote_rx,
             digests_buffer.clone(),
+            self.commitee.clone(),
+        );
+
+        let header_elector_handle = HeaderElector::spawn(
+            cancellation_token.clone(),
+            network_tx.clone(),
+            header_rx,
+            round_rx.clone(),
+            self.validator_keypair.clone(),
+            self.db.clone(),
             self.commitee.clone(),
         );
 
@@ -154,7 +172,21 @@ impl BaseAgent for Primary {
             cancellation_token.clone(),
         );
 
-        let res = tokio::try_join!(network_handle, digests_receiver_handle,);
+        let dag_processor_handle = dag_processor::DagProcessor::spawn(
+            cancellation_token.clone(),
+            peers_certificates_rx,
+            certificates_rx,
+            round_tx,
+            self.commitee.clone(),
+        );
+
+        let res = tokio::try_join!(
+            network_handle,
+            digests_receiver_handle,
+            header_builder_handle,
+            header_elector_handle,
+            dag_processor_handle,
+        );
         match res {
             Ok(_) => tracing::info!("Primary exited successfully"),
             Err(e) => tracing::error!("Primary exited with error: {:?}", e),

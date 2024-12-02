@@ -86,7 +86,7 @@ where
     P: ManagePeers + Send,
     A: HandleEvent<P, C>,
 {
-    committee: Committee,
+    _committee: Committee,
     swarm: libp2p::Swarm<CalfBehavior>,
     peers: P,
     connector: C,
@@ -103,7 +103,7 @@ where
     A: HandleEvent<P, C> + Send,
 {
     pub fn spawn(
-        committee: Committee,
+        _committee: Committee,
         connector: C,
         authority_keypair: ed25519::Keypair,
         keypair: ed25519::Keypair,
@@ -154,7 +154,7 @@ where
                 .build();
 
             let mut this = Self {
-                committee,
+                _committee,
                 swarm,
                 peers,
                 connector,
@@ -170,16 +170,16 @@ where
                 Some(res) => {
                     match res {
                         Ok(_) => {
-                            tracing::info!("worker network finished successfully");
+                            tracing::info!("network finished successfully");
                         }
                         Err(e) => {
-                            tracing::error!("worker network finished with an error: {:#?}", e);
+                            tracing::error!("network finished with an error: {:#?}", e);
                         }
                     };
                     cancellation_token.cancel();
                 }
                 None => {
-                    tracing::info!("worker network has been cancelled");
+                    tracing::info!("network has been cancelled");
                 }
             }
         })
