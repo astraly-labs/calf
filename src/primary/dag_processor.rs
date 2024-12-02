@@ -57,7 +57,14 @@ impl DagProcessor {
                     round,
                     certificates.len()
                 );
-                //TODO: feature
+
+                // TODO: gc round should be decided by consensus engine, for now we hardcode it
+                // Garbage collect rounds before current - 10 to maintain some history
+                if round > 10 {
+                    dag.update_gc_round(round - 10);
+                }
+
+                // TODO: add under feature flag
                 dag.simplified()
                     .write_to_file(format!("dag_log/round_{round}.json"))?;
                 round += 1;
