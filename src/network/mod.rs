@@ -27,7 +27,7 @@ pub struct WorkerNetwork;
 pub struct PrimaryNetwork;
 
 const MAIN_PROTOCOL: &str = "/calf/0/";
-const MAX_CONCURENT_STREAMS: usize = 10;
+const MAX_CONCURENT_STREAMS: usize = 100;
 const CONNECTION_TIMEOUT: u64 = 1000;
 
 #[derive(NetworkBehaviour)]

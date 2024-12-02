@@ -8,12 +8,12 @@ use super::{
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Dag(HashMap<String, Vertex>);
+pub struct Dag(pub HashMap<String, Vertex>);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct Vertex {
-    certificate: Certificate,
-    parents: HashSet<String>,
+pub struct Vertex {
+    pub certificate: Certificate,
+    pub parents: HashSet<String>,
 }
 
 impl Vertex {
