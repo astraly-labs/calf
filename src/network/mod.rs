@@ -170,16 +170,16 @@ where
                 Some(res) => {
                     match res {
                         Ok(_) => {
-                            tracing::info!("worker network finished successfully");
+                            tracing::info!("network finished successfully");
                         }
                         Err(e) => {
-                            tracing::error!("worker network finished with an error: {:#?}", e);
+                            tracing::error!("network finished with an error: {:#?}", e);
                         }
                     };
                     cancellation_token.cancel();
                 }
                 None => {
-                    tracing::info!("worker network has been cancelled");
+                    tracing::info!("network has been cancelled");
                 }
             }
         })

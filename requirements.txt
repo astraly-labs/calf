@@ -1,2 +1,6 @@
 libp2p
 argparse
+matplotlib
+networkx
+pygraphviz
+pydot

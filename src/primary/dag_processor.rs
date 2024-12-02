@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    settings::parser::Committee,
+    settings::parser::{Committee, FileLoader},
     types::{certificate::Certificate, dag::Dag, ReceivedObject, Round},
 };
 use proc_macros::Spawn;
@@ -21,6 +21,7 @@ impl DagProcessor {
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let genesis = Certificate::genesis([0; 32]);
         let mut dag = Dag::new(genesis.clone())?;
+        //dag.simplified().write_to_file("round_0.json")?;
         let mut round = 1;
         self.rounds_tx
             .send((round, HashSet::from_iter([genesis].into_iter())))?;
@@ -56,6 +57,9 @@ impl DagProcessor {
                     round,
                     certificates.len()
                 );
+                //TODO: feature
+                dag.simplified()
+                    .write_to_file(format!("dag_log/round_{round}.json"))?;
                 round += 1;
                 self.rounds_tx.send((round, certificates))?;
             }

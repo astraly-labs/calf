@@ -63,6 +63,7 @@ def create_validator_env(path, workers_number, executable_path, committee_path):
         shutil.copy(f"{committee_path}", f"{path}/worker_{i}/committee.json")
         generate_keypair(f"{path}/worker_{i}/keypair.json")
     os.makedirs(f"{path}/primary", exist_ok=True)
+    os.makedirs(f"{path}/primary/dag_log", exist_ok=True)
     shutil.copy(f"{path}/validator-keypair.json", f"{path}/primary")
     shutil.copy(f"{executable_path}", f"{path}/primary")
     shutil.copy(f"{committee_path}", f"{path}/primary/committee.json")
@@ -87,13 +88,15 @@ def run_worker_cmd(id, validator_keypair_path, keypair_path, db_path, exec_path)
     return [exec_path, 'run', 'worker', '--db-path', db_path, '--keypair-path', keypair_path, '--validator-keypair-path', validator_keypair_path, '--id', str(id)]
 
 def run_primary_cmd(validator_keypair_path, keypair_path, db_path, exec_path):
-    return [exec_path, 'run', 'primary', '--db-path', db_path, '--keypair-path', keypair_path, '--validator-keypair-path', validator_keypair_path]
+    dir_path = os.path.dirname(exec_path)
+    exec_name = os.path.basename(exec_path)
+    return ['bash', '-c', f'cd {dir_path} && ./{exec_name} run primary --db-path {db_path} --keypair-path {keypair_path} --validator-keypair-path {validator_keypair_path}']
 
 def worker_processes_commands(n_validators, n_workers, base_path, exec_name):
     return [run_worker_cmd(j, f"{base_path}/validator_{i}/worker_{j}/validator-keypair.json", f"{base_path}/validator_{i}/worker_{j}/keypair.json", f"{base_path}/validator_{i}/worker_{j}/db", f"{base_path}/validator_{i}/worker_{j}/{exec_name}") for i in range(n_validators) for j in range(n_workers)]
 
 def primary_processes_commands(n_validators, base_path, exec_name):
-    return [run_primary_cmd(f"{base_path}/validator_{i}/primary/validator-keypair.json", f"{base_path}/validator_{i}/primary/keypair.json", f"{base_path}/validator_{i}/primary/db", f"{base_path}/validator_{i}/primary/{exec_name}") for i in range(n_validators)]
+    return [run_primary_cmd("validator-keypair.json", "keypair.json", "db", f"{base_path}/validator_{i}/primary/{exec_name}") for i in range(n_validators)]
 
 def run_command(command, output_file):
     with open(output_file, "w") as outfile:

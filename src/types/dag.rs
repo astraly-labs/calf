@@ -7,13 +7,13 @@ use super::{
     Round,
 };
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Dag(HashMap<CertificateId, Vertex>);
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Dag(HashMap<String, Vertex>);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct Vertex {
     certificate: Certificate,
-    parents: HashSet<CertificateId>,
+    parents: HashSet<String>,
 }
 
 impl Vertex {
@@ -22,7 +22,7 @@ impl Vertex {
             parents: certificate
                 .parents()
                 .iter()
-                .map(|parent| parent.id())
+                .map(|parent| hex::encode(parent.id()))
                 .collect(),
             certificate,
         }
@@ -36,15 +36,15 @@ impl Dag {
         Ok(dag)
     }
     pub fn insert_certificate(&mut self, certificate: Certificate) -> Result<(), DagError> {
-        let certificate_id = certificate.id();
+        let certificate_id = hex::encode(certificate.id());
         let parents_ids = certificate
             .parents()
             .iter()
-            .map(|parent| parent.id())
-            .collect::<HashSet<CertificateId>>();
-        let current_vertices_ids = self.0.keys().collect::<HashSet<&CertificateId>>();
+            .map(|parent| hex::encode(parent.id()))
+            .collect::<HashSet<String>>();
+        let current_vertices_ids = self.0.keys().collect::<HashSet<&String>>();
 
-        let missing_parents: HashSet<&CertificateId> = parents_ids
+        let missing_parents: HashSet<&String> = parents_ids
             .iter()
             .filter(|parent_id| !current_vertices_ids.contains(parent_id))
             .collect();
@@ -82,23 +82,34 @@ impl Dag {
     pub fn children_number(&self, certificate: &Certificate) -> usize {
         self.0
             .values()
-            .filter(|vertex| vertex.parents.contains(&certificate.id()))
+            .filter(|vertex| vertex.parents.contains(&hex::encode(certificate.id())))
             .count()
     }
     pub fn round_certificates_number(&self, round: Round) -> usize {
         self.count_all(|certificate| match certificate {
             Certificate::Derived(derived) => derived.round == round,
             Certificate::Genesis(_) => round == 0,
+            _ => unreachable!(),
         })
     }
     pub fn round_certificates(&self, round: Round) -> HashSet<Certificate> {
         self.get_all(|certificate| match certificate {
             Certificate::Derived(derived) => derived.round == round,
             Certificate::Genesis(_) => round == 0,
+            _ => unreachable!(),
         })
         .into_iter()
         .cloned()
         .collect()
+    }
+    pub fn simplified(&self) -> Self {
+        let mut simplified = self.0.clone();
+        for key in self.0.keys() {
+            let mut vertex = self.0.get(key).unwrap().clone();
+            vertex.certificate = Certificate::Dummy;
+            simplified.insert(key.clone(), vertex.clone());
+        }
+        Self(simplified)
     }
 }
 
@@ -107,7 +118,7 @@ pub enum DagError {
     #[error("Certificate already exists")]
     CertificateAlreadyExists,
     #[error("Missing parents")]
-    MissingParents(HashSet<CertificateId>),
+    MissingParents(HashSet<String>),
     #[error("Invalid certificate")]
     InvalidCertificate,
 }

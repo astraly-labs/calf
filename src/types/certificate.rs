@@ -9,6 +9,7 @@ pub type Seed = Digest;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum Certificate {
+    Dummy,
     Genesis(Seed),
     Derived(DerivedCertificate),
 }
@@ -33,6 +34,7 @@ impl Certificate {
                 data.extend_from_slice(&derived.round.to_le_bytes());
                 *blake3::hash(&data).as_bytes()
             }
+            Certificate::Dummy => [0; 32],
         }
     }
     pub fn parents(&self) -> HashSet<&Certificate> {
@@ -43,6 +45,7 @@ impl Certificate {
                 .certificates
                 .iter()
                 .collect::<HashSet<&Certificate>>(),
+            Certificate::Dummy => HashSet::new(),
         }
     }
     pub fn derived(round: Round, author: PublicKey, votes: Vec<Vote>, header: BlockHeader) -> Self {
