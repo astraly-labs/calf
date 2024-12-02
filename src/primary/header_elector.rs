@@ -69,6 +69,7 @@ impl HeaderElector {
 
 fn header_data_in_storage(header: &BlockHeader, db: &Arc<Db>) -> bool {
     header.digests.iter().all(|digest| {
+        tracing::info!("trying to get digest in db: {}", hex::encode(digest));
         db.get(db::Column::Digests, &hex::encode(digest))
             .is_ok_and(|d: Option<Digest>| d.is_some())
     }) || header.digests.is_empty()

@@ -94,6 +94,7 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
             }
             NetworkRequest::SendToPrimary(req) => match peers.primary {
                 Some((id, _)) => {
+                    if let RequestPayload::Digest(dgst) = req.clone() {}
                     swarm_actions::send(swarm, id, req)?;
                 }
                 None => {

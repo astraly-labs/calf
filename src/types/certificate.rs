@@ -37,6 +37,20 @@ impl Certificate {
             Certificate::Dummy => [0; 32],
         }
     }
+    pub fn set_round(&mut self, round: Round) {
+        match self {
+            Certificate::Genesis(_) => {}
+            Certificate::Derived(derived) => derived.round = round,
+            Certificate::Dummy => {}
+        }
+    }
+    pub fn round(&self) -> Round {
+        match self {
+            Certificate::Genesis(_) => 0,
+            Certificate::Derived(derived) => derived.round,
+            Certificate::Dummy => 0,
+        }
+    }
     pub fn parents(&self) -> HashSet<&Certificate> {
         match self {
             Certificate::Genesis(_) => HashSet::new(),

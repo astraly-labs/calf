@@ -11,7 +11,7 @@ pub mod types;
 pub mod utils;
 pub mod worker;
 
-const CHANNEL_SIZE: usize = 10_000;
+const CHANNEL_SIZE: usize = 100;
 
 // Empty settings for now
 impl AsRef<Settings> for Settings {

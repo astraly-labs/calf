@@ -35,12 +35,6 @@ def get_args():
         help="tested executable path"
     )
     parser.add_argument(
-        "--committee-path",
-        type=str,
-        default="committee.json",
-        help="committee file path"
-    )
-    parser.add_argument(
         "--build",
         action="store_true",
         help="Build in release mode before running"
@@ -90,7 +84,9 @@ def workers_processes_output(n_validators, n_workers, base_path):
     return [f"{base_path}/validator_{i}/worker_{j}/output.log" for i in range(n_validators) for j in range(n_workers)]
 
 def run_worker_cmd(id, validator_keypair_path, keypair_path, db_path, exec_path):
-    return [exec_path, 'run', 'worker', '--db-path', db_path, '--keypair-path', keypair_path, '--validator-keypair-path', validator_keypair_path, '--id', str(id)]
+    dir_path = os.path.dirname(exec_path)
+    exec_name = os.path.basename(exec_path)
+    return ['bash', '-c', f'cd {dir_path} && ./{exec_name} run primary --db-path {db_path} --keypair-path {keypair_path} --validator-keypair-path {validator_keypair_path} --worker-id {str(id)}']
 
 def run_primary_cmd(validator_keypair_path, keypair_path, db_path, exec_path):
     dir_path = os.path.dirname(exec_path)
@@ -98,7 +94,7 @@ def run_primary_cmd(validator_keypair_path, keypair_path, db_path, exec_path):
     return ['bash', '-c', f'cd {dir_path} && ./{exec_name} run primary --db-path {db_path} --keypair-path {keypair_path} --validator-keypair-path {validator_keypair_path}']
 
 def worker_processes_commands(n_validators, n_workers, base_path, exec_name):
-    return [run_worker_cmd(j, f"{base_path}/validator_{i}/worker_{j}/validator-keypair.json", f"{base_path}/validator_{i}/worker_{j}/keypair.json", f"{base_path}/validator_{i}/worker_{j}/db", f"{base_path}/validator_{i}/worker_{j}/{exec_name}") for i in range(n_validators) for j in range(n_workers)]
+    return [run_worker_cmd(0, "validator-keypair.json", "keypair.json", "db", f"{base_path}/validator_{i}/primary/{exec_name}") for i in range(n_validators) for j in range(n_workers)]
 
 def primary_processes_commands(n_validators, base_path, exec_name):
     return [run_primary_cmd("validator-keypair.json", "keypair.json", "db", f"{base_path}/validator_{i}/primary/{exec_name}") for i in range(n_validators)]
@@ -114,6 +110,24 @@ def config():
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
+def generate_authority_info():
+    return {
+        "authority_id": libp2p.peer.id.ID.from_pubkey(libp2p.crypto.ed25519.create_new_key_pair().public_key).to_base58(),
+        "authority_pubkey": "0" * 32,
+        "primary_address": ["0.0.0.0", "0"],
+        "stake": 0,
+        "workers_addresses": [
+            ["0.0.0.0", "0"]
+        ]
+    }
+
+def generate_dummy_committee(num_authorities, path):
+    committee = {
+        "authorities": [generate_authority_info() for _ in range(num_authorities)]
+    }
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(committee, file, indent=4)
+
 if __name__ == '__main__':
     config()
 
@@ -122,7 +136,7 @@ if __name__ == '__main__':
     n_workers = args.workers
     test_id = args.test_id
     calf = args.calf
-    committee_path = args.committee_path
+    committee_path = "committee.json"
 
     if args.build:
         logging.info("Building in release mode...")
@@ -130,6 +144,7 @@ if __name__ == '__main__':
 
     exec_name = os.path.basename(calf)
 
+    generate_dummy_committee(n_validators, committee_path)
     create_env(n_validators, n_workers, test_id, calf, committee_path)
 
     commands = worker_processes_commands(n_validators, n_workers, test_id, exec_name) + primary_processes_commands(n_validators, test_id, exec_name)
