@@ -33,6 +33,9 @@ pub struct Committee {
 // TODO: reparer
 impl Committee {
     pub fn quorum_threshold(&self) -> u32 {
+        if self.authorities.len() == 2 {
+            return 2;
+        }
         ((self.authorities.len() / 3) * 2 + 1) as u32
     }
     pub fn has_authority_id(&self, peer_id: &PeerId) -> bool {

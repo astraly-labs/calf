@@ -87,8 +87,8 @@ pub type Round = u64;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct Vote {
-    authority: PublicKey,
-    signature: Signature,
+    pub authority: PublicKey,
+    pub signature: Signature,
 }
 
 // Vote: Signed Hash of the BlockHeader + PublicKey of the authority

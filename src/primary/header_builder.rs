@@ -70,6 +70,7 @@ impl HeaderBuilder {
                                         &header,
                                         quorum_threshold as usize,
                                         &mut votes_rx,
+                                        &keypair,
                                     ),
                                 )
                                 .await;
@@ -111,18 +112,26 @@ pub async fn wait_for_quorum(
     waiting_header: &BlockHeader,
     threshold: usize,
     votes_rx: &mut broadcast::Receiver<ReceivedObject<Vote>>,
+    keypair: &Keypair,
 ) -> anyhow::Result<Vec<Vote>> {
     tracing::info!("⏳ Waiting quorum for header... threshold: {}", threshold);
     let header_hash = waiting_header.digest()?;
     let mut votes = vec![];
+    let my_vote = Vote::from_header(waiting_header.clone(), keypair)?;
+    votes.push(my_vote);
     loop {
         let vote = votes_rx.recv().await?;
+        tracing::info!(
+            "📡 received new vote from {}",
+            hex::encode(vote.object.authority)
+        );
         // vote: signed hash of the header
         if vote.object.verify(&header_hash)? {
             votes.push(vote.object);
+            tracing::info!("👍 vote accepted");
         }
         // we vote for ourself
-        if votes.len() >= threshold - 1 {
+        if votes.len() >= threshold {
             break;
         }
     }

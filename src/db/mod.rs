@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub struct Db {

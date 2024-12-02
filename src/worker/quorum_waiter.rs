@@ -66,7 +66,7 @@ impl QuorumWaiter {
                             if !batch.acknowledgers.insert(sender) {
                                 tracing::warn!("Duplicate acknowledgment from peer: {:?}", sender);
                             }
-                            if batch.acknowledgers.len() as u32 >= self.quorum_threshold {
+                            if batch.acknowledgers.len() as u32 + 1 >= self.quorum_threshold {
                                 tracing::info!("trying to send a digest to primary: {}", hex::encode(batch.digest));
                                 self.network_tx.send(NetworkRequest::SendToPrimary(RequestPayload::Digest(batch.digest))).await?;
                                 let _ = self.insert_batch_in_db(batches.remove(batch_index));
