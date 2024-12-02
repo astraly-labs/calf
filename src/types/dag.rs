@@ -78,6 +78,7 @@ impl Dag {
             .iter()
             .filter(|parent_id| !current_vertices_ids.contains(parent_id))
             .collect();
+
         if !missing_parents.is_empty() {
             return Err(DagError::MissingParents(
                 missing_parents.into_iter().map(|elm| elm.clone()).collect(),
