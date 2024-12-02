@@ -1,22 +1,18 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
-
-use sled::{transaction, Db as SledDb};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub struct Db {
-    #[allow(dead_code)]
-    db: SledDb,
-    columns: [sled::Tree; Column::COUNT],
+    db: Arc<Mutex<HashMap<String, HashMap<String, Vec<u8>>>>>, // Thread-safe storage
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Sled error: {0}")]
-    Sled(#[from] sled::Error),
-    #[error("Transaction error: {0}")]
-    Transaction(#[from] transaction::TransactionError),
-    #[error("Bincode error: {0}")]
+    #[error("Serialization error: {0}")]
     Bincode(#[from] bincode::Error),
+    #[error("Key not found")]
+    KeyNotFound,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -24,12 +20,6 @@ pub enum Column {
     Batches,
     Headers,
     Digests,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum DbError {
-    #[error("Invalid columns number")]
-    InvalidColumnsNumber,
 }
 
 impl Column {
@@ -51,25 +41,18 @@ impl Column {
             Column::Digests => "digests",
         }
     }
-
-    fn as_usize(&self) -> usize {
-        *self as usize
-    }
 }
 
 #[allow(dead_code)]
 impl Db {
-    pub fn new(path: PathBuf) -> Result<Self, anyhow::Error> {
-        let db = sled::open(path)?;
-        let columns: [sled::Tree; Column::COUNT] = match Column::iter()
-            .map(|column| db.open_tree(column.as_str()))
-            .collect::<Result<Vec<_>, _>>()?
-            .try_into()
-        {
-            Ok(columns) => columns,
-            Err(_) => return Err(DbError::InvalidColumnsNumber.into()),
-        };
-        Ok(Self { db, columns })
+    pub fn new(_: PathBuf) -> Result<Self, anyhow::Error> {
+        let mut db = HashMap::new();
+        for column in Column::iter() {
+            db.insert(column.as_str().to_string(), HashMap::new());
+        }
+        Ok(Self {
+            db: Arc::new(Mutex::new(db)),
+        })
     }
 
     pub fn insert<T>(&self, column: Column, key: &str, value: T) -> Result<(), Error>
@@ -77,7 +60,9 @@ impl Db {
         T: serde::Serialize,
     {
         let value = bincode::serialize(&value)?;
-        self.columns[column.as_usize()].insert(key, value)?;
+        let mut db_lock = self.db.lock().unwrap();
+        let column_map = db_lock.get_mut(column.as_str()).unwrap();
+        column_map.insert(key.to_string(), value);
         Ok(())
     }
 
@@ -85,22 +70,28 @@ impl Db {
     where
         T: serde::de::DeserializeOwned,
     {
-        let value = self.columns[column.as_usize()].get(key)?;
-        match value {
-            Some(value) => Ok(Some(bincode::deserialize(&value)?)),
-            None => Ok(None),
+        let db_lock = self.db.lock().unwrap();
+        if let Some(column_map) = db_lock.get(column.as_str()) {
+            if let Some(value) = column_map.get(key) {
+                let deserialized: T = bincode::deserialize(value)?;
+                return Ok(Some(deserialized));
+            }
         }
+        Ok(None)
     }
 
     pub fn remove<T>(&self, column: Column, key: &str) -> Result<Option<T>, Error>
     where
         T: serde::de::DeserializeOwned,
     {
-        let value = self.columns[column.as_usize()].remove(key)?;
-        match value {
-            Some(value) => Ok(Some(bincode::deserialize(&value)?)),
-            None => Ok(None),
+        let mut db_lock = self.db.lock().unwrap();
+        if let Some(column_map) = db_lock.get_mut(column.as_str()) {
+            if let Some(value) = column_map.remove(key) {
+                let deserialized: T = bincode::deserialize(&value)?;
+                return Ok(Some(deserialized));
+            }
         }
+        Ok(None)
     }
 }
 
