@@ -19,6 +19,9 @@ A smol implementation of [narwhal](https://arxiv.org/pdf/2105.11827) - a mempool
 **For macOS:**
 ```bash
 brew install gmp
+
+export CFLAGS="-I/opt/homebrew/include"            
+export LDFLAGS="-L/opt/homebrew/lib"
 ```
 
 ### 🔧 Environment Setup
@@ -51,6 +54,7 @@ python test_launcher.py --validators <number_of_validators> [optional arguments]
 - `--workers`: Number of workers per validator (default: 1)
 - `--test-id`: Test name (default: "test")
 - `--calf`: Path to the executable (default: "target/release/calf")
+- `--build`: Build the binary in release mode automatically
 
 #### File Requirements
 
