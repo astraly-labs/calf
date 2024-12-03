@@ -25,7 +25,7 @@ impl Vertex {
             parents: certificate
                 .parents()
                 .iter()
-                .map(|parent| hex::encode(parent.id()))
+                .map(|id| hex::encode(id))
                 .collect(),
             certificate,
         }
@@ -69,7 +69,7 @@ impl Dag {
         let parents_ids = certificate
             .parents()
             .iter()
-            .map(|parent| hex::encode(parent.id()))
+            .map(|parent| hex::encode(parent))
             .collect::<HashSet<String>>();
 
         let current_vertices_ids = self.certificates.keys().collect::<HashSet<&String>>();

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use derive_more::derive::Constructor;
 use serde::{Deserialize, Serialize};
 
-use super::{block_header::BlockHeader, Digest, PublicKey, Round, Vote};
+use super::{block_header::BlockHeader, Digest, Hash, PublicKey, Round, Vote};
 
 pub type Seed = Digest;
 
@@ -19,7 +19,8 @@ pub struct DerivedCertificate {
     pub round: Round,
     pub author: PublicKey,
     pub votes: Vec<Vote>,
-    pub header: BlockHeader,
+    pub header_hash: Digest,
+    pub parents: Vec<CertificateId>,
 }
 
 pub type CertificateId = Digest;
@@ -51,19 +52,30 @@ impl Certificate {
             Certificate::Dummy => 0,
         }
     }
-    pub fn parents(&self) -> HashSet<&Certificate> {
+    pub fn parents(&self) -> HashSet<&CertificateId> {
         match self {
             Certificate::Genesis(_) => HashSet::new(),
-            Certificate::Derived(derived) => derived
-                .header
-                .certificates
-                .iter()
-                .collect::<HashSet<&Certificate>>(),
+            Certificate::Derived(derived) => {
+                derived.parents.iter().collect::<HashSet<&CertificateId>>()
+            }
             Certificate::Dummy => HashSet::new(),
         }
     }
-    pub fn derived(round: Round, author: PublicKey, votes: Vec<Vote>, header: BlockHeader) -> Self {
-        Certificate::Derived(DerivedCertificate::new(round, author, votes, header))
+    pub fn derived(
+        round: Round,
+        author: PublicKey,
+        votes: Vec<Vote>,
+        header: &BlockHeader,
+    ) -> Result<Self, anyhow::Error> {
+        let header_hash = header.digest()?;
+        let parents = header.certificates.iter().map(|c| c.id()).collect();
+        Ok(Certificate::Derived(DerivedCertificate::new(
+            round,
+            author,
+            votes,
+            header_hash,
+            parents,
+        )))
     }
     pub fn genesis(seed: Seed) -> Self {
         Certificate::Genesis(seed)

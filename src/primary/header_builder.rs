@@ -81,14 +81,18 @@ impl HeaderBuilder {
                                             round,
                                             keypair.public().to_bytes(),
                                             votes,
-                                            header,
+                                            &header,
                                         );
-                                        let _ = broadcast_certificate(
-                                            certificate,
-                                            &network_tx,
-                                            &certificate_tx,
-                                        )
-                                        .await;
+                                        if let Ok(certificate) = certificate {
+                                            let _ = broadcast_certificate(
+                                                certificate,
+                                                &network_tx,
+                                                &certificate_tx,
+                                            )
+                                            .await;
+                                        } else {
+                                            tracing::warn!("Error building certificate");
+                                        }
                                         break;
                                     }
                                     Ok(Err(e)) => {
