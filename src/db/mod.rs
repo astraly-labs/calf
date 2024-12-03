@@ -1,16 +1,19 @@
-use std::collections::HashMap;
+use rocksdb::{Options, DB};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub struct Db {
-    db: Arc<Mutex<HashMap<String, HashMap<String, Vec<u8>>>>>, // Thread-safe storage
+    db: Arc<Mutex<DB>>,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Serialization error: {0}")]
     Bincode(#[from] bincode::Error),
+    #[error("RocksDB error: {0}")]
+    RocksDB(#[from] rocksdb::Error),
     #[error("Key not found")]
     KeyNotFound,
 }
@@ -45,11 +48,12 @@ impl Column {
 
 #[allow(dead_code)]
 impl Db {
-    pub fn new(_: PathBuf) -> Result<Self, anyhow::Error> {
-        let mut db = HashMap::new();
-        for column in Column::iter() {
-            db.insert(column.as_str().to_string(), HashMap::new());
-        }
+    pub fn new(path: PathBuf) -> Result<Self, anyhow::Error> {
+        let mut options = Options::default();
+        options.create_if_missing(true);
+        options.create_missing_column_families(true);
+
+        let db = DB::open_cf(&options, path, Column::ALL.iter().map(Column::as_str))?;
         Ok(Self {
             db: Arc::new(Mutex::new(db)),
         })
@@ -57,39 +61,38 @@ impl Db {
 
     pub fn insert<T>(&self, column: Column, key: &str, value: T) -> Result<(), Error>
     where
-        T: serde::Serialize,
+        T: Serialize,
     {
         let value = bincode::serialize(&value)?;
-        let mut db_lock = self.db.lock().unwrap();
-        let column_map = db_lock.get_mut(column.as_str()).unwrap();
-        column_map.insert(key.to_string(), value);
+        let db = self.db.lock().unwrap();
+        let cf = db.cf_handle(column.as_str()).ok_or(Error::KeyNotFound)?;
+        db.put_cf(cf, key.as_bytes(), value)?;
         Ok(())
     }
 
     pub fn get<T>(&self, column: Column, key: &str) -> Result<Option<T>, Error>
     where
-        T: serde::de::DeserializeOwned,
+        T: for<'de> Deserialize<'de>,
     {
-        let db_lock = self.db.lock().unwrap();
-        if let Some(column_map) = db_lock.get(column.as_str()) {
-            if let Some(value) = column_map.get(key) {
-                let deserialized: T = bincode::deserialize(value)?;
-                return Ok(Some(deserialized));
-            }
+        let db = self.db.lock().unwrap();
+        let cf = db.cf_handle(column.as_str()).ok_or(Error::KeyNotFound)?;
+        if let Some(value) = db.get_cf(cf, key.as_bytes())? {
+            let deserialized: T = bincode::deserialize(&value)?;
+            return Ok(Some(deserialized));
         }
         Ok(None)
     }
 
     pub fn remove<T>(&self, column: Column, key: &str) -> Result<Option<T>, Error>
     where
-        T: serde::de::DeserializeOwned,
+        T: for<'de> Deserialize<'de>,
     {
-        let mut db_lock = self.db.lock().unwrap();
-        if let Some(column_map) = db_lock.get_mut(column.as_str()) {
-            if let Some(value) = column_map.remove(key) {
-                let deserialized: T = bincode::deserialize(&value)?;
-                return Ok(Some(deserialized));
-            }
+        let db = self.db.lock().unwrap();
+        let cf = db.cf_handle(column.as_str()).ok_or(Error::KeyNotFound)?;
+        if let Some(value) = db.get_cf(cf, key.as_bytes())? {
+            let deserialized: T = bincode::deserialize(&value)?;
+            db.delete_cf(cf, key.as_bytes())?;
+            return Ok(Some(deserialized));
         }
         Ok(None)
     }
@@ -101,7 +104,7 @@ mod test {
 
     #[test]
     fn test_db() {
-        let db = Db::new("/tmp/test_db_3".into()).unwrap();
+        let db = Db::new("/tmp/test_db_rocksdb".into()).unwrap();
         db.insert(Column::Batches, "key", 42).unwrap();
         assert_eq!(db.get::<i32>(Column::Batches, "key").unwrap(), Some(42));
         assert_eq!(db.remove::<i32>(Column::Batches, "key").unwrap(), Some(42));
