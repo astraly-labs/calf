@@ -32,7 +32,6 @@ use crate::{
     utils,
 };
 
-// ARBITRAIRE !!! : charger depuis le committee (TODO)
 const QUORUM_TRESHOLD: u32 = 1;
 const TIMEOUT: u64 = 1000;
 const BATCH_SIZE: usize = 100;

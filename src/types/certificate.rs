@@ -58,6 +58,15 @@ impl Certificate {
             Certificate::Dummy => HashSet::new(),
         }
     }
+    pub fn parents_as_hex(&self) -> HashSet<String> {
+        match self {
+            Certificate::Genesis(_) => HashSet::new(),
+            Certificate::Derived(derived) => {
+                derived.parents.iter().map(|p| hex::encode(p)).collect()
+            }
+            Certificate::Dummy => HashSet::new(),
+        }
+    }
     pub fn derived(
         round: Round,
         author: PublicKey,
