@@ -35,6 +35,9 @@ impl Certificate {
             Certificate::Dummy => [0; 32],
         }
     }
+    pub fn id_as_hex(&self) -> String {
+        hex::encode(self.id())
+    }
     pub fn set_round(&mut self, round: Round) {
         match self {
             Certificate::Genesis(_) => {}

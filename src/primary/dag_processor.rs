@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use crate::{
-    db::Db,
+    db::{self, Db},
     settings::parser::{Committee, FileLoader},
     types::{certificate::Certificate, dag::Dag, network::ReceivedObject, Round},
 };
@@ -28,6 +28,7 @@ impl DagProcessor {
         loop {
             tokio::select! {
                 Some(certificate) = self.certificates_rx.recv() => {
+                    self.db.insert(db::Column::Certificates, &certificate.id_as_hex(), &certificate)?;
                     match dag.insert_certificate(certificate) {
                         Ok(()) => {
                             tracing::info!("💾 current header certificate inserted in the DAG");
@@ -39,6 +40,7 @@ impl DagProcessor {
                 }
                 Ok(certificate) = self.peers_certificates_rx.recv() => {
                     tracing::info!("📡 received new certificate from {}", certificate.sender);
+                    self.db.insert(db::Column::Certificates, &certificate.object.id_as_hex(), &certificate.object)?;
                     match dag.insert_certificate(certificate.object) {
                         Ok(()) => {
                             tracing::info!("💾 certificate from {} inserted in the DAG", certificate.sender);
