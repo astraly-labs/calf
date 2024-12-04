@@ -1,6 +1,6 @@
 use crate::{
     settings::parser::Committee,
-    types::{NetworkRequest, RequestPayload},
+    types::network::{NetworkRequest, RequestPayload},
 };
 use async_trait::async_trait;
 use futures::StreamExt;

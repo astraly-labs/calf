@@ -3,7 +3,12 @@ use std::collections::HashMap;
 use crate::{
     network::PeerIdentifyInfos,
     settings::parser::Committee,
-    types::{NetworkRequest, ReceivedAcknowledgment, ReceivedBatch, RequestPayload},
+    types::{
+        batch::Batch,
+        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        transaction::Transaction,
+        Acknowledgment,
+    },
 };
 use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId, Swarm};
@@ -12,8 +17,8 @@ use tokio::sync::mpsc;
 use super::{swarm_actions, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, WorkerNetwork};
 
 pub struct WorkerConnector {
-    acks_tx: mpsc::Sender<ReceivedAcknowledgment>,
-    batches_tx: mpsc::Sender<ReceivedBatch>,
+    acks_tx: mpsc::Sender<ReceivedObject<Acknowledgment>>,
+    batches_tx: mpsc::Sender<ReceivedObject<Batch<Transaction>>>,
 }
 
 impl WorkerConnector {
@@ -21,8 +26,8 @@ impl WorkerConnector {
         buffer: usize,
     ) -> (
         Self,
-        mpsc::Receiver<ReceivedAcknowledgment>,
-        mpsc::Receiver<ReceivedBatch>,
+        mpsc::Receiver<ReceivedObject<Acknowledgment>>,
+        mpsc::Receiver<ReceivedObject<Batch<Transaction>>>,
     ) {
         let (acks_tx, acks_rx) = mpsc::channel(buffer);
         let (batches_tx, batches_rx) = mpsc::channel(buffer);
@@ -60,16 +65,11 @@ impl Connect for WorkerConnector {
     async fn dispatch(&self, payload: RequestPayload, sender: PeerId) -> anyhow::Result<()> {
         match payload {
             RequestPayload::Acknowledgment(ack) => {
-                self.acks_tx
-                    .send(ReceivedAcknowledgment {
-                        sender,
-                        acknowledgement: ack,
-                    })
-                    .await?;
+                self.acks_tx.send(ReceivedObject::new(ack, sender)).await?;
             }
             RequestPayload::Batch(batch) => {
                 self.batches_tx
-                    .send(ReceivedBatch { batch, sender })
+                    .send(ReceivedObject::new(batch, sender))
                     .await?;
             }
             _ => {}
@@ -94,7 +94,7 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
             }
             NetworkRequest::SendToPrimary(req) => match peers.primary {
                 Some((id, _)) => {
-                    if let RequestPayload::Digest(dgst) = req.clone() {}
+                    if let RequestPayload::Digest(_) = req.clone() {}
                     swarm_actions::send(swarm, id, req)?;
                 }
                 None => {
@@ -169,7 +169,7 @@ impl ManagePeers for WorkerPeers {
                 .unwrap_or(false)
             || self.established.contains_key(&id)
     }
-    fn get_to_dial_peers(committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
+    fn get_to_dial_peers(_committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
         todo!()
     }
     fn add_established(&mut self, id: PeerId, addr: Multiaddr) {

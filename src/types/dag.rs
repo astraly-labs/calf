@@ -1,11 +1,7 @@
-use derive_more::derive::Constructor;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use super::{
-    certificate::{Certificate, CertificateId},
-    Round,
-};
+use super::{certificate::Certificate, Round};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Dag {

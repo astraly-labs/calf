@@ -12,8 +12,12 @@ use crate::{
     db::Db,
     settings::parser::Committee,
     types::{
-        block_header::BlockHeader, certificate::Certificate, Digest, Hash, NetworkRequest,
-        ReceivedObject, RequestPayload, Round, Vote,
+        block_header::BlockHeader,
+        certificate::Certificate,
+        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        traits::Hash,
+        vote::Vote,
+        Digest, Round,
     },
     utils::CircularBuffer,
 };
@@ -45,7 +49,7 @@ impl HeaderBuilder {
             let header = BlockHeader::new(
                 self.keypair.public().to_bytes(),
                 digests,
-                certificates.into_iter().collect(),
+                certificates.into_iter().map(|elm| elm.id()).collect(),
                 round,
             );
             cancellation_token = CancellationToken::new();
@@ -119,7 +123,7 @@ pub async fn wait_for_quorum(
     keypair: &Keypair,
 ) -> anyhow::Result<Vec<Vote>> {
     tracing::info!("⏳ Waiting quorum for header... threshold: {}", threshold);
-    let header_hash = waiting_header.digest()?;
+    let header_hash = waiting_header.digest();
     let mut votes = vec![];
     let my_vote = Vote::from_header(waiting_header.clone(), keypair)?;
     votes.push(my_vote);
@@ -163,7 +167,7 @@ async fn broadcast_header(
     header: BlockHeader,
     network_tx: &mpsc::Sender<NetworkRequest>,
 ) -> anyhow::Result<()> {
-    tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()?));
+    tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()));
     network_tx
         .send(NetworkRequest::Broadcast(RequestPayload::Header(header)))
         .await?;

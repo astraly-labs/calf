@@ -1,11 +1,15 @@
-use std::collections::HashSet;
-
+use super::{
+    block_header::BlockHeader,
+    traits::{AsBytes, Hash},
+    vote::Vote,
+    Digest, PublicKey, Round,
+};
 use derive_more::derive::Constructor;
 use serde::{Deserialize, Serialize};
-
-use super::{block_header::BlockHeader, Digest, Hash, PublicKey, Round, Vote};
+use std::collections::HashSet;
 
 pub type Seed = Digest;
+pub type CertificateId = Digest;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum Certificate {
@@ -16,25 +20,18 @@ pub enum Certificate {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Constructor, Hash)]
 pub struct DerivedCertificate {
-    pub round: Round,
     pub author: PublicKey,
+    pub round: Round,
     pub votes: Vec<Vote>,
     pub header_hash: Digest,
     pub parents: Vec<CertificateId>,
 }
 
-pub type CertificateId = Digest;
-
 impl Certificate {
-    //ID = H(author, round)
     pub fn id(&self) -> CertificateId {
         match self {
             Certificate::Genesis(seed) => *seed,
-            Certificate::Derived(derived) => {
-                let mut data = derived.author.to_vec();
-                data.extend_from_slice(&derived.round.to_le_bytes());
-                *blake3::hash(&data).as_bytes()
-            }
+            Certificate::Derived(_) => self.digest(),
             Certificate::Dummy => [0; 32],
         }
     }
@@ -67,11 +64,11 @@ impl Certificate {
         votes: Vec<Vote>,
         header: &BlockHeader,
     ) -> Result<Self, anyhow::Error> {
-        let header_hash = header.digest()?;
-        let parents = header.certificates.iter().map(|c| c.id()).collect();
+        let header_hash = header.digest();
+        let parents = header.certificates_ids.clone();
         Ok(Certificate::Derived(DerivedCertificate::new(
-            round,
             author,
+            round,
             votes,
             header_hash,
             parents,
@@ -79,6 +76,38 @@ impl Certificate {
     }
     pub fn genesis(seed: Seed) -> Self {
         Certificate::Genesis(seed)
+    }
+}
+
+impl AsBytes for Certificate {
+    fn bytes(&self) -> Vec<u8> {
+        match &self {
+            Certificate::Derived(certificate) => {
+                let votes: Vec<u8> = certificate
+                    .votes
+                    .iter()
+                    .flat_map(|elm| {
+                        elm.authority
+                            .iter()
+                            .chain(elm.signature.iter())
+                            .copied()
+                            .collect::<Vec<u8>>()
+                    })
+                    .collect();
+                let data: Vec<u8> = certificate
+                    .author
+                    .iter()
+                    .chain(certificate.round.to_le_bytes().iter())
+                    .chain(votes.iter())
+                    .chain(certificate.header_hash.iter())
+                    .chain(certificate.parents.iter().flat_map(|p| p.iter()))
+                    .copied()
+                    .collect();
+                data
+            }
+            Certificate::Genesis(seed) => seed.to_vec(),
+            Certificate::Dummy => vec![0; 32],
+        }
     }
 }
 

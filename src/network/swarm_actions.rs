@@ -6,7 +6,7 @@ use libp2p::{
     Multiaddr, PeerId, Swarm,
 };
 
-use crate::types::RequestPayload;
+use crate::types::network::RequestPayload;
 
 use super::{CalfBehavior, ManagePeers};
 

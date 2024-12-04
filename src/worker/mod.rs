@@ -26,12 +26,13 @@ use crate::{
     settings::parser::{AuthorityInfo, Committee, FileLoader as _},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
-        Transaction,
+        traits::Random,
+        transaction::Transaction,
     },
     utils,
 };
 
-// ARBITRAIRE !!!
+// ARBITRAIRE !!! : charger depuis le committee (TODO)
 const QUORUM_TRESHOLD: u32 = 1;
 const TIMEOUT: u64 = 1000;
 const BATCH_SIZE: usize = 100;
