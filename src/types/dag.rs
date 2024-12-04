@@ -18,11 +18,7 @@ struct Vertex {
 impl Vertex {
     pub fn from_certificate(certificate: Certificate) -> Self {
         Self {
-            parents: certificate
-                .parents()
-                .iter()
-                .map(|id| hex::encode(id))
-                .collect(),
+            parents: certificate.parents_as_hex(),
             certificate,
         }
     }

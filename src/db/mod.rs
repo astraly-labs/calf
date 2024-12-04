@@ -1,6 +1,8 @@
-use rocksdb::{Options, DB};
+use anyhow::Context;
+use rocksdb::{Env, Options, DB};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
@@ -26,16 +28,10 @@ pub enum Column {
 }
 
 impl Column {
-    //const COUNT: usize = 3;
-
     pub const ALL: &'static [Self] = {
         use Column::*;
         &[Batches, Headers, Digests]
     };
-
-    // fn iter() -> impl Iterator<Item = Self> {
-    //     Self::ALL.iter().copied()
-    // }
 
     fn as_str(&self) -> &'static str {
         match self {
@@ -48,8 +44,8 @@ impl Column {
 
 #[allow(dead_code)]
 impl Db {
-    pub fn new(path: PathBuf) -> Result<Self, anyhow::Error> {
-        let mut options = Options::default();
+    pub fn new(path: PathBuf) -> anyhow::Result<Self> {
+        let mut options = Self::rocksdb_global_options()?;
         options.create_if_missing(true);
         options.create_missing_column_families(true);
 
@@ -58,7 +54,34 @@ impl Db {
             db: Arc::new(Mutex::new(db)),
         })
     }
+    pub fn rocksdb_global_options() -> anyhow::Result<Options> {
+        let mut options = Options::default();
+        options.create_if_missing(true);
+        options.create_missing_column_families(true);
+        let cores = std::thread::available_parallelism()
+            .map(|e| e.get() as i32)
+            .unwrap_or(1);
+        options.increase_parallelism(cores);
+        options.set_max_background_jobs(cores);
 
+        options.set_atomic_flush(true);
+        options.set_max_subcompactions(cores as _);
+
+        // Safe unwrap because we know the string is valid
+        options
+            .set_max_log_file_size(byte_unit::Byte::from_str("10 MiB").unwrap().as_u64() as usize);
+        options.set_max_open_files(2048);
+        options.set_keep_log_file_num(3);
+        options.set_log_level(rocksdb::LogLevel::Warn);
+
+        let mut env = Env::new().context("Creating rocksdb env")?;
+        // env.set_high_priority_background_threads(cores); // flushes
+        env.set_low_priority_background_threads(cores); // compaction
+
+        options.set_env(&env);
+
+        Ok(options)
+    }
     pub fn insert<T>(&self, column: Column, key: &str, value: T) -> Result<(), Error>
     where
         T: Serialize,

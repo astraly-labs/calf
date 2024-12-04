@@ -28,6 +28,7 @@ tokio-util = "0.7.12"
 rand = "0.8.5"
 proc_macros = {path = "./proc_macros"}
 rocksdb = "0.22.0"
+byte-unit = "5.1.6"
 
 [dev-dependencies]
 rstest = "0.23.0"

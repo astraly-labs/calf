@@ -79,10 +79,7 @@ mod test {
     #[tokio::test]
     async fn test_single_batch_acknowledgement() {
         let (batches_tx, mut requests_rx, _, _) = launch_batch_receiver("/tmp/test_db_7");
-        let batch = ReceivedObject::new(
-            Batch::new(vec![Transaction::random(100); 10]),
-            PeerId::random(),
-        );
+        let batch = ReceivedObject::new(Batch::random(30), PeerId::random());
         let expected_request = NetworkRequest::SendTo(
             batch.sender,
             RequestPayload::Acknowledgment(Acknowledgment::from(&batch.object)),
