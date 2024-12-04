@@ -178,6 +178,7 @@ impl BaseAgent for Primary {
             certificates_rx,
             round_tx,
             self.commitee.clone(),
+            self.db.clone(),
         );
 
         let res = tokio::try_join!(

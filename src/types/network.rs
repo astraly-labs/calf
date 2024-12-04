@@ -1,6 +1,11 @@
 use super::{
-    batch::Batch, block_header::BlockHeader, certificate::Certificate, signing::SignedType,
-    transaction::Transaction, vote::Vote, Acknowledgment, Digest, WorkerId,
+    batch::Batch,
+    block_header::BlockHeader,
+    certificate::{Certificate, CertificateId},
+    signing::SignedType,
+    transaction::Transaction,
+    vote::Vote,
+    Acknowledgment, Digest, WorkerId,
 };
 use derive_more::derive::Constructor;
 use libp2p::PeerId;
@@ -21,6 +26,12 @@ pub enum RequestPayload {
     Header(BlockHeader),
     Certificate(Certificate),
     Vote(Vote),
+    Sync(SyncRequest),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub enum SyncRequest {
+    RequestCertificate(CertificateId),
 }
 
 #[derive(Clone, Debug, Constructor)]

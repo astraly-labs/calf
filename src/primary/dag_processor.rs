@@ -1,6 +1,7 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{
+    db::Db,
     settings::parser::{Committee, FileLoader},
     types::{certificate::Certificate, dag::Dag, network::ReceivedObject, Round},
 };
@@ -14,14 +15,13 @@ pub(crate) struct DagProcessor {
     certificates_rx: mpsc::Receiver<Certificate>,
     rounds_tx: watch::Sender<(Round, HashSet<Certificate>)>,
     committee: Committee,
+    db: Arc<Db>,
 }
 
 impl DagProcessor {
-    /// TODO: verify cerificates, why we stop receiving certificates after round 6 ??? total nonsense, if we go back to 0 when 7 is reached all works fine
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let genesis = Certificate::genesis([0; 32]);
         let mut dag = Dag::new(genesis.clone())?;
-        //dag.simplified().write_to_file("round_0.json")?;
         let mut round = 1;
         self.rounds_tx
             .send((round, HashSet::from_iter([genesis].into_iter())))?;
