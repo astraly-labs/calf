@@ -26,16 +26,16 @@ pub enum Column {
 }
 
 impl Column {
-    const COUNT: usize = 3;
+    //const COUNT: usize = 3;
 
     pub const ALL: &'static [Self] = {
         use Column::*;
         &[Batches, Headers, Digests]
     };
 
-    fn iter() -> impl Iterator<Item = Self> {
-        Self::ALL.iter().copied()
-    }
+    // fn iter() -> impl Iterator<Item = Self> {
+    //     Self::ALL.iter().copied()
+    // }
 
     fn as_str(&self) -> &'static str {
         match self {
