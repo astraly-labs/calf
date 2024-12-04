@@ -28,7 +28,7 @@ use crate::{
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         certificate::Certificate,
-        dag, Digest, Round,
+        Digest, Round,
     },
     utils::{self, CircularBuffer},
     CHANNEL_SIZE,

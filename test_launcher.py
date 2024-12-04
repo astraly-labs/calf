@@ -39,11 +39,6 @@ def get_args():
         action="store_true",
         help="Build in release mode before running"
     )
-    parser.add_argument(
-        "--build",
-        action="store_true",
-        help="Build in release mode before running"
-    )
 
     return parser.parse_args()
 

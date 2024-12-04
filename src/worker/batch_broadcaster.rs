@@ -2,11 +2,15 @@ use proc_macros::Spawn;
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 
-use crate::types::{NetworkRequest, RequestPayload, TxBatch};
+use crate::types::{
+    batch::Batch,
+    network::{NetworkRequest, RequestPayload},
+    transaction::Transaction,
+};
 
 #[derive(Spawn)]
 pub(crate) struct BatchBroadcaster {
-    batches_rx: broadcast::Receiver<TxBatch>,
+    batches_rx: broadcast::Receiver<Batch<Transaction>>,
     network_tx: mpsc::Sender<NetworkRequest>,
 }
 

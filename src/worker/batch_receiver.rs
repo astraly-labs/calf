@@ -6,12 +6,18 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::{self, Db},
-    types::{Hash, NetworkRequest, ReceivedBatch, RequestPayload},
+    types::{
+        batch::Batch,
+        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        traits::Hash,
+        transaction::Transaction,
+        Acknowledgment,
+    },
 };
 
 #[derive(Spawn)]
 pub(crate) struct BatchReceiver {
-    batches_rx: mpsc::Receiver<ReceivedBatch>,
+    batches_rx: mpsc::Receiver<ReceivedObject<Batch<Transaction>>>,
     requests_tx: mpsc::Sender<NetworkRequest>,
     db: Arc<Db>,
 }
@@ -19,18 +25,12 @@ pub(crate) struct BatchReceiver {
 impl BatchReceiver {
     pub async fn run(mut self) -> anyhow::Result<()> {
         while let Some(batch) = self.batches_rx.recv().await {
+            let digest = batch.object.digest();
             tracing::info!("Received batch from {}", batch.sender);
-            let digest = match batch.batch.digest() {
-                Ok(digest) => digest,
-                Err(e) => {
-                    tracing::warn!("Failed to compute digest for a received batch: {:?}", e);
-                    continue;
-                }
-            };
             self.requests_tx
                 .send(NetworkRequest::SendTo(
                     batch.sender,
-                    RequestPayload::Acknowledgment(digest),
+                    RequestPayload::Acknowledgment(Acknowledgment::from_digest(&digest)),
                 ))
                 .await?;
             self.requests_tx
@@ -39,7 +39,7 @@ impl BatchReceiver {
                 )))
                 .await?;
             self.db
-                .insert(db::Column::Batches, &hex::encode(digest), &batch.batch)?;
+                .insert(db::Column::Batches, &hex::encode(digest), &batch.object)?;
         }
         Ok(())
     }
@@ -50,11 +50,17 @@ mod test {
     use std::sync::Arc;
 
     use super::BatchReceiver;
-    use crate::types::{Hash, NetworkRequest, ReceivedBatch, RequestPayload, TxBatch};
+    use crate::types::{
+        batch::Batch,
+        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        traits::Random,
+        transaction::Transaction,
+        Acknowledgment,
+    };
     use libp2p::PeerId;
 
     type BatchReceiverFixture = (
-        tokio::sync::mpsc::Sender<ReceivedBatch>,
+        tokio::sync::mpsc::Sender<ReceivedObject<Batch<Transaction>>>,
         tokio::sync::mpsc::Receiver<NetworkRequest>,
         tokio::task::JoinHandle<()>,
         tokio_util::sync::CancellationToken,
@@ -73,15 +79,10 @@ mod test {
     #[tokio::test]
     async fn test_single_batch_acknowledgement() {
         let (batches_tx, mut requests_rx, _, _) = launch_batch_receiver("/tmp/test_db_7");
-
-        let batch = ReceivedBatch {
-            sender: PeerId::random(),
-            batch: TxBatch::default(),
-        };
-
+        let batch = ReceivedObject::new(Batch::random(30), PeerId::random());
         let expected_request = NetworkRequest::SendTo(
             batch.sender,
-            RequestPayload::Acknowledgment(batch.batch.digest().expect("failed to compute digest")),
+            RequestPayload::Acknowledgment(Acknowledgment::from(&batch.object)),
         );
         batches_tx.send(batch).await.expect("failed to send batch");
         let res = requests_rx.recv().await.expect("failed to receive request");

@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::fmt::Formatter;
 
-use crate::types::Hash;
 use async_trait::async_trait;
 use bincode::ErrorKind;
 use libp2p::identity::{ed25519::Keypair, SigningError};
@@ -61,15 +60,5 @@ impl Signable for PeerId {
     fn sign(&self, keypair: &Keypair) -> Result<Signature, SignError> {
         let msg = self.to_bytes();
         Ok(keypair.sign(&msg))
-    }
-}
-
-pub trait Sign {
-    fn sign_with(&self, keypair: &Keypair) -> anyhow::Result<Signature>;
-}
-
-impl<T: Hash> Sign for T {
-    fn sign_with(&self, keypair: &Keypair) -> anyhow::Result<Signature> {
-        Ok(keypair.sign(&self.digest()?))
     }
 }

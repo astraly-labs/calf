@@ -1,11 +1,7 @@
-use derive_more::derive::Constructor;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use super::{
-    certificate::{Certificate, CertificateId},
-    Round,
-};
+use super::{certificate::Certificate, Round};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Dag {
@@ -22,11 +18,7 @@ struct Vertex {
 impl Vertex {
     pub fn from_certificate(certificate: Certificate) -> Self {
         Self {
-            parents: certificate
-                .parents()
-                .iter()
-                .map(|parent| hex::encode(parent.id()))
-                .collect(),
+            parents: certificate.parents_as_hex(),
             certificate,
         }
     }
@@ -69,7 +61,7 @@ impl Dag {
         let parents_ids = certificate
             .parents()
             .iter()
-            .map(|parent| hex::encode(parent.id()))
+            .map(|parent| hex::encode(parent))
             .collect::<HashSet<String>>();
 
         let current_vertices_ids = self.certificates.keys().collect::<HashSet<&String>>();

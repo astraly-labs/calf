@@ -3,11 +3,12 @@ use std::time::Duration;
 use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::CancellationToken;
 
-use crate::types::{Transaction, TxBatch};
+use crate::types::batch::Batch;
+use crate::types::transaction::Transaction;
 
 #[derive(Spawn)]
 pub(crate) struct BatchMaker {
-    batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
+    batches_tx: tokio::sync::broadcast::Sender<Batch<Transaction>>,
     transactions_rx: Receiver<Transaction>,
     timeout: u64,
     max_batch_size: usize,
@@ -38,7 +39,7 @@ impl BatchMaker {
 
                     if current_batch_size >= self.max_batch_size {
                         tracing::info!("batch size reached: worker sending batch of size {}", current_batch_size);
-                        send_batch(sender, std::mem::take(&mut current_batch)).await?;
+                        send_batch(sender, Batch::new(std::mem::take(&mut current_batch))).await?;
                         current_batch_size = 0;
                         timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_millis(self.timeout));
                     }
@@ -46,7 +47,7 @@ impl BatchMaker {
                 _ = &mut timer => {
                     if !current_batch.is_empty() {
                         tracing::info!("batch timeout reached: worker sending batch of size {}", current_batch_size);
-                        send_batch(sender, std::mem::take(&mut current_batch)).await?;
+                        send_batch(sender, Batch::new(std::mem::take(&mut current_batch))).await?;
 
                     }
                     tracing::info!("batch timeout reached... doing nothing");
@@ -58,8 +59,8 @@ impl BatchMaker {
 }
 
 async fn send_batch(
-    batches_tx: tokio::sync::broadcast::Sender<TxBatch>,
-    batch: Vec<Transaction>,
+    batches_tx: tokio::sync::broadcast::Sender<Batch<Transaction>>,
+    batch: Batch<Transaction>,
 ) -> anyhow::Result<()> {
     batches_tx.send(batch).map_err(|e| {
         tracing::error!("channel error: failed to send batch: {}", e);
@@ -86,7 +87,7 @@ mod test {
 
     type BatchMakerFixture = (
         mpsc::Sender<Transaction>,
-        tokio::sync::broadcast::Receiver<TxBatch>,
+        tokio::sync::broadcast::Receiver<Batch<Transaction>>,
         JoinHandle<()>,
     );
 

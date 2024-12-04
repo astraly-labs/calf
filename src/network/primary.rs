@@ -1,8 +1,11 @@
 use crate::{
     settings::parser::Committee,
     types::{
-        block_header::BlockHeader, certificate::Certificate, Digest, NetworkRequest,
-        ReceivedObject, RequestPayload, Vote,
+        block_header::BlockHeader,
+        certificate::Certificate,
+        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        vote::Vote,
+        Digest,
     },
 };
 use async_trait::async_trait;
@@ -92,7 +95,7 @@ impl ManagePeers for PrimaryPeers {
                 }
                 true
             }
-            Peer::Worker(id, addr, index) => {
+            Peer::Worker(id, addr, _index) => {
                 if authority_pubkey == self.authority_pubkey {
                     if !self.workers.iter().any(|(peer_id, _)| peer_id == &id) {
                         self.workers.push((id, addr));
@@ -134,7 +137,7 @@ impl ManagePeers for PrimaryPeers {
             || self.workers.iter().any(|(peer_id, _)| peer_id == &id)
             || self.established.contains_key(&id)
     }
-    fn get_to_dial_peers(committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
+    fn get_to_dial_peers(_committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
         todo!()
     }
     fn add_established(&mut self, id: PeerId, addr: Multiaddr) {

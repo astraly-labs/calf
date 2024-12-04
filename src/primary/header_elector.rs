@@ -9,8 +9,11 @@ use crate::{
     db::{self, Db},
     settings::parser::Committee,
     types::{
-        block_header::BlockHeader, certificate::Certificate, Digest, NetworkRequest, PublicKey,
-        ReceivedObject, Round, Vote,
+        block_header::BlockHeader,
+        certificate::Certificate,
+        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        vote::Vote,
+        Digest, PublicKey, Round,
     },
 };
 
@@ -41,11 +44,13 @@ impl HeaderElector {
                 round_authors.clear();
                 previous_round = round;
             }
+            let potential_parents_ids = certificates.iter().map(|elm| elm.id()).collect();
             // Check if all batch digests are available in the database, all certificates are valid, the header is from the current round and if the header author has not already produced a header for the current round
             if header.object.round == round
                 && header
                     .object
-                    .verify_parents(certificates, self.committee.quorum_threshold())
+                    .verify_parents(potential_parents_ids, self.committee.quorum_threshold())
+                    .is_ok()
                 && header_data_in_storage(&header.object, &self.db)
             //&& round_authors.insert(header.object.author) // TODO: if the header produced by a validator is the same as the previous one, it will not be rejected
             {
@@ -53,7 +58,7 @@ impl HeaderElector {
                 self.network_tx
                     .send(NetworkRequest::SendTo(
                         header.sender,
-                        crate::types::RequestPayload::Vote(Vote::from_header(
+                        RequestPayload::Vote(Vote::from_header(
                             header.object,
                             &self.validator_keypair,
                         )?),

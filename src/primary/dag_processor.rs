@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     settings::parser::{Committee, FileLoader},
-    types::{certificate::Certificate, dag::Dag, ReceivedObject, Round},
+    types::{certificate::Certificate, dag::Dag, network::ReceivedObject, Round},
 };
 use proc_macros::Spawn;
 use tokio::sync::{broadcast, mpsc, watch};

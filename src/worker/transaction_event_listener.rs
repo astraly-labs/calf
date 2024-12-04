@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::types::Transaction;
+use crate::types::transaction::Transaction;
 use crossterm::event::{Event, EventStream, KeyCode};
 use futures_timer::Delay;
 use tokio::sync::mpsc;
