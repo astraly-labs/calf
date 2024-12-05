@@ -18,6 +18,8 @@ pub struct SyncTracker {
     // A watch channel to expose all orpahn certificates, to avoid to iterate avec all the DAG elements
     orphans_tx: watch::Sender<CertificateId>,
     fetcher_tx: mpsc::Sender<Vec<CertificateId>>,
+    // When the DAG that we are trying to synchronize is outdated: TODO: continue anyway ? elsewhere ?
+    reset_trigger: mpsc::Receiver<()>,
 }
 
 //TODO: store orphans by round for a more efficient search ?
@@ -29,6 +31,7 @@ struct OrphanCertificate {
 
 impl SyncTracker {
     pub async fn run(mut self) -> anyhow::Result<()> {
+        tracing::info!("🔄 Starting the synchronizer");
         let mut orphans: Vec<OrphanCertificate> = vec![];
         loop {
             publish_orphans(&orphans, &self.orphans_tx)?;
@@ -51,6 +54,10 @@ impl SyncTracker {
                     });
                     // We can remove the orphan certificate from the list if all its parents have been retrieved. WARNING(TODO): really ?
                     orphans.retain(|elm| !elm.missing_parents.is_empty());
+                }
+                Some(_) = self.reset_trigger.recv() => {
+                    orphans.clear();
+                    tracing::info!("🔄 Resetting the synchronizer");
                 }
                 else => break Ok(()),
             }
