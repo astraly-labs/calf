@@ -21,6 +21,7 @@ pub type Stake = u64;
 pub type Round = u64;
 pub type SignedBlockHeader = SignedType<BlockHeader>;
 pub type HeaderId = Digest;
+pub type RequestId = Digest;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Acknowledgment(Digest);

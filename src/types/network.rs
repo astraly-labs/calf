@@ -1,11 +1,5 @@
 use super::{
-    batch::Batch,
-    block_header::BlockHeader,
-    certificate::{Certificate, CertificateId},
-    signing::SignedType,
-    transaction::Transaction,
-    vote::Vote,
-    Acknowledgment, Digest, HeaderId, WorkerId,
+    batch::Batch, block_header::BlockHeader, certificate::{Certificate, CertificateId}, signing::SignedType, transaction::Transaction, vote::Vote, Acknowledgment, Digest, HeaderId, RequestId, WorkerId
 };
 use derive_more::derive::Constructor;
 use libp2p::PeerId;
@@ -26,17 +20,31 @@ pub enum RequestPayload {
     Header(BlockHeader),
     Certificate(Certificate),
     Vote(Vote),
-    Sync(SyncRequest),
+    SyncRequest(SyncRequest),
+    SyncResponse(SyncResponse),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum SyncRequest {
-    RequestCertificate(CertificateId),
-    RequestBlockHeader(HeaderId),
+    RequestCertificates(Vec<CertificateId>),
+    RequestBlockHeaders(Vec<HeaderId>),
     // Worker to Worker
-    RequestBatch(Digest),
+    RequestBatches(Vec<Digest>),
     // Ask a worker to get the batch corresponding to a digest contained in a header
     SyncDigest(Digest),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub enum SyncResponse {
+    Succes(RequestId, SyncData),
+    Failure,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct SyncData {
+    pub certificates: Vec<Certificate>,
+    pub headers: Vec<BlockHeader>,
+    pub batches: Vec<Batch<Transaction>>,
 }
 
 #[derive(Clone, Debug, Constructor)]
