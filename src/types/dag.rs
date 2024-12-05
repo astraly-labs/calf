@@ -7,7 +7,7 @@ use super::certificate::Certificate;
 use super::traits::{AsBytes, AsHex, Hash};
 
 #[derive(Serialize, Deserialize, Debug, Clone, CopyGetters)]
-/// A particular type of DAG where vertices are ordonned by layers, vertices from each layer can only have parents from previous layers and the data of each vertex is unique.
+/// A particular type of DAG where vertices are ordonned by layers. vertices from each layer can only have direct parents from previous layers and the data of each vertex is unique.
 pub struct Dag<T>
 where
     T: Hash + AsBytes + Clone,
@@ -162,13 +162,10 @@ pub enum DagError {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
-
-    use rstest::rstest;
-
-    use crate::types::traits::{AsHex, Hash};
-
     use super::{Dag, Vertex};
+    use crate::types::traits::{AsHex, Hash};
+    use rstest::rstest;
+    use std::collections::HashSet;
 
     #[rstest]
     fn test_one_child_one_parent_check() {
