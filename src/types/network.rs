@@ -36,15 +36,16 @@ pub enum SyncRequest {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum SyncResponse {
-    Succes(RequestId, SyncData),
+    Success(RequestId, SyncData),
+    Partial(RequestId, SyncData),
     Failure,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-pub struct SyncData {
-    pub certificates: Vec<Certificate>,
-    pub headers: Vec<BlockHeader>,
-    pub batches: Vec<Batch<Transaction>>,
+pub enum SyncData {
+    Certificates(Vec<Certificate>),
+    Headers(Vec<BlockHeader>),
+    Batches(Vec<Batch<Transaction>>),
 }
 
 #[derive(Clone, Debug, Constructor)]

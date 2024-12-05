@@ -10,6 +10,7 @@ pub mod settings;
 pub mod types;
 pub mod utils;
 pub mod worker;
+pub mod synchroniser;
 
 const CHANNEL_SIZE: usize = 10_000;
 
