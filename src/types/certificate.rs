@@ -30,7 +30,7 @@ pub struct DerivedCertificate {
 impl Certificate {
     pub fn id(&self) -> CertificateId {
         match self {
-            Certificate::Genesis(seed) => *seed,
+            Certificate::Genesis(seed) => seed.digest(),
             Certificate::Derived(_) => self.digest(),
             Certificate::Dummy => [0; 32],
         }

@@ -5,7 +5,7 @@ use super::{
     signing::SignedType,
     transaction::Transaction,
     vote::Vote,
-    Acknowledgment, Digest, WorkerId,
+    Acknowledgment, Digest, HeaderId, WorkerId,
 };
 use derive_more::derive::Constructor;
 use libp2p::PeerId;
@@ -32,6 +32,11 @@ pub enum RequestPayload {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum SyncRequest {
     RequestCertificate(CertificateId),
+    RequestBlockHeader(HeaderId),
+    // Worker to Worker
+    RequestBatch(Digest),
+    // Ask a worker to get the batch corresponding to a digest contained in a header
+    SyncDigest(Digest),
 }
 
 #[derive(Clone, Debug, Constructor)]
