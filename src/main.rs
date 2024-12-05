@@ -7,10 +7,10 @@ pub mod db;
 pub mod network;
 pub mod primary;
 pub mod settings;
+pub mod synchroniser;
 pub mod types;
 pub mod utils;
 pub mod worker;
-pub mod synchroniser;
 
 const CHANNEL_SIZE: usize = 10_000;
 

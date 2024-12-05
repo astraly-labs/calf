@@ -1,18 +1,18 @@
 use super::{
-    batch::Batch, block_header::BlockHeader, certificate::{Certificate, CertificateId}, signing::SignedType, transaction::Transaction, vote::Vote, Acknowledgment, Digest, HeaderId, RequestId, WorkerId
+    batch::Batch, block_header::BlockHeader, certificate::{Certificate, CertificateId}, signing::SignedType, traits::AsBytes, transaction::Transaction, vote::Vote, Acknowledgment, Digest, HeaderId, RequestId, WorkerId
 };
 use derive_more::derive::Constructor;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum NetworkRequest {
     Broadcast(RequestPayload),
     SendTo(PeerId, RequestPayload),
     SendToPrimary(RequestPayload),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum RequestPayload {
     Batch(Batch<Transaction>),
     Acknowledgment(Acknowledgment),
@@ -24,7 +24,7 @@ pub enum RequestPayload {
     SyncResponse(SyncResponse),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum SyncRequest {
     RequestCertificates(Vec<CertificateId>),
     RequestBlockHeaders(Vec<HeaderId>),
@@ -34,14 +34,21 @@ pub enum SyncRequest {
     SyncDigest(Digest),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+impl AsBytes for SyncRequest {
+    fn bytes(&self) -> Vec<u8> {
+        // Serialize self using bincode
+        bincode::serialize(self).expect("Failed to serialize SyncRequest")
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum SyncResponse {
     Success(RequestId, SyncData),
     Partial(RequestId, SyncData),
     Failure,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum SyncData {
     Certificates(Vec<Certificate>),
     Headers(Vec<BlockHeader>),
