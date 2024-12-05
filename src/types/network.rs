@@ -1,5 +1,12 @@
 use super::{
-    batch::Batch, block_header::BlockHeader, certificate::{Certificate, CertificateId}, signing::SignedType, traits::AsBytes, transaction::Transaction, vote::Vote, Acknowledgment, Digest, HeaderId, RequestId, WorkerId
+    batch::Batch,
+    block_header::BlockHeader,
+    certificate::{Certificate, CertificateId},
+    signing::SignedType,
+    traits::AsBytes,
+    transaction::Transaction,
+    vote::Vote,
+    Acknowledgment, Digest, HeaderId, RequestId, WorkerId,
 };
 use derive_more::derive::Constructor;
 use libp2p::PeerId;

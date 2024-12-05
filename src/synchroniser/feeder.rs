@@ -11,7 +11,8 @@ use crate::{
         certificate::Certificate,
         network::{SyncData, SyncRequest, SyncResponse},
         traits::{AsHex, Hash},
-        transaction::Transaction, RequestId,
+        transaction::Transaction,
+        RequestId,
     },
 };
 
@@ -43,17 +44,21 @@ impl Feeder {
                 }
                 SyncRequest::RequestBlockHeaders(payload) => {
                     self.try_retrieve_block_header(&payload, request_id).await?
-                },
+                }
                 SyncRequest::RequestBatches(payload) => {
                     self.try_retrieve_batches(&payload, request_id).await?
-                },
+                }
                 SyncRequest::SyncDigest(_) => todo!(),
             }
         }
         Ok(())
     }
 
-    pub async fn try_retrieve_certficate(&self, payload: &Vec<[u8; 32]>, req_id: RequestId)  -> anyhow::Result<()> {
+    pub async fn try_retrieve_certficate(
+        &self,
+        payload: &Vec<[u8; 32]>,
+        req_id: RequestId,
+    ) -> anyhow::Result<()> {
         let mut datas: Vec<Certificate> = vec![];
         let certif_to_retrieve = payload.len();
         for certificate_id in payload {
@@ -75,10 +80,17 @@ impl Feeder {
             len if len == 0 => SyncResponse::Failure,
             _ => unreachable!(),
         };
-        self.data_tx.send(response).await.context("Failed to send certificate data over the channel")
+        self.data_tx
+            .send(response)
+            .await
+            .context("Failed to send certificate data over the channel")
     }
 
-    pub async fn try_retrieve_block_header(&self, payload: &Vec<[u8; 32]>, req_id: RequestId)  -> anyhow::Result<()> {
+    pub async fn try_retrieve_block_header(
+        &self,
+        payload: &Vec<[u8; 32]>,
+        req_id: RequestId,
+    ) -> anyhow::Result<()> {
         let mut datas: Vec<BlockHeader> = vec![];
         let certif_to_retrieve = payload.len();
         for header_id in payload {
@@ -100,10 +112,17 @@ impl Feeder {
             len if len == 0 => SyncResponse::Failure,
             _ => unreachable!(),
         };
-        self.data_tx.send(response).await.context("Failed to send headers data over the channel")
+        self.data_tx
+            .send(response)
+            .await
+            .context("Failed to send headers data over the channel")
     }
 
-    pub async fn try_retrieve_batches(&self, payload: &Vec<[u8; 32]>, req_id: RequestId) -> anyhow::Result<()> {
+    pub async fn try_retrieve_batches(
+        &self,
+        payload: &Vec<[u8; 32]>,
+        req_id: RequestId,
+    ) -> anyhow::Result<()> {
         let mut datas: Vec<Batch<Transaction>> = vec![];
         let certif_to_retrieve = payload.len();
         for digest in payload {
@@ -125,6 +144,9 @@ impl Feeder {
             len if len == 0 => SyncResponse::Failure,
             _ => unreachable!(),
         };
-        self.data_tx.send(response).await.context("Failed to send batches data over the channel")
+        self.data_tx
+            .send(response)
+            .await
+            .context("Failed to send batches data over the channel")
     }
 }
