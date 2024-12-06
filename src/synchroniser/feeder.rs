@@ -1,7 +1,9 @@
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 use anyhow::Context;
-use tokio::sync::mpsc;
+use proc_macros::Spawn;
+use tokio::sync::broadcast;
 
 use crate::{
     db::{Column, Db},
@@ -9,49 +11,42 @@ use crate::{
         batch::Batch,
         block_header::BlockHeader,
         certificate::Certificate,
-        network::{SyncData, SyncRequest, SyncResponse},
-        traits::{AsHex, Hash},
+        network::{ReceivedObject, SyncData, SyncRequest, SyncResponse},
+        traits::{Hash, AsHex},
         transaction::Transaction,
         RequestId,
     },
 };
 
-pub struct Feeder {
-    pub req_rx: mpsc::Receiver<SyncRequest>,
-    pub data_tx: mpsc::Sender<SyncResponse>,
-    pub db: Arc<Db>,
+#[derive(Spawn)]
+pub(crate) struct Feeder {
+    req_rx: broadcast::Receiver<ReceivedObject<SyncRequest>>,
+    data_tx: broadcast::Sender<SyncResponse>,
+    db: Arc<Db>,
 }
 
 impl Feeder {
-    pub fn new(
-        req_rx: mpsc::Receiver<SyncRequest>,
-        data_tx: mpsc::Sender<SyncResponse>,
-        db: Arc<Db>,
-    ) -> Self {
-        Self {
-            req_rx,
-            data_tx,
-            db,
-        }
-    }
-
-    pub async fn run_forever(&mut self) -> anyhow::Result<()> {
-        while let Some(request) = self.req_rx.recv().await {
-            let request_id = request.digest();
-            match request {
-                SyncRequest::RequestCertificates(payload) => {
-                    self.try_retrieve_certficate(&payload, request_id).await?
-                }
-                SyncRequest::RequestBlockHeaders(payload) => {
-                    self.try_retrieve_block_header(&payload, request_id).await?
-                }
-                SyncRequest::RequestBatches(payload) => {
-                    self.try_retrieve_batches(&payload, request_id).await?
-                }
-                SyncRequest::SyncDigest(_) => todo!(),
+    pub async fn run(mut self) -> anyhow::Result<()> {
+        loop {
+            match self.req_rx.recv().await {
+                Ok(request) => {
+                    let request_id = request.object.digest();
+                    match request.object {
+                        SyncRequest::RequestCertificates(payload) => {
+                            self.try_retrieve_certficate(&payload, request_id).await?
+                        }
+                        SyncRequest::RequestBlockHeaders(payload) => {
+                            self.try_retrieve_block_header(&payload, request_id).await?
+                        }
+                        SyncRequest::RequestBatches(payload) => {
+                            self.try_retrieve_batches(&payload, request_id).await?
+                        }
+                        SyncRequest::SyncDigest(_) => todo!(),
+                    }
+                },
+                Err(e) => tracing::error!("Feeder: Failed to recv {}",e),
             }
-        }
-        Ok(())
+        } 
     }
 
     pub async fn try_retrieve_certficate(
@@ -82,8 +77,8 @@ impl Feeder {
         };
         self.data_tx
             .send(response)
-            .await
-            .context("Failed to send certificate data over the channel")
+            .context("Failed to send certificate data over the channel")?;
+        Ok(())
     }
 
     pub async fn try_retrieve_block_header(
@@ -114,8 +109,8 @@ impl Feeder {
         };
         self.data_tx
             .send(response)
-            .await
-            .context("Failed to send headers data over the channel")
+            .context("Failed to send headers data over the channel")?;
+        Ok(())
     }
 
     pub async fn try_retrieve_batches(
@@ -146,7 +141,7 @@ impl Feeder {
         };
         self.data_tx
             .send(response)
-            .await
-            .context("Failed to send batches data over the channel")
+            .context("Failed to send batches data over the channel")?;
+        Ok(())
     }
 }

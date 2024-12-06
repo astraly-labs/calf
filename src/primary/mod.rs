@@ -32,6 +32,7 @@ use crate::{
         Digest, Round,
     },
     utils::{self, CircularBuffer},
+    synchroniser::feeder::Feeder,
     CHANNEL_SIZE,
 };
 
@@ -113,7 +114,7 @@ impl BaseAgent for Primary {
         let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
         let (round_tx, round_rx) =
             watch::channel::<(Round, HashSet<Certificate>)>((0, HashSet::new()));
-        let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx) =
+        let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx, sync_req_rx, sync_resp_tx) =
             PrimaryConnector::new(CHANNEL_SIZE);
         let (certificates_tx, certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
@@ -182,12 +183,20 @@ impl BaseAgent for Primary {
             self.db.clone(),
         );
 
+        let feeder_handle = Feeder::spawn(
+            cancellation_token.clone(),
+            sync_req_rx,
+            sync_resp_tx,
+            self.db.clone(),
+        );
+
         let res = tokio::try_join!(
             network_handle,
             digests_receiver_handle,
             header_builder_handle,
             header_elector_handle,
             dag_processor_handle,
+            feeder_handle,
         );
         match res {
             Ok(_) => tracing::info!("Primary exited successfully"),
