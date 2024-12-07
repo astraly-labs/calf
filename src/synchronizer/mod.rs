@@ -24,7 +24,7 @@ pub enum FetcherCommand {
     Remove(Box<dyn Fetch + Send + Sync + 'static>),
 }
 
-/// A structure that contains an object to fetch and the source to fetch it from
+/// A structure that contains and object to fetch and the source to fetch it from
 pub struct RequestedObject<T> {
     pub object: T,
     pub source: Box<dyn DataProvider + Send + Sync + 'static>,
