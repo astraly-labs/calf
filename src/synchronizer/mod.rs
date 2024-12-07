@@ -24,6 +24,7 @@ pub enum FetcherCommand {
     Remove(Box<dyn Fetch + Send + Sync + 'static>),
 }
 
+/// A structure that contains an object to fetch and the source to fetch it from
 pub struct RequestedObject<T> {
     pub object: T,
     pub source: Box<dyn DataProvider + Send + Sync + 'static>,
@@ -94,16 +95,14 @@ where
                     }
                 }
             });
-            let (response, sender) = match tokio::time::timeout(
-                std::time::Duration::from_millis(ONE_PEER_FETCH_TIMEOUT),
-                wait_for_response,
-            )
-            .await
-            {
-                Ok(Ok((response, sender))) => (response, sender),
-                Ok(Err(_)) => continue,
-                Err(_) => Err(FetchError::BrokenChannel)?,
-            };
+            let (response, sender) =
+                match tokio::time::timeout(std::time::Duration::from_millis(ONE_PEER_FETCH_TIMEOUT), wait_for_response)
+                    .await
+                {
+                    Ok(Ok((response, sender))) => (response, sender),
+                    Ok(Err(_)) => continue,
+                    Err(_) => Err(FetchError::BrokenChannel)?,
+                };
             match response {
                 SyncResponse::Success(_, data) => {
                     let payloads = data.into_payloads();
@@ -115,14 +114,14 @@ where
                         })
                         .collect());
                     //TODO: check the accumulator too
-                }
+                },
                 SyncResponse::Partial(_, _data) => {
                     //TODO: remove fetched data from next request to next peer, add fetched data to an accumulator
                     todo!()
-                }
+                },
                 SyncResponse::Failure(_) => {
                     continue;
-                }
+                },
             }
         }
         //TODO: return the accumulator
