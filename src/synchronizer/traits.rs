@@ -43,18 +43,18 @@ pub trait Sourced<S, T>
 where
     S: DataProvider,
 {
-    fn requested_with_source(self, source: S) -> RequestedObject<T>;
+    fn requested_with_source(self, source: S) -> Box<RequestedObject<T>>;
 }
 
 impl<S, T> Sourced<S, T> for T
 where
     S: DataProvider + Sync + Send + 'static,
 {
-    fn requested_with_source(self, source: S) -> RequestedObject<T> {
-        RequestedObject {
+    fn requested_with_source(self, source: S) -> Box<RequestedObject<T>> {
+        Box::new(RequestedObject {
             object: self,
             source: Box::new(source),
-        }
+        })
     }
 }
 

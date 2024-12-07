@@ -2,7 +2,7 @@ pub mod dag_processor;
 pub mod digests_receiver;
 pub mod header_builder;
 pub mod header_elector;
-pub mod synchronizer;
+pub mod sync_tracker;
 
 use anyhow::Context;
 use clap::{command, Parser};

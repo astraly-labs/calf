@@ -5,10 +5,10 @@ use tokio::sync::{broadcast, mpsc};
 use traits::{DataProvider, Fetch, IntoSyncRequest};
 
 use crate::types::{
-        block_header::HeaderId,
-        certificate::CertificateId,
-        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
-    };
+    block_header::HeaderId,
+    certificate::CertificateId,
+    network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
+};
 
 pub mod fetcher;
 pub mod traits;
@@ -53,7 +53,7 @@ where
 }
 
 #[async_trait]
-/// How we fetch things, the logic is defined here for all thins that can be turned into a SyncRequest
+/// How we fetch things, the logic is defined here for all things that can be turned into a SyncRequest
 impl<T> Fetch for T
 where
     T: IntoSyncRequest + Send + Sync + 'static,
@@ -91,14 +91,16 @@ where
                     }
                 }
             });
-            let (response, sender) =
-                match tokio::time::timeout(std::time::Duration::from_millis(ONE_PEER_FETCH_TIMEOUT), wait_for_response)
-                    .await
-                {
-                    Ok(Ok((response, sender))) => (response, sender),
-                    Ok(Err(_)) => continue,
-                    Err(_) => Err(FetchError::BrokenChannel)?,
-                };
+            let (response, sender) = match tokio::time::timeout(
+                std::time::Duration::from_millis(ONE_PEER_FETCH_TIMEOUT),
+                wait_for_response,
+            )
+            .await
+            {
+                Ok(Ok((response, sender))) => (response, sender),
+                Ok(Err(_)) => continue,
+                Err(_) => Err(FetchError::BrokenChannel)?,
+            };
             match response {
                 SyncResponse::Success(_, data) => {
                     let payloads = data.into_payloads();
@@ -110,14 +112,14 @@ where
                         })
                         .collect());
                     //TODO: check the accumulator too
-                },
+                }
                 SyncResponse::Partial(_, _data) => {
                     //TODO: remove fetched data from next request to next peer, add fetched data to an accumulator
                     todo!()
-                },
+                }
                 SyncResponse::Failure(_) => {
                     continue;
-                },
+                }
             }
         }
         //TODO: return the accumulator
