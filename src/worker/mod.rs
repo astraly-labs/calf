@@ -13,7 +13,7 @@ use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use libp2p::identity::ed25519;
 use quorum_waiter::QuorumWaiter;
 use std::{path::PathBuf, sync::Arc};
-use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio_util::sync::CancellationToken;
 use transaction_event_listener::TransactionEventListener;
 

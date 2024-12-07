@@ -1,17 +1,12 @@
-use libp2p::PeerId;
-use std::{any, sync::Arc};
-use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
-use tokio_util::sync::CancellationToken;
+use std::sync::Arc;
+use tokio::sync::{broadcast, mpsc, RwLock};
 
 use crate::{
     network::{Connect, ManagePeers},
-    types::{
-        certificate::{Certificate, CertificateId},
-        network::{NetworkRequest, ReceivedObject, SyncResponse},
-    },
+    types::network::{NetworkRequest, ReceivedObject, SyncResponse},
 };
 
-use super::{traits::Sourced, Fetch, FetcherCommand};
+use super::Fetch;
 
 pub struct Fetcher<R>
 where

@@ -1,4 +1,4 @@
-use std::{sync::Arc, vec};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use libp2p::PeerId;
@@ -6,13 +6,10 @@ use tokio::sync::{broadcast, mpsc, RwLock};
 
 use crate::{
     network::ManagePeers,
-    types::{
-        certificate::CertificateId,
-        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
-    },
+    types::network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
 };
 
-use super::{FetchError, RequestedObject};
+use super::RequestedObject;
 
 #[async_trait]
 /// Detach the logic of fetching the objects from the logic of the object to fetch

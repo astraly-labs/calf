@@ -2,17 +2,13 @@ use std::collections::HashSet;
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast, mpsc};
-use traits::{DataProvider, Fetch, IntoSyncRequest, Sourced};
+use traits::{DataProvider, Fetch, IntoSyncRequest};
 
-use crate::{
-    network::Peer,
-    types::{
+use crate::types::{
         block_header::HeaderId,
-        certificate::{Certificate, CertificateId},
+        certificate::CertificateId,
         network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
-        Digest,
-    },
-};
+    };
 
 pub mod fetcher;
 pub mod traits;
