@@ -3,11 +3,18 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use proc_macros::Id;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    certificate::CertificateId, signing::Signable, traits::AsBytes, Digest, PublicKey, Round,
+    certificate::CertificateId,
+    signing::Signable,
+    traits::{AsBytes, Hash},
+    Digest, PublicKey, Round,
 };
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Id)]
+pub struct HeaderId(pub Digest);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct BlockHeader {
@@ -67,6 +74,9 @@ impl BlockHeader {
                 .map_or(Err(HeaderError::NotEnoughParents), |_| Ok(()))
         }
     }
+    pub fn id(&self) -> Digest {
+        self.digest()
+    }
 }
 
 impl AsBytes for BlockHeader {
@@ -76,7 +86,7 @@ impl AsBytes for BlockHeader {
             .chain(self.round.to_le_bytes().iter())
             .chain(self.timestamp_ms.to_le_bytes().iter())
             .chain(self.digests.iter().flat_map(|d| d.iter()))
-            .chain(self.certificates_ids.iter().flat_map(|c| c.iter()))
+            .chain(self.certificates_ids.iter().flat_map(|c| c.0.iter()))
             .copied()
             .collect()
     }

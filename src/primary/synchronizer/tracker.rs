@@ -9,6 +9,8 @@ use crate::types::{
     network::ReceivedObject,
 };
 
+use super::FetcherCommand;
+
 #[derive(Spawn)]
 pub struct SyncTracker {
     // The receiver for the certificates from the peers, our certificates cannot be orphans because they certify a header that has been built with the certificates from the local DAG
@@ -17,7 +19,7 @@ pub struct SyncTracker {
     orphans_rx: mpsc::Receiver<OrphanCertificate>,
     // A watch channel to expose all orpahn certificates, to avoid to iterate avec all the DAG elements
     orphans_tx: watch::Sender<CertificateId>,
-    fetcher_tx: mpsc::Sender<Vec<CertificateId>>,
+    fetcher_commands_tx: mpsc::Sender<FetcherCommand>,
     // When the DAG that we are trying to synchronize is outdated: TODO: continue anyway ? elsewhere ?
     reset_trigger: mpsc::Receiver<()>,
 }
@@ -38,7 +40,7 @@ impl SyncTracker {
             tokio::select! {
                 Some(orphan) = self.orphans_rx.recv() => {
                     tracing::info!("📡 Received orphan certificate {}", orphan.id.as_hex_string());
-                    self.fetcher_tx.send(orphan.missing_parents.clone()).await?;
+                    self.fetcher_commands_tx.send(FetcherCommand::Push()).await?;
                     orphans.push(orphan);
                 }
                 Ok(certificate) = self.certificates_rx.recv() => {

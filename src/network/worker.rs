@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     network::PeerIdentifyInfos,
@@ -12,7 +12,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId, Swarm};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 
 use super::{swarm_actions, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, WorkerNetwork};
 
@@ -62,14 +62,16 @@ impl WorkerPeers {
 
 #[async_trait]
 impl Connect for WorkerConnector {
-    async fn dispatch(&self, payload: RequestPayload, sender: PeerId) -> anyhow::Result<()> {
+    async fn dispatch(&self, payload: &RequestPayload, sender: PeerId) -> anyhow::Result<()> {
         match payload {
             RequestPayload::Acknowledgment(ack) => {
-                self.acks_tx.send(ReceivedObject::new(ack, sender)).await?;
+                self.acks_tx
+                    .send(ReceivedObject::new(ack.clone(), sender))
+                    .await?;
             }
             RequestPayload::Batch(batch) => {
                 self.batches_tx
-                    .send(ReceivedObject::new(batch, sender))
+                    .send(ReceivedObject::new(batch.clone(), sender))
                     .await?;
             }
             _ => {}
@@ -80,19 +82,19 @@ impl Connect for WorkerConnector {
 
 #[async_trait]
 impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
-    fn handle_request(
+    async fn handle_request(
         swarm: &mut Swarm<CalfBehavior>,
         request: NetworkRequest,
-        peers: &WorkerPeers,
+        peers: Arc<RwLock<WorkerPeers>>,
     ) -> anyhow::Result<()> {
         match request {
             NetworkRequest::Broadcast(req) => {
-                swarm_actions::broadcast(swarm, peers, req)?;
+                swarm_actions::broadcast(swarm, peers, req).await?;
             }
             NetworkRequest::SendTo(id, req) => {
                 swarm_actions::send(swarm, id, req)?;
             }
-            NetworkRequest::SendToPrimary(req) => match peers.primary {
+            NetworkRequest::SendToPrimary(req) => match peers.read().await.primary {
                 Some((id, _)) => {
                     if let RequestPayload::Digest(_) = req.clone() {}
                     swarm_actions::send(swarm, id, req)?;
@@ -169,7 +171,7 @@ impl ManagePeers for WorkerPeers {
                 .unwrap_or(false)
             || self.established.contains_key(&id)
     }
-    fn get_to_dial_peers(_committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
+    fn get_to_dial_peers(&self, _committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
         todo!()
     }
     fn add_established(&mut self, id: PeerId, addr: Multiaddr) {

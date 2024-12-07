@@ -13,7 +13,7 @@ use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use libp2p::identity::ed25519;
 use quorum_waiter::QuorumWaiter;
 use std::{path::PathBuf, sync::Arc};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 use transaction_event_listener::TransactionEventListener;
 
@@ -158,10 +158,10 @@ impl BaseAgent for Worker {
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
 
-        let peers = WorkerPeers::new(
+        let peers = Arc::new(RwLock::new(WorkerPeers::new(
             self.id,
             hex::encode(self.validator_keypair.public().to_bytes()),
-        );
+        )));
 
         tracing::info!(
             "launched with validator keypair: {}",

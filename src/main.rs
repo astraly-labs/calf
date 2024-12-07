@@ -7,6 +7,7 @@ pub mod db;
 pub mod network;
 pub mod primary;
 pub mod settings;
+pub mod synchronizer;
 pub mod types;
 pub mod utils;
 pub mod worker;

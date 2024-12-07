@@ -16,7 +16,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use tokio::sync::{mpsc, watch, Mutex};
+use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -122,12 +122,12 @@ impl BaseAgent for Primary {
         )));
         let cancellation_token = CancellationToken::new();
 
-        let peers = PrimaryPeers {
+        let peers = Arc::new(RwLock::new(PrimaryPeers {
             authority_pubkey: hex::encode(self.validator_keypair.public().to_bytes()),
             workers: vec![],
             primaries: HashMap::new(),
             established: HashMap::new(),
-        };
+        }));
 
         tracing::info!(
             "launched with validator keypair: {}",
@@ -168,7 +168,7 @@ impl BaseAgent for Primary {
             connector,
             self.keypair.clone(),
             self.keypair.clone(),
-            peers,
+            peers.clone(),
             network_rx,
             cancellation_token.clone(),
         );

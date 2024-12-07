@@ -10,8 +10,8 @@ use crate::{
 };
 use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId, Swarm};
-use std::collections::HashMap;
-use tokio::sync::broadcast;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::{broadcast, RwLock};
 
 use super::{
     swarm_actions, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, PeerIdentifyInfos,
@@ -64,20 +64,23 @@ pub struct PrimaryPeers {
 
 #[async_trait]
 impl Connect for PrimaryConnector {
-    async fn dispatch(&self, payload: RequestPayload, sender: PeerId) -> anyhow::Result<()> {
+    async fn dispatch(&self, payload: &RequestPayload, sender: PeerId) -> anyhow::Result<()> {
         match payload {
             RequestPayload::Digest(digest) => {
-                self.digest_tx.send(ReceivedObject::new(digest, sender))?;
+                self.digest_tx
+                    .send(ReceivedObject::new(digest.clone(), sender))?;
             }
             RequestPayload::Header(header) => {
-                self.headers_tx.send(ReceivedObject::new(header, sender))?;
+                self.headers_tx
+                    .send(ReceivedObject::new(header.clone(), sender))?;
             }
             RequestPayload::Vote(vote) => {
-                self.vote_tx.send(ReceivedObject::new(vote, sender))?;
+                self.vote_tx
+                    .send(ReceivedObject::new(vote.clone(), sender))?;
             }
             RequestPayload::Certificate(certificate) => {
                 self.certificates_tx
-                    .send(ReceivedObject::new(certificate, sender))?;
+                    .send(ReceivedObject::new(certificate.clone(), sender))?;
             }
             _ => {}
         }
@@ -137,7 +140,7 @@ impl ManagePeers for PrimaryPeers {
             || self.workers.iter().any(|(peer_id, _)| peer_id == &id)
             || self.established.contains_key(&id)
     }
-    fn get_to_dial_peers(_committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
+    fn get_to_dial_peers(&self, _committee: &Committee) -> Vec<(PeerId, Multiaddr)> {
         todo!()
     }
     fn add_established(&mut self, id: PeerId, addr: Multiaddr) {
@@ -150,14 +153,14 @@ impl ManagePeers for PrimaryPeers {
 
 #[async_trait]
 impl HandleEvent<PrimaryPeers, PrimaryConnector> for PrimaryNetwork {
-    fn handle_request(
+    async fn handle_request(
         swarm: &mut Swarm<CalfBehavior>,
         request: NetworkRequest,
-        peers: &PrimaryPeers,
+        peers: Arc<RwLock<PrimaryPeers>>,
     ) -> anyhow::Result<()> {
         match request {
             NetworkRequest::Broadcast(req) => {
-                swarm_actions::broadcast(swarm, peers, req)?;
+                swarm_actions::broadcast(swarm, peers, req).await?;
             }
             NetworkRequest::SendTo(id, req) => {
                 swarm_actions::send(swarm, id, req)?;

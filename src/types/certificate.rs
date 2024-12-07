@@ -5,11 +5,14 @@ use super::{
     Digest, PublicKey, Round,
 };
 use derive_more::derive::Constructor;
+use proc_macros::Id;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 pub type Seed = Digest;
-pub type CertificateId = Digest;
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Copy, Id)]
+pub struct CertificateId(pub Digest);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum Certificate {
@@ -30,13 +33,13 @@ pub struct DerivedCertificate {
 impl Certificate {
     pub fn id(&self) -> CertificateId {
         match self {
-            Certificate::Genesis(seed) => seed.digest(),
-            Certificate::Derived(_) => self.digest(),
-            Certificate::Dummy => [0; 32],
+            Certificate::Genesis(seed) => seed.digest().into(),
+            Certificate::Derived(_) => self.digest().into(),
+            Certificate::Dummy => [0; 32].into(),
         }
     }
     pub fn id_as_hex(&self) -> String {
-        hex::encode(self.id())
+        hex::encode(self.id().0)
     }
     pub fn set_round(&mut self, round: Round) {
         match self {
@@ -65,7 +68,7 @@ impl Certificate {
         match self {
             Certificate::Genesis(_) => HashSet::new(),
             Certificate::Derived(derived) => {
-                derived.parents.iter().map(|p| hex::encode(p)).collect()
+                derived.parents.iter().map(|p| hex::encode(p.0)).collect()
             }
             Certificate::Dummy => HashSet::new(),
         }
@@ -112,7 +115,7 @@ impl AsBytes for Certificate {
                     .chain(certificate.round.to_le_bytes().iter())
                     .chain(votes.iter())
                     .chain(certificate.header_hash.iter())
-                    .chain(certificate.parents.iter().flat_map(|p| p.iter()))
+                    .chain(certificate.parents.iter().flat_map(|p| p.0.iter()))
                     .copied()
                     .collect();
                 data

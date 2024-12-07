@@ -24,10 +24,8 @@ impl DagProcessor {
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let genesis = Certificate::genesis(GENESIS_SEED);
         let mut dag = Dag::new_with_root(0, genesis.clone());
-        self.rounds_tx.send((
-            dag.height() as u64 + 1,
-            HashSet::from_iter([genesis].into_iter()),
-        ))?;
+        self.rounds_tx
+            .send((dag.height() + 1, HashSet::from_iter([genesis].into_iter())))?;
         loop {
             tokio::select! {
                 Some(certificate) = self.certificates_rx.recv() => {
@@ -64,8 +62,7 @@ impl DagProcessor {
                     dag.height(),
                     round_certificates_number
                 );
-                self.rounds_tx
-                    .send((dag.height() as u64 + 1, certificates))?;
+                self.rounds_tx.send((dag.height() + 1, certificates))?;
             }
         }
         Ok(())

@@ -14,8 +14,8 @@ use libp2p::{
     PeerId, StreamProtocol, Swarm,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, marker::PhantomData, time::Duration};
-use tokio::sync::mpsc;
+use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
+use tokio::sync::{mpsc, RwLock};
 use tokio_util::sync::CancellationToken;
 
 pub mod primary;
@@ -59,36 +59,36 @@ pub trait ManagePeers {
     fn identify(&self) -> PeerIdentifyInfos;
     fn get_broadcast_peers(&self) -> Vec<(PeerId, Multiaddr)>;
     fn get_send_peer(&self, id: PeerId) -> Option<(PeerId, Multiaddr)>;
-    fn get_to_dial_peers(committee: &Committee) -> Vec<(PeerId, Multiaddr)>;
+    fn get_to_dial_peers(&self, committee: &Committee) -> Vec<(PeerId, Multiaddr)>;
 }
 
 #[async_trait]
 pub trait Connect {
-    async fn dispatch(&self, payload: RequestPayload, sender: PeerId) -> anyhow::Result<()>;
+    async fn dispatch(&self, payload: &RequestPayload, sender: PeerId) -> anyhow::Result<()>;
 }
 
 #[async_trait]
 pub trait HandleEvent<P, C>
 where
-    P: ManagePeers + Send,
+    P: ManagePeers + Send + Sync,
     C: Connect + Send,
 {
-    fn handle_request(
+    async fn handle_request(
         swarm: &mut Swarm<CalfBehavior>,
         request: NetworkRequest,
-        peers: &P,
+        peers: Arc<RwLock<P>>,
     ) -> anyhow::Result<()>;
 }
 
 pub(crate) struct Network<A, C, P>
 where
     C: Connect + Send,
-    P: ManagePeers + Send,
+    P: ManagePeers + Send + Sync,
     A: HandleEvent<P, C>,
 {
     _committee: Committee,
     swarm: libp2p::Swarm<CalfBehavior>,
-    peers: P,
+    peers: Arc<RwLock<P>>,
     connector: C,
     requests_rx: mpsc::Receiver<NetworkRequest>,
     _authority_keypair: ed25519::Keypair,
@@ -99,7 +99,7 @@ where
 impl<A, C, P> Network<A, C, P>
 where
     C: Connect + Send + 'static,
-    P: ManagePeers + Send + 'static,
+    P: ManagePeers + Send + Sync + 'static,
     A: HandleEvent<P, C> + Send,
 {
     pub fn spawn(
@@ -107,14 +107,14 @@ where
         connector: C,
         authority_keypair: ed25519::Keypair,
         keypair: ed25519::Keypair,
-        peers: P,
+        peers: Arc<RwLock<P>>,
         requests_rx: mpsc::Receiver<NetworkRequest>,
         cancellation_token: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
+            let identify_infos = serde_json::to_string(&peers.read().await.identify())
+                .expect("serialization error, is it possible ?");
             let keypair_lib = Keypair::from(keypair.clone());
-            let identify_infos = serde_json::to_string(&peers.identify())
-                .expect("serialization error: is it possible ?");
             let mdns = match mdns::tokio::Behaviour::new(
                 mdns::Config::default(),
                 keypair_lib.public().to_peer_id(),
@@ -193,10 +193,10 @@ where
         loop {
             tokio::select! {
                 event = self.swarm.select_next_some() => {
-                    swarm_events::handle_event(event, &mut self.swarm, &mut self.peers, &mut self.connector).await?;
+                    swarm_events::handle_event(event, &mut self.swarm, self.peers.clone(), &mut self.connector).await?;
                 },
                 Some(message) = self.requests_rx.recv() => {
-                    A::handle_request(&mut self.swarm, message, &self.peers)?;
+                    A::handle_request(&mut self.swarm, message, self.peers.clone()).await?;
                 }
             }
         }
