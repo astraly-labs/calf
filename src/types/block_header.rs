@@ -7,13 +7,14 @@ use proc_macros::Id;
 use serde::{Deserialize, Serialize};
 
 use super::{
+    batch::BatchId,
     certificate::CertificateId,
     signing::Signable,
     traits::{AsBytes, Hash},
     Digest, PublicKey, Round,
 };
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Id)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Id, Hash)]
 pub struct HeaderId(pub Digest);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -21,14 +22,14 @@ pub struct BlockHeader {
     pub author: PublicKey,
     pub round: Round,
     pub timestamp_ms: u128,
-    pub digests: Vec<Digest>,
+    pub digests: Vec<BatchId>,
     pub certificates_ids: Vec<CertificateId>,
 }
 
 impl BlockHeader {
     pub fn new(
         author: PublicKey,
-        digests: Vec<Digest>,
+        digests: Vec<BatchId>,
         certificates_ids: Vec<CertificateId>,
         round: Round,
     ) -> Self {
@@ -85,7 +86,7 @@ impl AsBytes for BlockHeader {
             .iter()
             .chain(self.round.to_le_bytes().iter())
             .chain(self.timestamp_ms.to_le_bytes().iter())
-            .chain(self.digests.iter().flat_map(|d| d.iter()))
+            .chain(self.digests.iter().flat_map(|d| d.0.iter()))
             .chain(self.certificates_ids.iter().flat_map(|c| c.0.iter()))
             .copied()
             .collect()

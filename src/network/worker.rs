@@ -16,6 +16,7 @@ use tokio::sync::{mpsc, RwLock};
 
 use super::{swarm_actions, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, WorkerNetwork};
 
+#[derive(Clone)]
 pub struct WorkerConnector {
     acks_tx: mpsc::Sender<ReceivedObject<Acknowledgment>>,
     batches_tx: mpsc::Sender<ReceivedObject<Batch<Transaction>>>,

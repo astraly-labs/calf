@@ -6,6 +6,7 @@ pub mod sync_tracker;
 
 use anyhow::Context;
 use clap::{command, Parser};
+use dag_processor::DagProcessor;
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use digests_receiver::DigestReceiver;
 use header_builder::HeaderBuilder;
@@ -16,6 +17,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
+use sync_tracker::SyncTracker;
 use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
@@ -26,9 +28,11 @@ use crate::{
         Network, PrimaryNetwork,
     },
     settings::parser::{Committee, FileLoader as _},
+    synchronizer::fetcher::{self, Fetcher},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
-        certificate::Certificate,
+        batch::BatchId,
+        certificate::{Certificate, CertificateId},
         Digest, Round,
     },
     utils::{self, CircularBuffer},
@@ -113,11 +117,20 @@ impl BaseAgent for Primary {
         let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
         let (round_tx, round_rx) =
             watch::channel::<(Round, HashSet<Certificate>)>((0, HashSet::new()));
-        let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx) =
+        let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx, sync_responses_rx) =
             PrimaryConnector::new(CHANNEL_SIZE);
         let (certificates_tx, certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
-        let digests_buffer = Arc::new(Mutex::new(CircularBuffer::<Digest>::new(
+        let (orphans_tx, orphans_rx) = mpsc::channel(CHANNEL_SIZE);
+        let (missing_headers_tx, missing_headers_rx) = mpsc::channel(CHANNEL_SIZE);
+        let (incomplete_headers_tx, incomplete_headers_rx) = mpsc::channel(CHANNEL_SIZE);
+
+        let (orphans_list_tx, orphans_list_rx) = watch::channel(HashSet::<CertificateId>::new());
+        let (fetcher_commands_tx, fetcher_commands_rx) = mpsc::channel(CHANNEL_SIZE);
+
+        let (sync_reset_trigger_tx, sync_reset_trigger_rx) = mpsc::channel(CHANNEL_SIZE);
+
+        let digests_buffer = Arc::new(Mutex::new(CircularBuffer::<BatchId>::new(
             MAX_DIGESTS_IN_HEADER,
         )));
         let cancellation_token = CancellationToken::new();
@@ -161,11 +174,12 @@ impl BaseAgent for Primary {
             self.validator_keypair.clone(),
             self.db.clone(),
             self.commitee.clone(),
+            incomplete_headers_tx,
         );
 
         let network_handle = Network::<PrimaryNetwork, PrimaryConnector, PrimaryPeers>::spawn(
             self.commitee.clone(),
-            connector,
+            connector.clone(),
             self.keypair.clone(),
             self.keypair.clone(),
             peers.clone(),
@@ -173,16 +187,41 @@ impl BaseAgent for Primary {
             cancellation_token.clone(),
         );
 
-        let dag_processor_handle = dag_processor::DagProcessor::spawn(
+        let dag_processor_handle = DagProcessor::spawn(
             cancellation_token.clone(),
-            peers_certificates_rx,
+            peers_certificates_rx.resubscribe(),
             certificates_rx,
+            orphans_tx,
+            missing_headers_tx,
+            orphans_list_rx,
             round_tx,
             self.commitee.clone(),
             self.db.clone(),
+            sync_reset_trigger_tx,
+        );
+
+        let sync_tracker_handle = SyncTracker::spawn(
+            cancellation_token.clone(),
+            peers_certificates_rx.resubscribe(),
+            orphans_rx,
+            orphans_list_tx,
+            fetcher_commands_tx,
+            sync_reset_trigger_rx,
+            incomplete_headers_rx,
+            missing_headers_rx,
+        );
+
+        let fetcher_handle = Fetcher::spawn(
+            cancellation_token.clone(),
+            network_tx.clone(),
+            fetcher_commands_rx,
+            sync_responses_rx,
+            Box::new(connector.clone()),
         );
 
         let res = tokio::try_join!(
+            fetcher_handle,
+            sync_tracker_handle,
             network_handle,
             digests_receiver_handle,
             header_builder_handle,

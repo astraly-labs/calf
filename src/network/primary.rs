@@ -1,9 +1,10 @@
 use crate::{
     settings::parser::Committee,
     types::{
+        batch::BatchId,
         block_header::BlockHeader,
         certificate::Certificate,
-        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncResponse},
         vote::Vote,
         Digest,
     },
@@ -18,11 +19,13 @@ use super::{
     PrimaryNetwork,
 };
 
+#[derive(Clone)]
 pub struct PrimaryConnector {
-    digest_tx: broadcast::Sender<ReceivedObject<Digest>>,
+    digest_tx: broadcast::Sender<ReceivedObject<BatchId>>,
     headers_tx: broadcast::Sender<ReceivedObject<BlockHeader>>,
     vote_tx: broadcast::Sender<ReceivedObject<Vote>>,
     certificates_tx: broadcast::Sender<ReceivedObject<Certificate>>,
+    sync_responses_tx: broadcast::Sender<ReceivedObject<SyncResponse>>,
 }
 
 impl PrimaryConnector {
@@ -30,15 +33,17 @@ impl PrimaryConnector {
         buffer: usize,
     ) -> (
         Self,
-        broadcast::Receiver<ReceivedObject<Digest>>,
+        broadcast::Receiver<ReceivedObject<BatchId>>,
         broadcast::Receiver<ReceivedObject<BlockHeader>>,
         broadcast::Receiver<ReceivedObject<Vote>>,
         broadcast::Receiver<ReceivedObject<Certificate>>,
+        broadcast::Receiver<ReceivedObject<SyncResponse>>,
     ) {
         let (digest_tx, digest_rx) = broadcast::channel(buffer);
         let (headers_tx, headers_rx) = broadcast::channel(buffer);
         let (vote_tx, vote_rx) = broadcast::channel(buffer);
         let (certificates_tx, certificates_rx) = broadcast::channel(buffer);
+        let (sync_responses_tx, sync_responses_rx) = broadcast::channel(buffer);
 
         (
             Self {
@@ -46,11 +51,13 @@ impl PrimaryConnector {
                 headers_tx,
                 vote_tx,
                 certificates_tx,
+                sync_responses_tx,
             },
             digest_rx,
             headers_rx,
             vote_rx,
             certificates_rx,
+            sync_responses_rx,
         )
     }
 }
@@ -68,7 +75,7 @@ impl Connect for PrimaryConnector {
         match payload {
             RequestPayload::Digest(digest) => {
                 self.digest_tx
-                    .send(ReceivedObject::new(digest.clone(), sender))?;
+                    .send(ReceivedObject::new(digest.clone().into(), sender))?;
             }
             RequestPayload::Header(header) => {
                 self.headers_tx
@@ -81,6 +88,10 @@ impl Connect for PrimaryConnector {
             RequestPayload::Certificate(certificate) => {
                 self.certificates_tx
                     .send(ReceivedObject::new(certificate.clone(), sender))?;
+            }
+            RequestPayload::SyncResponse(sync_response) => {
+                self.sync_responses_tx
+                    .send(ReceivedObject::new(sync_response.clone(), sender))?;
             }
             _ => {}
         }

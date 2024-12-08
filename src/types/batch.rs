@@ -1,8 +1,15 @@
-use super::traits::{AsBytes, Hash, Random};
+use super::{
+    traits::{AsBytes, Hash, Random},
+    Digest,
+};
 use derive_more::derive::Constructor;
+use proc_macros::Id;
 use serde::{Deserialize, Serialize};
 
 const RANDOM_ITEM_SIZE: usize = 32;
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default, Id, Hash)]
+pub struct BatchId(pub Digest);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Constructor, Default)]
 pub struct Batch<T>(pub Vec<T>)

@@ -3,11 +3,19 @@ use std::{collections::HashSet, sync::Arc};
 use crate::{
     db::{self, Db},
     settings::parser::Committee,
-    types::{certificate::Certificate, dag::Dag, network::ReceivedObject, Round},
+    types::{
+        block_header::HeaderId,
+        certificate::{Certificate, CertificateId},
+        dag::Dag,
+        network::ReceivedObject,
+        Round,
+    },
 };
 use proc_macros::Spawn;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_util::sync::CancellationToken;
+
+use super::sync_tracker::OrphanCertificate;
 
 const GENESIS_SEED: [u8; 32] = [0; 32];
 
@@ -15,11 +23,16 @@ const GENESIS_SEED: [u8; 32] = [0; 32];
 pub(crate) struct DagProcessor {
     peers_certificates_rx: broadcast::Receiver<ReceivedObject<Certificate>>,
     certificates_rx: mpsc::Receiver<Certificate>,
+    oprhans_tx: mpsc::Sender<ReceivedObject<OrphanCertificate>>,
+    missing_headers_tx: mpsc::Sender<ReceivedObject<HeaderId>>,
+    orphans_list_rx: watch::Receiver<HashSet<CertificateId>>,
     rounds_tx: watch::Sender<(Round, HashSet<Certificate>)>,
     committee: Committee,
     db: Arc<Db>,
+    reset_trigger_tx: mpsc::Sender<()>,
 }
 
+//TODO: verify the certificates votes and check if we have the header in DB befroe insertion: check parents, dirty insertion if all parents are not in the DAG
 impl DagProcessor {
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let genesis = Certificate::genesis(GENESIS_SEED);

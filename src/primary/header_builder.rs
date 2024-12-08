@@ -12,6 +12,7 @@ use crate::{
     db::Db,
     settings::parser::Committee,
     types::{
+        batch::BatchId,
         block_header::BlockHeader,
         certificate::Certificate,
         network::{NetworkRequest, ReceivedObject, RequestPayload},
@@ -32,7 +33,7 @@ pub(crate) struct HeaderBuilder {
     _db: Arc<Db>,
     header_trigger_rx: watch::Receiver<(Round, HashSet<Certificate>)>,
     votes_rx: broadcast::Receiver<ReceivedObject<Vote>>,
-    digests_buffer: Arc<Mutex<CircularBuffer<Digest>>>,
+    digests_buffer: Arc<Mutex<CircularBuffer<BatchId>>>,
     committee: Committee,
 }
 

@@ -95,7 +95,6 @@ where
                     .into_iter()
                     .filter(|(peer_id, _)| !peers.contains_peer(*peer_id));
                 to_dial.for_each(|(id, addr)| {
-                    //TODO: handle error
                     let _res = swarm_actions::dial_peer(swarm, id, addr);
                 });
             }
