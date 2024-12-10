@@ -5,6 +5,7 @@ use tokio::sync::{broadcast, mpsc};
 use traits::{DataProvider, Fetch, IntoSyncRequest};
 
 use crate::types::{
+    batch::BatchId,
     block_header::HeaderId,
     certificate::CertificateId,
     network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
@@ -63,7 +64,7 @@ where
         requests_tx: mpsc::Sender<NetworkRequest>,
         responses_rx: broadcast::Receiver<ReceivedObject<SyncResponse>>,
     ) -> anyhow::Result<Vec<ReceivedObject<RequestPayload>>> {
-        todo!("random peers broadcast ?")
+        unimplemented!("random peers broadcast ?")
     }
     async fn try_fetch_from(
         &mut self,
@@ -98,7 +99,7 @@ where
             .await
             {
                 Ok(Ok((response, sender))) => (response, sender),
-                Ok(Err(_)) => continue,
+                Ok(Err(_)) => continue, // TODO: verify is relly timeout here
                 Err(_) => Err(FetchError::BrokenChannel)?,
             };
             match response {
@@ -111,7 +112,6 @@ where
                             sender,
                         })
                         .collect());
-                    //TODO: check the accumulator too
                 }
                 SyncResponse::Partial(_, _data) => {
                     //TODO: remove fetched data from next request to next peer, add fetched data to an accumulator
@@ -147,6 +147,12 @@ impl IntoSyncRequest for HeaderId {
 impl IntoSyncRequest for HashSet<HeaderId> {
     fn into_sync_request(&self) -> SyncRequest {
         SyncRequest::BlockHeaders(self.iter().map(|id| id.0).collect())
+    }
+}
+
+impl IntoSyncRequest for HashSet<BatchId> {
+    fn into_sync_request(&self) -> SyncRequest {
+        SyncRequest::Batches(self.iter().map(|id| id.0).collect())
     }
 }
 

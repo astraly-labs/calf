@@ -14,6 +14,22 @@ pub type Seed = Digest;
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Copy, Id)]
 pub struct CertificateId(pub Digest);
 
+impl TryFrom<String> for CertificateId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let bytes = hex::decode(value)
+            .map_err(|e| anyhow::anyhow!("Failed to decode hex string: {}", e))?;
+        if bytes.len() != 32 {
+            return Err(anyhow::anyhow!("Expected 32 bytes, got {}", bytes.len()));
+        }
+        let array: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to convert bytes into [u8; 32]"))?;
+        Ok(CertificateId::from(array))
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum Certificate {
     Dummy,

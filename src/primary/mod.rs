@@ -124,6 +124,7 @@ impl BaseAgent for Primary {
         let (orphans_tx, orphans_rx) = mpsc::channel(CHANNEL_SIZE);
         let (missing_headers_tx, missing_headers_rx) = mpsc::channel(CHANNEL_SIZE);
         let (incomplete_headers_tx, incomplete_headers_rx) = mpsc::channel(CHANNEL_SIZE);
+        let (received_certificates_tx, received_certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
         let (orphans_list_tx, orphans_list_rx) = watch::channel(HashSet::<CertificateId>::new());
         let (fetcher_commands_tx, fetcher_commands_rx) = mpsc::channel(CHANNEL_SIZE);
@@ -149,7 +150,7 @@ impl BaseAgent for Primary {
 
         let digests_receiver_handle = DigestReceiver::spawn(
             cancellation_token.clone(),
-            digests_rx,
+            digests_rx.resubscribe(),
             digests_buffer.clone(),
             self.db.clone(),
         );
@@ -161,7 +162,7 @@ impl BaseAgent for Primary {
             self.keypair.clone(),
             self.db.clone(),
             round_rx.clone(),
-            vote_rx,
+            vote_rx.resubscribe(),
             digests_buffer.clone(),
             self.commitee.clone(),
         );
@@ -169,7 +170,7 @@ impl BaseAgent for Primary {
         let header_elector_handle = HeaderElector::spawn(
             cancellation_token.clone(),
             network_tx.clone(),
-            header_rx,
+            header_rx.resubscribe(),
             round_rx.clone(),
             self.validator_keypair.clone(),
             self.db.clone(),
@@ -189,8 +190,9 @@ impl BaseAgent for Primary {
 
         let dag_processor_handle = DagProcessor::spawn(
             cancellation_token.clone(),
-            peers_certificates_rx.resubscribe(),
+            peers_certificates_rx,
             certificates_rx,
+            received_certificates_tx,
             orphans_tx,
             missing_headers_tx,
             orphans_list_rx,
@@ -202,13 +204,17 @@ impl BaseAgent for Primary {
 
         let sync_tracker_handle = SyncTracker::spawn(
             cancellation_token.clone(),
-            peers_certificates_rx.resubscribe(),
+            received_certificates_rx,
+            header_rx.resubscribe(),
+            digests_rx.resubscribe(),
             orphans_rx,
-            orphans_list_tx,
-            fetcher_commands_tx,
-            sync_reset_trigger_rx,
             incomplete_headers_rx,
             missing_headers_rx,
+            fetcher_commands_tx,
+            orphans_list_tx,
+            sync_reset_trigger_rx,
+            connector.clone(),
+            self.db.clone(),
         );
 
         let fetcher_handle = Fetcher::spawn(

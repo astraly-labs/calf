@@ -1,6 +1,6 @@
 use std::{collections::HashSet, sync::Arc};
 
-use libp2p::identity::ed25519::Keypair;
+use libp2p::{identity::ed25519::Keypair, PeerId};
 use proc_macros::Spawn;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_util::sync::CancellationToken;
@@ -21,7 +21,6 @@ use crate::{
 
 use super::sync_tracker::IncompleteHeader;
 
-/// TODO: check the header, if incomplete make a IncompleteHeader and send it to the sync tracker
 #[derive(Spawn)]
 pub(crate) struct HeaderElector {
     network_tx: mpsc::Sender<NetworkRequest>,
@@ -54,7 +53,7 @@ impl HeaderElector {
                 );
                 continue;
             }
-            match process_header(header.object.clone(), &self.db) {
+            match process_header(header.object.clone(), header.sender, &self.db) {
                 Ok(()) => {
                     tracing::info!("✅ header approved");
                 }
@@ -66,22 +65,44 @@ impl HeaderElector {
                     continue;
                 }
             }
-            // Send back a vote to the header author
-            self.network_tx
-                .send(NetworkRequest::SendTo(
-                    header.sender,
-                    RequestPayload::Vote(Vote::from_header(
+
+            match header
+                .object
+                .verify_parents(potential_parents_ids, self.committee.quorum_threshold())
+            {
+                Ok(()) => {
+                    tracing::info!("✅ header parents verified");
+                    // Send back a vote to the header author
+                    self.network_tx
+                        .send(NetworkRequest::SendTo(
+                            header.sender,
+                            RequestPayload::Vote(Vote::from_header(
+                                header.object.clone(),
+                                &self.validator_keypair,
+                            )?),
+                        ))
+                        .await?;
+                    tracing::info!("✨ header accepted, vote sent");
+                    self.db.insert(
+                        db::Column::Headers,
+                        &header.object.id().as_hex_string(),
                         header.object,
-                        &self.validator_keypair,
-                    )?),
-                ))
-                .await?;
-            tracing::info!("✨ header accepted, vote sent");
+                    )?;
+                }
+                Err(e) => {
+                    tracing::info!("🚫 header parents verification failed: {}", e);
+                    continue;
+                }
+            }
         }
     }
 }
 
-fn process_header(header: BlockHeader, db: &Arc<Db>) -> Result<(), IncompleteHeader> {
+fn process_header(
+    header: BlockHeader,
+    sender: PeerId,
+    db: &Arc<Db>,
+) -> Result<(), IncompleteHeader> {
     let missing_batches: HashSet<BatchId> = header
         .digests
         .iter()
@@ -93,6 +114,7 @@ fn process_header(header: BlockHeader, db: &Arc<Db>) -> Result<(), IncompleteHea
         )
         .cloned()
         .collect();
+
     let missing_certificates: HashSet<CertificateId> = header
         .certificates_ids
         .iter()
@@ -113,6 +135,7 @@ fn process_header(header: BlockHeader, db: &Arc<Db>) -> Result<(), IncompleteHea
             missing_certificates,
             missing_batches,
             header,
+            sender,
         })
     }
 }
