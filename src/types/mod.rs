@@ -12,7 +12,7 @@ pub mod vote;
 use block_header::BlockHeader;
 use serde::{Deserialize, Serialize};
 use signing::SignedType;
-use traits::{Hash, Sign};
+use traits::{AsBytes, Hash, Sign};
 
 pub type Digest = [u8; 32];
 pub type PublicKey = [u8; 32];
@@ -34,5 +34,11 @@ impl Acknowledgment {
     }
     pub fn verify(&self, digest: &[u8; 32]) -> bool {
         *digest == self.0
+    }
+}
+
+impl AsBytes for Acknowledgment {
+    fn bytes(&self) -> Vec<u8> {
+        self.0.to_vec()
     }
 }

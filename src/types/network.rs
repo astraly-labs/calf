@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::{
     batch::Batch, block_header::BlockHeader, certificate::Certificate, signing::SignedType,
     traits::Hash, transaction::Transaction, vote::Vote, Acknowledgment, Digest, RequestId,
@@ -44,6 +46,17 @@ impl RequestPayload {
             RequestPayload::SyncResponse(sync_resp) => Box::new(sync_resp),
         }
     }
+    pub fn inner_id(&self) -> anyhow::Result<Digest> {
+        match self {
+            RequestPayload::Header(header) => Ok(header.id()),
+            RequestPayload::Certificate(cert) => Ok(cert.digest()),
+            RequestPayload::Batch(batch) => Ok(batch.digest()),
+            RequestPayload::Vote(vote) => Ok(vote.digest()),
+            RequestPayload::Acknowledgment(ack) => Ok(ack.digest()),
+            RequestPayload::Digest(digest) => Ok(*digest),
+            _ => Err(anyhow::anyhow!("Invalid payload type")),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -62,6 +75,36 @@ impl SyncRequest {
             SyncRequest::BlockHeaders(keys) => keys.clone(),
             SyncRequest::Batches(keys) => keys.clone(),
             SyncRequest::SyncDigest(key) => vec![*key],
+        }
+    }
+    pub fn remove_reached(&mut self, reached: HashSet<Digest>) {
+        match self {
+            SyncRequest::Certificates(keys) => {
+                *keys = keys
+                    .iter()
+                    .cloned()
+                    .filter(|key| !reached.contains(key))
+                    .collect()
+            }
+            SyncRequest::BlockHeaders(keys) => {
+                *keys = keys
+                    .iter()
+                    .cloned()
+                    .filter(|key| !reached.contains(key))
+                    .collect()
+            }
+            SyncRequest::Batches(keys) => {
+                *keys = keys
+                    .iter()
+                    .cloned()
+                    .filter(|key| !reached.contains(key))
+                    .collect()
+            }
+            SyncRequest::SyncDigest(key) => {
+                if reached.contains(key) {
+                    *self = SyncRequest::Batches(vec![*key]);
+                }
+            }
         }
     }
 }

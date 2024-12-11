@@ -9,6 +9,7 @@ use crate::types::{
     block_header::HeaderId,
     certificate::CertificateId,
     network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
+    Digest,
 };
 
 pub mod fetcher;
@@ -72,8 +73,9 @@ where
         responses_rx: broadcast::Receiver<ReceivedObject<SyncResponse>>,
         source: &Box<dyn DataProvider + Send + Sync + 'static>,
     ) -> anyhow::Result<Vec<ReceivedObject<RequestPayload>>> {
-        let request = self.into_sync_request();
-        let keys = request.keys();
+        let mut request = self.into_sync_request();
+        let keys: HashSet<Digest> = request.keys().into_iter().collect();
+        let mut responses: Vec<ReceivedObject<RequestPayload>> = vec![];
         for source in source.sources().await {
             let payload = RequestPayload::SyncRequest(request.clone());
             let id = payload.id().map_err(|_| FetchError::IdError)?;
@@ -113,15 +115,28 @@ where
                         })
                         .collect());
                 }
-                SyncResponse::Partial(_, _data) => {
-                    continue;
+                SyncResponse::Partial(_, data) => {
+                    let payloads = data.into_payloads();
+                    let reached_data_ids: HashSet<Digest> = payloads
+                        .iter()
+                        .flat_map(|payload| payload.inner_id())
+                        .collect();
+                    request.remove_reached(reached_data_ids);
+                    responses.extend(payloads.into_iter().map(|payload| ReceivedObject {
+                        object: payload,
+                        sender: source.clone(),
+                    }));
                 }
                 SyncResponse::Failure(_) => {
                     continue;
                 }
             }
         }
-        Err(FetchError::Timeout.into())
+        if responses.is_empty() {
+            Err(FetchError::Timeout)?
+        } else {
+            Ok(responses)
+        }
     }
 }
 
