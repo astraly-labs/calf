@@ -3,7 +3,7 @@ use crate::{
     types::{
         block_header::BlockHeader,
         certificate::Certificate,
-        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
+        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest},
         vote::Vote,
         Digest,
     },
@@ -24,7 +24,6 @@ pub struct PrimaryConnector {
     vote_tx: broadcast::Sender<ReceivedObject<Vote>>,
     certificates_tx: broadcast::Sender<ReceivedObject<Certificate>>,
     sync_req_tx: broadcast::Sender<ReceivedObject<SyncRequest>>,
-    sync_rsp_rx: broadcast::Receiver<SyncResponse>,
 }
 
 impl PrimaryConnector {
@@ -37,14 +36,12 @@ impl PrimaryConnector {
         broadcast::Receiver<ReceivedObject<Vote>>,
         broadcast::Receiver<ReceivedObject<Certificate>>,
         broadcast::Receiver<ReceivedObject<SyncRequest>>,
-        broadcast::Sender<SyncResponse>,
     ) {
         let (digest_tx, digest_rx) = broadcast::channel(buffer);
         let (headers_tx, headers_rx) = broadcast::channel(buffer);
         let (vote_tx, vote_rx) = broadcast::channel(buffer);
         let (certificates_tx, certificates_rx) = broadcast::channel(buffer);
         let (sync_req_tx, sync_req_rx) = broadcast::channel(buffer);
-        let (sync_rsp_tx, sync_rsp_rx) = broadcast::channel(buffer);
 
         (
             Self {
@@ -53,14 +50,12 @@ impl PrimaryConnector {
                 vote_tx,
                 certificates_tx,
                 sync_req_tx,
-                sync_rsp_rx,
             },
             digest_rx,
             headers_rx,
             vote_rx,
             certificates_rx,
             sync_req_rx,
-            sync_rsp_tx
         )
     }
 }
@@ -91,6 +86,11 @@ impl Connect for PrimaryConnector {
             }
             RequestPayload::SyncRequest(request) => {
                 self.sync_req_tx.send(ReceivedObject::new(request,sender))?;
+            }
+            RequestPayload::SyncResponse(_request) => {
+                //verify data integrity
+                //store in db
+                todo!()
             }
             _ => {}
         }

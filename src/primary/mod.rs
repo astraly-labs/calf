@@ -20,20 +20,13 @@ use tokio::sync::{mpsc, watch, Mutex};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    db,
-    network::{
-        primary::{PrimaryConnector, PrimaryPeers},
-        Network, PrimaryNetwork,
-    },
-    settings::parser::{Committee, FileLoader as _},
-    types::{
+    db, network::{
+        primary::{PrimaryConnector, PrimaryPeers}, Network, PrimaryNetwork
+    }, settings::parser::{Committee, FileLoader as _}, synchroniser::feeder::Feeder, types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         certificate::Certificate,
         Digest, Round,
-    },
-    utils::{self, CircularBuffer},
-    synchroniser::feeder::Feeder,
-    CHANNEL_SIZE,
+    }, utils::{self, CircularBuffer}, CHANNEL_SIZE
 };
 
 const MAX_DIGESTS_IN_HEADER: usize = 10;
@@ -114,7 +107,7 @@ impl BaseAgent for Primary {
         let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
         let (round_tx, round_rx) =
             watch::channel::<(Round, HashSet<Certificate>)>((0, HashSet::new()));
-        let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx, sync_req_rx, sync_resp_tx) =
+        let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx, sync_req_rx) =
             PrimaryConnector::new(CHANNEL_SIZE);
         let (certificates_tx, certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
@@ -186,7 +179,7 @@ impl BaseAgent for Primary {
         let feeder_handle = Feeder::spawn(
             cancellation_token.clone(),
             sync_req_rx,
-            sync_resp_tx,
+            network_tx.clone(),
             self.db.clone(),
         );
 

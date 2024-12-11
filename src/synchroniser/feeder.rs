@@ -1,27 +1,45 @@
 use std::sync::Arc;
+use libp2p::PeerId;
+use serde::de::DeserializeOwned;
 use tokio_util::sync::CancellationToken;
 
 use anyhow::Context;
 use proc_macros::Spawn;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 
 use crate::{
     db::{Column, Db},
     types::{
-        batch::Batch,
-        block_header::BlockHeader,
-        certificate::Certificate,
-        network::{ReceivedObject, SyncData, SyncRequest, SyncResponse},
-        traits::{Hash, AsHex},
-        transaction::Transaction,
-        RequestId,
+        batch::Batch, block_header::BlockHeader, certificate::Certificate, network::{NetworkRequest, ReceivedObject, RequestPayload, SyncData, SyncRequest, SyncResponse}, traits::{AsHex, Hash}, transaction::Transaction, Digest, RequestId
     },
 };
+
+pub trait IntoSyncData {
+    fn into_sync_data(self) -> SyncData;
+}
+
+impl IntoSyncData for Vec<Certificate> {
+    fn into_sync_data(self) -> SyncData {
+        SyncData::Certificates(self)
+    }
+}
+
+impl IntoSyncData for Vec<BlockHeader> {
+    fn into_sync_data(self) -> SyncData {
+        SyncData::Headers(self)
+    }
+}
+
+impl IntoSyncData for Vec<Batch<Transaction>> {
+    fn into_sync_data(self) -> SyncData {
+        SyncData::Batches(self)
+    }
+}
 
 #[derive(Spawn)]
 pub(crate) struct Feeder {
     req_rx: broadcast::Receiver<ReceivedObject<SyncRequest>>,
-    data_tx: broadcast::Sender<SyncResponse>,
+    network_tx: mpsc::Sender<NetworkRequest>,
     db: Arc<Db>,
 }
 
@@ -33,13 +51,13 @@ impl Feeder {
                     let request_id = request.object.digest();
                     match request.object {
                         SyncRequest::RequestCertificates(payload) => {
-                            self.try_retrieve_certficate(&payload, request_id).await?
+                            self.try_retrieve_data::<Certificate>(&payload, request_id, request.sender, Column::Certificates).await?
                         }
                         SyncRequest::RequestBlockHeaders(payload) => {
-                            self.try_retrieve_block_header(&payload, request_id).await?
+                            self.try_retrieve_data::<BlockHeader>(&payload, request_id, request.sender, Column::Headers).await?
                         }
                         SyncRequest::RequestBatches(payload) => {
-                            self.try_retrieve_batches(&payload, request_id).await?
+                            self.try_retrieve_data::<Batch<Transaction>>(&payload, request_id, request.sender, Column::Batches).await?
                         }
                         SyncRequest::SyncDigest(_) => todo!(),
                     }
@@ -49,99 +67,58 @@ impl Feeder {
         } 
     }
 
-    pub async fn try_retrieve_certficate(
+    pub async fn try_retrieve_data<T>(
         &self,
         payload: &Vec<[u8; 32]>,
         req_id: RequestId,
-    ) -> anyhow::Result<()> {
-        let mut datas: Vec<Certificate> = vec![];
-        let certif_to_retrieve = payload.len();
-        for certificate_id in payload {
-            match self
-                .db
-                .get::<Certificate>(Column::Certificates, &certificate_id.as_hex_string())
-            {
-                Ok(Some(certif)) => datas.push(certif),
-                _ => {}
-            };
-        }
-        let response = match datas.len() {
-            len if len == certif_to_retrieve => {
-                SyncResponse::Success(req_id.into(), SyncData::Certificates(datas))
-            }
-            len if len < certif_to_retrieve => {
-                SyncResponse::Partial(req_id.into(), SyncData::Certificates(datas))
-            }
-            len if len == 0 => SyncResponse::Failure,
-            _ => unreachable!(),
-        };
-        self.data_tx
-            .send(response)
-            .context("Failed to send certificate data over the channel")?;
-        Ok(())
-    }
-
-    pub async fn try_retrieve_block_header(
-        &self,
-        payload: &Vec<[u8; 32]>,
-        req_id: RequestId,
-    ) -> anyhow::Result<()> {
-        let mut datas: Vec<BlockHeader> = vec![];
-        let certif_to_retrieve = payload.len();
-        for header_id in payload {
-            match self
-                .db
-                .get::<BlockHeader>(Column::Headers, &header_id.as_hex_string())
-            {
-                Ok(Some(header)) => datas.push(header),
-                _ => {}
-            };
-        }
-        let response = match datas.len() {
-            len if len == certif_to_retrieve => {
-                SyncResponse::Success(req_id.into(), SyncData::Headers(datas))
-            }
-            len if len < certif_to_retrieve => {
-                SyncResponse::Partial(req_id.into(), SyncData::Headers(datas))
-            }
-            len if len == 0 => SyncResponse::Failure,
-            _ => unreachable!(),
-        };
-        self.data_tx
-            .send(response)
-            .context("Failed to send headers data over the channel")?;
-        Ok(())
-    }
-
-    pub async fn try_retrieve_batches(
-        &self,
-        payload: &Vec<[u8; 32]>,
-        req_id: RequestId,
-    ) -> anyhow::Result<()> {
-        let mut datas: Vec<Batch<Transaction>> = vec![];
+        peer_id: PeerId,
+        column: Column,
+    ) -> anyhow::Result<()>
+    where
+        T: DeserializeOwned,
+        Vec<T>: IntoSyncData {
+        let mut datas = vec![];
         let certif_to_retrieve = payload.len();
         for digest in payload {
             match self
                 .db
-                .get::<Batch<Transaction>>(Column::Batches, &digest.as_hex_string())
+                .get::<T>(column, &digest.as_hex_string())
             {
                 Ok(Some(batch)) => datas.push(batch),
                 _ => {}
             };
         }
+
         let response = match datas.len() {
             len if len == certif_to_retrieve => {
-                SyncResponse::Success(req_id.into(), SyncData::Batches(datas))
+                SyncResponse::Success(req_id.into(), datas.into_sync_data())
             }
             len if len < certif_to_retrieve => {
-                SyncResponse::Partial(req_id.into(), SyncData::Batches(datas))
+                SyncResponse::Partial(req_id.into(), datas.into_sync_data())
             }
             len if len == 0 => SyncResponse::Failure,
             _ => unreachable!(),
         };
-        self.data_tx
+
+        let response = NetworkRequest::SendTo(peer_id, RequestPayload::SyncResponse(response));
+        self.network_tx
             .send(response)
+            .await
             .context("Failed to send batches data over the channel")?;
         Ok(())
+    }
+
+}
+
+
+#[cfg(test)]
+pub mod test{
+
+    #[rstest::rstest]
+    #[tokio::test]
+    async fn basic_test() {
+        //feed db
+        //mock a message in canal
+        //verify
     }
 }
