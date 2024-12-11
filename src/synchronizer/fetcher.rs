@@ -1,4 +1,8 @@
-use tokio::sync::{broadcast, mpsc};
+
+use std::{future::Future, pin::Pin};
+
+use proc_macros::Spawn;
+use tokio::{sync::{broadcast, mpsc}, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -7,6 +11,8 @@ use crate::{
 };
 
 use super::Fetch;
+
+const MAX_CONCURENT_FETCH_TASKS: usize = 10;
 
 pub struct Fetcher<R>
 where
@@ -86,5 +92,43 @@ where
                 }
             }
         })
+    }
+}
+
+struct TaskManager<T>
+where
+    T: Send + Sync + 'static,
+{
+    max_concurrent_tasks: usize,
+    results_tx: mpsc::Sender<T>,
+    tasks_rx: mpsc::Receiver<Pin<Box<dyn Future<Output = T> + Send>>>,
+}
+
+impl<T> TaskManager<T>
+where
+    T: Send + Sync + 'static,
+{
+    // TODO: timeout for each task ?
+    pub async fn run(mut self) -> anyhow::Result<()> {
+        let mut tasks_number = 0;
+        let mut tasks = JoinSet::new();
+        loop {
+            tokio::select! {
+                Some(Ok(next_res)) = tasks.join_next() => {
+                    self.results_tx.send(next_res).await?;
+                    tasks_number -= 1;
+                }
+                Some(task) = self.tasks_rx.recv() => {
+                    if tasks_number < self.max_concurrent_tasks {
+                        tasks.spawn(task);
+                        tasks_number += 1;
+                    }
+                    else {
+                        tracing::warn!("TaskManager: too many tasks, queueing");
+                    }
+                }
+                else => break Ok(())
+            }
+        }
     }
 }
