@@ -9,7 +9,6 @@ use crate::{
         block_header::{BlockHeader, HeaderId},
         network::RequestPayload,
         traits::AsHex,
-        Digest,
     },
 };
 use derive_more::derive::Constructor;

@@ -6,7 +6,6 @@ use crate::{
         certificate::Certificate,
         network::{NetworkRequest, ReceivedObject, RequestPayload, SyncResponse},
         vote::Vote,
-        Digest,
     },
 };
 use async_trait::async_trait;

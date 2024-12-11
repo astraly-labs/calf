@@ -58,7 +58,7 @@ impl DagProcessor {
                     match dag.check_parents(&certificate.object.clone().into()) {
                         Ok(()) => {
                             tracing::info!("💾 certificate from {} inserted in the DAG", certificate.sender);
-                            dag.insert(certificate.object.clone().into());
+                            let _ = dag.insert(certificate.object.clone().into());
                             self.db.insert(db::Column::Certificates, &certificate.object.id_as_hex(), &certificate.object)?;
                         },
                         Err(error) => {

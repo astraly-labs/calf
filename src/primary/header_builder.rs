@@ -18,7 +18,7 @@ use crate::{
         network::{NetworkRequest, ReceivedObject, RequestPayload},
         traits::Hash,
         vote::Vote,
-        Digest, Round,
+        Round,
     },
     utils::CircularBuffer,
 };

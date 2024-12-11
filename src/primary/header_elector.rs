@@ -15,7 +15,7 @@ use crate::{
         network::{NetworkRequest, ReceivedObject, RequestPayload},
         traits::AsHex,
         vote::Vote,
-        Digest, PublicKey, Round,
+        Round,
     },
 };
 

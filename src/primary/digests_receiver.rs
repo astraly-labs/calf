@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::{self, Db},
-    types::{batch::BatchId, network::ReceivedObject, traits::AsHex, Digest},
+    types::{batch::BatchId, network::ReceivedObject, traits::AsHex},
     utils::CircularBuffer,
 };
 

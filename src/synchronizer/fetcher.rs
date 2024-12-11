@@ -1,10 +1,8 @@
-use proc_macros::Spawn;
-use std::sync::Arc;
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    network::{Connect, ManagePeers},
+    network::Connect,
     types::network::{NetworkRequest, ReceivedObject, SyncResponse},
 };
 
