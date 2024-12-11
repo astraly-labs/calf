@@ -10,18 +10,23 @@ use crate::{
 
 use super::Fetch;
 
-#[derive(Spawn)]
-pub struct Fetcher {
+pub struct Fetcher<R>
+where
+    R: Connect + Send,
+{
     network_tx: mpsc::Sender<NetworkRequest>,
     //The data that need to be fetched, the fetcher doesn't care about the type of the data, it just fetch it and send it back in the router to be dispatched to the right tasks
     commands_rx: mpsc::Receiver<Box<dyn Fetch + Send + Sync>>,
     //Will contain only responses to sync requests
     sync_response_rx: broadcast::Receiver<ReceivedObject<SyncResponse>>,
     //PrimaryConnector or WorkerConnector, Only contains senders, can be duplicated. To dispatch the fetched data
-    publish_router: Box<dyn Connect + Send>,
+    publish_router: R,
 }
 
-impl Fetcher {
+impl<R> Fetcher<R>
+where
+    R: Connect + Send + 'static,
+{
     /// Just for testing for now, fecth tasks cant be blocking, circular buffer of tasks, timeout for each task ?
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         loop {
@@ -45,5 +50,43 @@ impl Fetcher {
                 _ => {}
             };
         }
+    }
+
+    pub fn spawn(
+        cancellation_token: CancellationToken,
+        network_tx: mpsc::Sender<NetworkRequest>,
+        //The data that need to be fetched, the fetcher doesn't care about the type of the data, it just fetch it and send it back in the router to be dispatched to the right tasks
+        commands_rx: mpsc::Receiver<Box<dyn Fetch + Send + Sync>>,
+        //Will contain only responses to sync requests
+        sync_response_rx: broadcast::Receiver<ReceivedObject<SyncResponse>>,
+        //PrimaryConnector or WorkerConnector, Only contains senders, can be duplicated. To dispatch the fetched data
+        publish_router: R,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let run = Self {
+                network_tx,
+                commands_rx,
+                sync_response_rx,
+                publish_router,
+            }
+            .run();
+            let res = cancellation_token.run_until_cancelled(run).await;
+            match res {
+                Some(res) => {
+                    match res {
+                        Ok(_) => {
+                            tracing::info!("fetcher finished successfully");
+                        }
+                        Err(e) => {
+                            tracing::error!("fetcher finished with an error: {:#?}", e);
+                        }
+                    };
+                    cancellation_token.cancel();
+                }
+                None => {
+                    tracing::info!("fetcher has been cancelled");
+                }
+            }
+        })
     }
 }

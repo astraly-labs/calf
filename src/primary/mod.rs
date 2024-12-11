@@ -222,7 +222,7 @@ impl BaseAgent for Primary {
             network_tx.clone(),
             fetcher_commands_rx,
             sync_responses_rx,
-            Box::new(connector.clone()),
+            connector.clone(),
         );
 
         let res = tokio::try_join!(

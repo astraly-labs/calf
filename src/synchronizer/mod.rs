@@ -99,8 +99,8 @@ where
             .await
             {
                 Ok(Ok((response, sender))) => (response, sender),
-                Ok(Err(_)) => continue, // TODO: verify is relly timeout here
-                Err(_) => Err(FetchError::BrokenChannel)?,
+                Ok(Err(_)) => Err(FetchError::BrokenChannel)?,
+                Err(_) => continue,
             };
             match response {
                 SyncResponse::Success(_, data) => {
@@ -114,15 +114,13 @@ where
                         .collect());
                 }
                 SyncResponse::Partial(_, _data) => {
-                    //TODO: remove fetched data from next request to next peer, add fetched data to an accumulator
-                    todo!()
+                    continue;
                 }
                 SyncResponse::Failure(_) => {
                     continue;
                 }
             }
         }
-        //TODO: return the accumulator
         Err(FetchError::Timeout.into())
     }
 }
