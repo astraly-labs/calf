@@ -2,6 +2,7 @@ pub mod batch_broadcaster;
 pub mod batch_maker;
 pub mod batch_receiver;
 pub mod quorum_waiter;
+pub mod sync_relayer;
 pub mod transaction_event_listener;
 
 use anyhow::Context;
@@ -24,6 +25,7 @@ use crate::{
         Network, WorkerNetwork,
     },
     settings::parser::{AuthorityInfo, Committee, FileLoader as _},
+    synchronizer::fetcher::{Fetcher, MAX_CONCURENT_FETCH_TASKS},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         traits::Random,
@@ -137,7 +139,9 @@ impl BaseAgent for Worker {
         let (transactions_tx, transactions_rx) = mpsc::channel(100);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
         let (network_tx, network_rx) = mpsc::channel(100);
-        let (p2p_connector, acks_rx, received_batches_rx) = WorkerConnector::new(100);
+        let (p2p_connector, acks_rx, received_batches_rx, sync_requests_rx, sync_responses_rx) =
+            WorkerConnector::new(100);
+        let (fetcher_commands_tx, commands_rx) = mpsc::channel(100);
 
         let cancellation_token = CancellationToken::new();
 
@@ -170,10 +174,10 @@ impl BaseAgent for Worker {
 
         let worker_network_handle = Network::<WorkerNetwork, WorkerConnector, WorkerPeers>::spawn(
             self.commitee,
-            p2p_connector,
+            p2p_connector.clone(),
             self.validator_keypair,
             self.keypair,
-            peers,
+            peers.clone(),
             network_rx,
             cancellation_token.clone(),
         );
@@ -191,8 +195,24 @@ impl BaseAgent for Worker {
         let batch_acknowledger_handle = BatchReceiver::spawn(
             cancellation_token.clone(),
             received_batches_rx,
-            network_tx,
+            network_tx.clone(),
             Arc::clone(&self.db),
+        );
+
+        let fetcher_handle = Fetcher::spawn(
+            cancellation_token.clone(),
+            network_tx.clone(),
+            commands_rx,
+            sync_responses_rx,
+            p2p_connector.clone(),
+            MAX_CONCURENT_FETCH_TASKS,
+        );
+
+        let sync_relayer_handle = sync_relayer::SyncRelayer::spawn(
+            cancellation_token.clone(),
+            fetcher_commands_tx,
+            sync_requests_rx,
+            peers.clone(),
         );
 
         let res = tokio::try_join!(
@@ -203,6 +223,8 @@ impl BaseAgent for Worker {
             quorum_waiter_handle,
             batch_acknowledger_handle,
             tx_producer_handle,
+            sync_relayer_handle,
+            fetcher_handle,
         );
 
         match res {

@@ -74,7 +74,6 @@ where
         source: &Box<dyn DataProvider + Send + Sync + 'static>,
     ) -> anyhow::Result<Vec<ReceivedObject<RequestPayload>>> {
         let mut request = self.into_sync_request();
-        let keys: HashSet<Digest> = request.keys().into_iter().collect();
         let mut responses: Vec<ReceivedObject<RequestPayload>> = vec![];
         for source in source.sources().await {
             let payload = RequestPayload::SyncRequest(request.clone());

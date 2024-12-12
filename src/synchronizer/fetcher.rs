@@ -31,7 +31,6 @@ where
     //PrimaryConnector or WorkerConnector, Only contains senders, can be duplicated. To dispatch the fetched data
     publish_router: R,
     max_concurrent_fetch_tasks: usize,
-    cancellation_token: CancellationToken,
 }
 
 impl<R> Fetcher<R>
@@ -102,7 +101,6 @@ where
                 sync_response_rx,
                 publish_router,
                 max_concurrent_fetch_tasks,
-                cancellation_token: cancellation_token.clone(),
             }
             .run();
             let res = cancellation_token.run_until_cancelled(run).await;

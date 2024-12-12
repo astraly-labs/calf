@@ -65,7 +65,7 @@ pub enum SyncRequest {
     BlockHeaders(Vec<Digest>),
     Batches(Vec<Digest>),
     // Ask a worker to get the batch corresponding to a digest contained in a header
-    SyncDigest(Digest),
+    SyncDigests(Vec<Digest>),
 }
 
 impl SyncRequest {
@@ -74,7 +74,7 @@ impl SyncRequest {
             SyncRequest::Certificates(keys) => keys.clone(),
             SyncRequest::BlockHeaders(keys) => keys.clone(),
             SyncRequest::Batches(keys) => keys.clone(),
-            SyncRequest::SyncDigest(key) => vec![*key],
+            SyncRequest::SyncDigests(keys) => keys.clone(),
         }
     }
     pub fn remove_reached(&mut self, reached: HashSet<Digest>) {
@@ -100,10 +100,12 @@ impl SyncRequest {
                     .filter(|key| !reached.contains(key))
                     .collect()
             }
-            SyncRequest::SyncDigest(key) => {
-                if reached.contains(key) {
-                    *self = SyncRequest::Batches(vec![*key]);
-                }
+            SyncRequest::SyncDigests(keys) => {
+                *keys = keys
+                    .iter()
+                    .cloned()
+                    .filter(|key| !reached.contains(key))
+                    .collect()
             }
         }
     }

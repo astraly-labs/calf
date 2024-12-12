@@ -1,3 +1,4 @@
+use core::sync;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
@@ -5,14 +6,16 @@ use crate::{
     settings::parser::Committee,
     types::{
         batch::Batch,
-        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        network::{
+            NetworkRequest, ReceivedObject, RequestPayload, SyncData, SyncRequest, SyncResponse,
+        },
         transaction::Transaction,
         Acknowledgment,
     },
 };
 use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId, Swarm};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 
 use super::{swarm_actions, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer, WorkerNetwork};
 
@@ -20,6 +23,8 @@ use super::{swarm_actions, CalfBehavior, Connect, HandleEvent, ManagePeers, Peer
 pub struct WorkerConnector {
     acks_tx: mpsc::Sender<ReceivedObject<Acknowledgment>>,
     batches_tx: mpsc::Sender<ReceivedObject<Batch<Transaction>>>,
+    sync_requests_tx: broadcast::Sender<ReceivedObject<SyncRequest>>,
+    sync_responses_tx: broadcast::Sender<ReceivedObject<SyncResponse>>,
 }
 
 impl WorkerConnector {
@@ -29,16 +34,24 @@ impl WorkerConnector {
         Self,
         mpsc::Receiver<ReceivedObject<Acknowledgment>>,
         mpsc::Receiver<ReceivedObject<Batch<Transaction>>>,
+        broadcast::Receiver<ReceivedObject<SyncRequest>>,
+        broadcast::Receiver<ReceivedObject<SyncResponse>>,
     ) {
         let (acks_tx, acks_rx) = mpsc::channel(buffer);
         let (batches_tx, batches_rx) = mpsc::channel(buffer);
+        let (sync_requests_tx, sync_requests_rx) = broadcast::channel(buffer);
+        let (sync_responses_tx, sync_responses_rx) = broadcast::channel(buffer);
         (
             Self {
                 acks_tx,
                 batches_tx,
+                sync_requests_tx,
+                sync_responses_tx,
             },
             acks_rx,
             batches_rx,
+            sync_requests_rx,
+            sync_responses_rx,
         )
     }
 }
