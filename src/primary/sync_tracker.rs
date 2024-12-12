@@ -110,7 +110,6 @@ impl SyncTracker {
                             tracing::info!("📡 Certificate {} direct parents has been retrieved", id.0.as_hex_string());
                         }
                     });
-                    // We can remove the orphan certificate from the list if all its parents have been retrieved. WARNING(TODO): really ?
                     orphans_certificates.retain(|elm| !elm.missing_parents.is_empty());
                     incomplete_headers.iter_mut().for_each(|elm| {
                         elm.missing_certificates.retain(|certificate| certificate != &id);

@@ -28,7 +28,7 @@ pub trait Fetch {
 }
 
 #[async_trait]
-/// A trait to abscract structures that contains peers. Needed to build and use a requestedObject. TODO: But is it really needed ?
+/// A trait to abscract structures that contains peers. Needed to build and use a requestedObject.
 pub trait DataProvider {
     async fn sources(&self) -> Box<dyn Iterator<Item = PeerId> + Send>;
 }
@@ -38,7 +38,7 @@ pub trait IntoSyncRequest {
     fn into_sync_request(&self) -> SyncRequest;
 }
 
-///TODO: Find a better name: A trait to build a requested object from an object and a source: if the object implements Fetch, calling fetch on the requested obejct will call try_fetch_from on the object with the source
+/// A trait to build a requested object from an object and a source: if the object implements Fetch, calling fetch on the requested obejct will call try_fetch_from on the object with the source
 pub trait Sourced<S, T>
 where
     S: DataProvider,
