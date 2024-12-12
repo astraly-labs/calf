@@ -1,8 +1,4 @@
-use core::task;
-use std::{future::Future, pin::Pin};
 
-use libp2p::core::transport::memory::Chan;
-use proc_macros::Spawn;
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinSet,
@@ -11,8 +7,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     network::Connect,
-    types::network::{NetworkRequest, ReceivedObject, RequestPayload, SyncResponse},
-    CHANNEL_SIZE,
+    types::network::{NetworkRequest, ReceivedObject, SyncResponse},
 };
 
 use super::Fetch;

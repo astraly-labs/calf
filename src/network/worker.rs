@@ -1,4 +1,3 @@
-use core::sync;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
@@ -7,7 +6,7 @@ use crate::{
     types::{
         batch::Batch,
         network::{
-            NetworkRequest, ReceivedObject, RequestPayload, SyncData, SyncRequest, SyncResponse,
+            NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse,
         },
         transaction::Transaction,
         Acknowledgment,

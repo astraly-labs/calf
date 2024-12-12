@@ -9,13 +9,10 @@ pub mod traits;
 pub mod transaction;
 pub mod vote;
 
-use batch::{Batch, BatchId};
 use block_header::BlockHeader;
-use certificate::Certificate;
 use serde::{Deserialize, Serialize};
 use signing::SignedType;
 use traits::{AsBytes, Hash, Sign};
-use transaction::Transaction;
 
 pub type Digest = [u8; 32];
 pub type PublicKey = [u8; 32];
