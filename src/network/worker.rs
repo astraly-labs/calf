@@ -87,6 +87,14 @@ impl Connect for WorkerConnector {
                     .send(ReceivedObject::new(batch.clone(), sender))
                     .await?;
             }
+            RequestPayload::SyncRequest(sync_req) => {
+                self.sync_requests_tx
+                    .send(ReceivedObject::new(sync_req.clone(), sender))?;
+            }
+            RequestPayload::SyncResponse(sync_resp) => {
+                self.sync_responses_tx
+                    .send(ReceivedObject::new(sync_resp.clone(), sender))?;
+            }
             _ => {}
         }
         Ok(())
