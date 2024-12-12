@@ -28,7 +28,7 @@ use crate::{
         Network, PrimaryNetwork,
     },
     settings::parser::{Committee, FileLoader as _},
-    synchronizer::fetcher::Fetcher,
+    synchronizer::fetcher::{Fetcher, MAX_CONCURENT_FETCH_TASKS},
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         batch::BatchId,
@@ -223,6 +223,7 @@ impl BaseAgent for Primary {
             fetcher_commands_rx,
             sync_responses_rx,
             connector.clone(),
+            MAX_CONCURENT_FETCH_TASKS,
         );
 
         let res = tokio::try_join!(
