@@ -1,3 +1,5 @@
+use crate::settings::parser::Committee;
+
 use super::{
     block_header::{BlockHeader, HeaderId},
     traits::{AsBytes, Hash},
@@ -111,6 +113,28 @@ impl Certificate {
             parents,
         )))
     }
+    pub fn verify_votes(&self, committee: &Committee) -> Result<(), CertificateError> {
+        match self {
+            Certificate::Genesis(_) => Ok(()),
+            Certificate::Dummy => Ok(()),
+            Certificate::Derived(cert) => {
+                if cert.votes.len() < committee.quorum_threshold() as usize {
+                    Err(CertificateError::NotEnoughVotes)
+                } else {
+                    let header_hash = cert.header_hash;
+                    if cert
+                        .votes
+                        .iter()
+                        .all(|elm| elm.verify(&header_hash).unwrap_or(false))
+                    {
+                        Ok(())
+                    } else {
+                        Err(CertificateError::InvalidVote)
+                    }
+                }
+            }
+        }
+    }
     pub fn genesis(seed: Seed) -> Self {
         Certificate::Genesis(seed)
     }
@@ -150,8 +174,8 @@ impl AsBytes for Certificate {
 
 #[derive(thiserror::Error, Debug)]
 pub enum CertificateError {
-    #[error("Certificate is falsified")]
-    Falsified,
+    #[error("One of the votes could not be verified")]
+    InvalidVote,
     #[error("unknown parents")]
     UnknownParents,
     #[error("not enough parents")]

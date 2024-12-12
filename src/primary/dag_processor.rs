@@ -33,7 +33,6 @@ pub(crate) struct DagProcessor {
     _reset_trigger_tx: mpsc::Sender<()>,
 }
 
-//TODO: verify the certificates votes
 impl DagProcessor {
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let genesis = Certificate::genesis(GENESIS_SEED);
@@ -55,6 +54,15 @@ impl DagProcessor {
                 }
                 Ok(certificate) = self.peers_certificates_rx.recv() => {
                     tracing::info!("📡 received new certificate from {}", certificate.sender);
+                    match certificate.object.verify_votes(&self.committee) {
+                        Ok(()) => {
+                            tracing::info!("🔍 valid votes in certificate from {}", certificate.sender);
+                        },
+                        Err(error) => {
+                            tracing::warn!("🔍 invalid votes in certificate from {}: {}", certificate.sender, error);
+                            continue;
+                        }
+                    }
                     if let Some(id) = certificate.object.header() {
                         if !check_header_storage(&id, &self.db) {
                             self.missing_headers_tx.send(ReceivedObject::new(id, certificate.sender)).await?;
