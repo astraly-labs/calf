@@ -3,11 +3,13 @@ use std::{collections::HashSet, sync::Arc};
 use crate::{
     db::{self, Db},
     settings::parser::Committee,
+    synchronizer::traits::Sourced,
     types::{
-        block_header::HeaderId,
+        block_header::{BlockHeader, HeaderId},
         certificate::{Certificate, CertificateId},
         dag::{Dag, DagError},
         network::ReceivedObject,
+        traits::AsHex,
         Round,
     },
 };
@@ -33,7 +35,7 @@ pub(crate) struct DagProcessor {
     reset_trigger_tx: mpsc::Sender<()>,
 }
 
-//TODO: verify the certificates votes and check if we have the header in DB befroe insertion (else signal to the tracker): check parents, dirty insertion if all parents are not in the DAG
+//TODO: verify the certificates votes
 impl DagProcessor {
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let genesis = Certificate::genesis(GENESIS_SEED);
@@ -55,6 +57,12 @@ impl DagProcessor {
                 }
                 Ok(certificate) = self.peers_certificates_rx.recv() => {
                     tracing::info!("📡 received new certificate from {}", certificate.sender);
+                    if let Some(id) = certificate.object.header() {
+                        if !check_header_storage(&id, &self.db) {
+                            self.missing_headers_tx.send(ReceivedObject::new(id, certificate.sender)).await?;
+                            tracing::info!("missing header referenced in {} certificate, sending to the tracker", certificate.object.id().0.as_hex_string());
+                        }
+                    }
                     match dag.check_parents(&certificate.object.clone().into()) {
                         Ok(()) => {
                             tracing::info!("💾 certificate from {} inserted in the DAG", certificate.sender);
@@ -95,5 +103,13 @@ impl DagProcessor {
             }
         }
         Ok(())
+    }
+}
+
+fn check_header_storage(id: &HeaderId, db: &Db) -> bool {
+    if let Ok(Some(_)) = db.get::<BlockHeader>(db::Column::Headers, &id.0.as_hex_string()) {
+        true
+    } else {
+        false
     }
 }

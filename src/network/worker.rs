@@ -5,9 +5,7 @@ use crate::{
     settings::parser::Committee,
     types::{
         batch::Batch,
-        network::{
-            NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse,
-        },
+        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
         transaction::Transaction,
         Acknowledgment,
     },

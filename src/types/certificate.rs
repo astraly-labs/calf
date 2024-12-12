@@ -1,5 +1,5 @@
 use super::{
-    block_header::BlockHeader,
+    block_header::{BlockHeader, HeaderId},
     traits::{AsBytes, Hash},
     vote::Vote,
     Digest, PublicKey, Round,
@@ -87,6 +87,12 @@ impl Certificate {
                 derived.parents.iter().map(|p| hex::encode(p.0)).collect()
             }
             Certificate::Dummy => HashSet::new(),
+        }
+    }
+    pub fn header(&self) -> Option<HeaderId> {
+        match self {
+            Certificate::Derived(cert) => Some(cert.header_hash.into()),
+            _ => None,
         }
     }
     pub fn derived(
