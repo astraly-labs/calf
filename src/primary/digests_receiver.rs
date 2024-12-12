@@ -103,17 +103,33 @@ mod tests {
         let (digest_tx, buffer, db, _) =
             launch_digest_receiver("/tmp/test_single_digest_received_db");
         let digests = random_digests(1);
-        for digest in digests.clone() {
-            digest_tx
-                .send(ReceivedObject::new(digest, PeerId::random()))
-                .unwrap();
+        {
+            for digest in digests.clone() {
+                digest_tx
+                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let mut buffer = buffer.lock().await;
+            let drained = buffer.drain();
+            assert_eq!(drained.len(), 1);
+            assert_eq!(drained[0], digests[0]);
+            check_storage_for_digests(&db, &digests);
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        let mut buffer = buffer.lock().await;
-        let drained = buffer.drain();
-        assert_eq!(drained.len(), 1);
-        assert_eq!(drained[0], digests[0]);
-        check_storage_for_digests(&db, &digests);
+        {
+            let digests = random_digests(1);
+            for digest in digests.clone() {
+                digest_tx
+                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let mut buffer = buffer.lock().await;
+            let drained = buffer.drain();
+            assert_eq!(drained.len(), 1);
+            assert_eq!(drained[0], digests[0]);
+            check_storage_for_digests(&db, &digests);
+        }
     }
 
     #[tokio::test]
@@ -122,17 +138,33 @@ mod tests {
         let (digest_tx, buffer, db, _) =
             launch_digest_receiver("/tmp/test_multiple_under_capacity_digests_received_db");
         let digests = random_digests(10);
-        for digest in digests.clone() {
-            digest_tx
-                .send(ReceivedObject::new(digest, PeerId::random()))
-                .unwrap();
+        {
+            for digest in digests.clone() {
+                digest_tx
+                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let mut buffer = buffer.lock().await;
+            let drained = buffer.drain();
+            assert_eq!(drained.len(), 10);
+            assert_eq!(drained, digests);
+            check_storage_for_digests(&db, &digests);
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        let mut buffer = buffer.lock().await;
-        let drained = buffer.drain();
-        assert_eq!(drained.len(), 10);
-        assert_eq!(drained, digests);
-        check_storage_for_digests(&db, &digests);
+        {
+            let digests = random_digests(10);
+            for digest in digests.clone() {
+                digest_tx
+                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let mut buffer = buffer.lock().await;
+            let drained = buffer.drain();
+            assert_eq!(drained.len(), 10);
+            assert_eq!(drained, digests);
+            check_storage_for_digests(&db, &digests);
+        }
     }
 
     #[tokio::test]
@@ -141,17 +173,33 @@ mod tests {
         let (digest_tx, buffer, db, _) =
             launch_digest_receiver("/tmp/test_multiple_over_capacity_digests_received_db");
         let digests = random_digests(20);
-        for digest in digests.clone() {
-            digest_tx
-                .send(ReceivedObject::new(digest, PeerId::random()))
-                .unwrap();
+        {
+            for digest in digests.clone() {
+                digest_tx
+                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let mut buffer = buffer.lock().await;
+            let drained = buffer.drain();
+            assert_eq!(drained.len(), 10);
+            assert_eq!(drained, digests[10..].to_vec());
+            check_storage_for_digests(&db, &digests);
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        let mut buffer = buffer.lock().await;
-        let drained = buffer.drain();
-        assert_eq!(drained.len(), 10);
-        assert_eq!(drained, digests[10..].to_vec());
-        check_storage_for_digests(&db, &digests);
+        {
+            let digests = random_digests(20);
+            for digest in digests.clone() {
+                digest_tx
+                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let mut buffer = buffer.lock().await;
+            let drained = buffer.drain();
+            assert_eq!(drained.len(), 10);
+            assert_eq!(drained, digests[10..].to_vec());
+            check_storage_for_digests(&db, &digests);
+        }
     }
 
     #[tokio::test]
@@ -160,16 +208,32 @@ mod tests {
         let (digest_tx, buffer, db, _) =
             launch_digest_receiver("/tmp/test_multiple_very_over_capacity_digests_received_db");
         let digests = random_digests(100);
-        for digest in digests.clone() {
-            digest_tx
-                .send(ReceivedObject::new(digest, PeerId::random()))
-                .unwrap();
+        {
+            for digest in digests.clone() {
+                digest_tx
+                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let mut buffer = buffer.lock().await;
+            let drained = buffer.drain();
+            assert_eq!(drained.len(), 10);
+            assert_eq!(drained, digests[90..].to_vec());
+            check_storage_for_digests(&db, &digests);
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        let mut buffer = buffer.lock().await;
-        let drained = buffer.drain();
-        assert_eq!(drained.len(), 10);
-        assert_eq!(drained, digests[90..].to_vec());
-        check_storage_for_digests(&db, &digests);
+        {
+            let digests = random_digests(100);
+            for digest in digests.clone() {
+                digest_tx
+                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let mut buffer = buffer.lock().await;
+            let drained = buffer.drain();
+            assert_eq!(drained.len(), 10);
+            assert_eq!(drained, digests[90..].to_vec());
+            check_storage_for_digests(&db, &digests);
+        }
     }
 }
