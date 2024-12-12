@@ -3,7 +3,6 @@ use std::{collections::HashSet, sync::Arc};
 use crate::{
     db::{self, Db},
     settings::parser::Committee,
-    synchronizer::traits::Sourced,
     types::{
         block_header::{BlockHeader, HeaderId},
         certificate::{Certificate, CertificateId},
@@ -28,11 +27,10 @@ pub(crate) struct DagProcessor {
     certificates_tx: mpsc::Sender<ReceivedObject<Certificate>>,
     oprhans_tx: mpsc::Sender<ReceivedObject<OrphanCertificate>>,
     missing_headers_tx: mpsc::Sender<ReceivedObject<HeaderId>>,
-    orphans_list_rx: watch::Receiver<HashSet<CertificateId>>,
     rounds_tx: watch::Sender<(Round, HashSet<Certificate>)>,
     committee: Committee,
     db: Arc<Db>,
-    reset_trigger_tx: mpsc::Sender<()>,
+    _reset_trigger_tx: mpsc::Sender<()>,
 }
 
 //TODO: verify the certificates votes
@@ -78,9 +76,6 @@ impl DagProcessor {
                                     self.oprhans_tx.send(ReceivedObject::new(orphan, certificate.sender)).await?;
                                     tracing::info!("📡 orphan certificate from {} sent to the sync tracker", certificate.sender);
                                 },
-                                _ => {
-                                    tracing::warn!("error inserting certificate from {}: {}", certificate.sender, error);
-                                }
                             }
                         }
                     }

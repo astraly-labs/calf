@@ -17,7 +17,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use sync_tracker::SyncTracker;
+use sync_tracker::{SyncStatus, SyncTracker};
 use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
@@ -32,7 +32,7 @@ use crate::{
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         batch::BatchId,
-        certificate::{Certificate, CertificateId},
+        certificate::Certificate,
         Round,
     },
     utils::{self, CircularBuffer},
@@ -126,7 +126,7 @@ impl BaseAgent for Primary {
         let (incomplete_headers_tx, incomplete_headers_rx) = mpsc::channel(CHANNEL_SIZE);
         let (received_certificates_tx, received_certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
-        let (orphans_list_tx, orphans_list_rx) = watch::channel(HashSet::<CertificateId>::new());
+        let (sync_status_tx, sync_status_rx) = watch::channel(SyncStatus::Complete);
         let (fetcher_commands_tx, fetcher_commands_rx) = mpsc::channel(CHANNEL_SIZE);
 
         let (sync_reset_trigger_tx, sync_reset_trigger_rx) = mpsc::channel(CHANNEL_SIZE);
@@ -165,6 +165,7 @@ impl BaseAgent for Primary {
             vote_rx.resubscribe(),
             digests_buffer.clone(),
             self.commitee.clone(),
+            sync_status_rx,
         );
 
         let header_elector_handle = HeaderElector::spawn(
@@ -195,7 +196,6 @@ impl BaseAgent for Primary {
             received_certificates_tx,
             orphans_tx,
             missing_headers_tx,
-            orphans_list_rx,
             round_tx,
             self.commitee.clone(),
             self.db.clone(),
@@ -211,7 +211,7 @@ impl BaseAgent for Primary {
             incomplete_headers_rx,
             missing_headers_rx,
             fetcher_commands_tx,
-            orphans_list_tx,
+            sync_status_tx,
             sync_reset_trigger_rx,
             connector.clone(),
             self.db.clone(),

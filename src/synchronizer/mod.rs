@@ -62,8 +62,8 @@ where
 {
     async fn fetch(
         &mut self,
-        requests_tx: mpsc::Sender<NetworkRequest>,
-        responses_rx: broadcast::Receiver<ReceivedObject<SyncResponse>>,
+        _requests_tx: mpsc::Sender<NetworkRequest>,
+        _responses_rx: broadcast::Receiver<ReceivedObject<SyncResponse>>,
     ) -> anyhow::Result<Vec<ReceivedObject<RequestPayload>>> {
         unimplemented!("random peers broadcast ?")
     }

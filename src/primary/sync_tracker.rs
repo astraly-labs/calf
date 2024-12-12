@@ -35,7 +35,7 @@ pub struct SyncTracker {
     // to send commands to the fetcher
     fetcher_commands_tx: mpsc::Sender<Box<dyn Fetch + Send + Sync + 'static>>,
     // to expose all orphan certificates
-    orphans_tx: watch::Sender<HashSet<CertificateId>>,
+    sync_status_tx: watch::Sender<SyncStatus>,
     reset_trigger: mpsc::Receiver<()>,
     network_router: PrimaryConnector,
     db: Arc<Db>,
@@ -62,7 +62,12 @@ impl SyncTracker {
         let mut missing_headers: Vec<HeaderId> = vec![];
         let mut incomplete_headers: Vec<IncompleteHeader> = vec![];
         loop {
-            publish_orphans(&orphans_certificates, &self.orphans_tx)?;
+            publish_sync_status(
+                &orphans_certificates,
+                &missing_headers,
+                &incomplete_headers,
+                &self.sync_status_tx,
+            )?;
             tokio::select! {
                 // v-- reception of the data that we have to synchronize --v
                 Some(orphan) = self.orphans_rx.recv() => {
@@ -148,6 +153,11 @@ impl SyncTracker {
     }
 }
 
+pub enum SyncStatus {
+    Complete,
+    Incomplete,
+}
+
 /// check if we have all the data referenced by the header
 fn header_missing_data(
     header: &BlockHeader,
@@ -191,11 +201,17 @@ fn header_missing_data(
     }
 }
 
-fn publish_orphans(
+fn publish_sync_status(
     orphans: &Vec<OrphanCertificate>,
-    orphans_tx: &watch::Sender<HashSet<CertificateId>>,
+    missing_headers: &Vec<HeaderId>,
+    incomplete_headers: &Vec<IncompleteHeader>,
+    orphans_tx: &watch::Sender<SyncStatus>,
 ) -> anyhow::Result<()> {
-    orphans_tx.send(orphans.iter().map(|elm| elm.id).collect())?;
+    if orphans.is_empty() && missing_headers.is_empty() && incomplete_headers.is_empty() {
+        orphans_tx.send(SyncStatus::Complete)?;
+    } else {
+        orphans_tx.send(SyncStatus::Incomplete)?;
+    }
     Ok(())
 }
 

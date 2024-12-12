@@ -23,6 +23,8 @@ use crate::{
     utils::CircularBuffer,
 };
 
+use super::sync_tracker::SyncStatus;
+
 const QUORUM_TIMEOUT: u64 = 1000;
 
 #[derive(Spawn)]
@@ -35,6 +37,7 @@ pub(crate) struct HeaderBuilder {
     votes_rx: broadcast::Receiver<ReceivedObject<Vote>>,
     digests_buffer: Arc<Mutex<CircularBuffer<BatchId>>>,
     committee: Committee,
+    sync_status_rx: watch::Receiver<SyncStatus>,
 }
 
 impl HeaderBuilder {
@@ -42,6 +45,13 @@ impl HeaderBuilder {
         let mut cancellation_token = CancellationToken::new();
         loop {
             let _trigger = self.header_trigger_rx.changed().await?;
+            match *self.sync_status_rx.borrow() {
+                SyncStatus::Complete => {}
+                _ => {
+                    tracing::info!("🚫 Not synchronized, unable to build a header.");
+                    continue;
+                }
+            }
             cancellation_token.cancel();
             let (round, certificates) = self.header_trigger_rx.borrow().clone();
             tracing::info!("🔨 Building Header for round {}", round);
