@@ -34,7 +34,6 @@ use crate::{
     utils,
 };
 
-const QUORUM_TRESHOLD: u32 = 1;
 const TIMEOUT: u64 = 1000;
 const BATCH_SIZE: usize = 100;
 const QUORUM_TIMEOUT: u128 = 1000;
@@ -173,7 +172,7 @@ impl BaseAgent for Worker {
         );
 
         let worker_network_handle = Network::<WorkerNetwork, WorkerConnector, WorkerPeers>::spawn(
-            self.commitee,
+            self.commitee.clone(),
             p2p_connector.clone(),
             self.validator_keypair,
             self.keypair,
@@ -186,7 +185,7 @@ impl BaseAgent for Worker {
             cancellation_token.clone(),
             quorum_waiter_batches_rx,
             acks_rx,
-            QUORUM_TRESHOLD,
+            self.commitee.quorum_threshold(),
             network_tx.clone(),
             Arc::clone(&self.db),
             QUORUM_TIMEOUT,

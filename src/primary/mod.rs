@@ -3,6 +3,7 @@ pub mod digests_receiver;
 pub mod header_builder;
 pub mod header_elector;
 pub mod sync_tracker;
+pub mod test_utils;
 
 use anyhow::Context;
 use clap::{command, Parser};

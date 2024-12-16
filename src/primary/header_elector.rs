@@ -108,8 +108,8 @@ fn process_header(
         .iter()
         .filter(
             |digest| match db.get::<BatchId>(db::Column::Digests, &digest.0.as_hex_string()) {
-                Ok(Some(_)) => true,
-                _ => false,
+                Ok(Some(_)) => false,
+                _ => true,
             },
         )
         .cloned()
@@ -137,5 +137,112 @@ fn process_header(
             header,
             sender,
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{collections::HashSet, sync::Arc, time::Duration};
+
+    use libp2p::{identity::ed25519::{self, Keypair}, PeerId};
+    use rstest::rstest;
+    use tokio::{sync::{broadcast, mpsc, watch}, time::timeout};
+    use tokio_util::sync::CancellationToken;
+
+    use crate::{
+        db::{Column, Db},
+        primary::{
+            sync_tracker::IncompleteHeader,
+            test_utils::fixtures::{load_committee, random_digests, CHANNEL_CAPACITY, COMMITTEE_PATH, GENESIS_SEED},
+        },
+        types::{
+            block_header::BlockHeader, certificate::{Certificate, CertificateId}, network::{NetworkRequest, ReceivedObject, RequestPayload}, traits::{AsHex, Hash}, PublicKey, Round
+        },
+    };
+
+    use super::HeaderElector;
+
+    type HeaderElectorFixutre = (
+        //To send headers to the elector
+        broadcast::Sender<ReceivedObject<BlockHeader>>,
+        //To send the current round and certificates to the elector
+        watch::Sender<(Round, HashSet<Certificate>)>,
+        //To receive incomplete headers from the elector
+        mpsc::Receiver<ReceivedObject<IncompleteHeader>>,
+        //To receive requests from the elector
+        mpsc::Receiver<NetworkRequest>,
+        Arc<Db>,
+        CancellationToken,
+    );
+    
+    fn launch_header_elector(committee_path: String, db_path: &str) -> HeaderElectorFixutre {
+        let (headers_tx, headers_rx) = broadcast::channel(CHANNEL_CAPACITY);
+        let (round_tx, round_rx) = watch::channel((0, HashSet::new()));
+        let (incomplete_headers_tx, incomplete_headers_rx) = mpsc::channel(CHANNEL_CAPACITY);
+        let (network_tx, network_rx) = mpsc::channel(CHANNEL_CAPACITY);
+        let db = Arc::new(Db::new(db_path.into()).unwrap());
+        let validator_keypair = ed25519::Keypair::generate();
+        let token = CancellationToken::new();
+        let db_clone = db.clone();
+        let token_clone = token.clone();
+        tokio::spawn(async move {
+            HeaderElector::spawn(
+                token_clone,
+                network_tx,
+                headers_rx,
+                round_rx,
+                validator_keypair,
+                db_clone,
+                load_committee(&committee_path),
+                incomplete_headers_tx,
+            )
+            .await
+            .unwrap()
+        });
+        (headers_tx, round_tx, incomplete_headers_rx, network_rx, db, token)
+    }
+
+    fn set_header_storage_in_db(header: &BlockHeader, db: &Db) {
+        for digest in &header.digests {
+            db.insert(Column::Digests, &digest.0.as_hex_string(), digest).unwrap();
+        }
+    }
+
+    fn random_header(certificates_ids: &[CertificateId], round: Round) -> BlockHeader {
+        let digests = random_digests(10);
+        let author_pubkey = Keypair::generate().public().to_bytes();
+        BlockHeader::new(author_pubkey, digests, certificates_ids.into(), round)
+    }
+
+    fn publish_round_state(tx: &watch::Sender<(Round, HashSet<Certificate>)>, round: Round, references: &[Certificate]) {
+        let certificates = references.into_iter().cloned().collect();
+        tx.send((round, certificates)).unwrap();
+    }
+
+    async fn send_header_check_vote(header: BlockHeader, headers_tx: broadcast::Sender<ReceivedObject<BlockHeader>>, mut network_rx: mpsc::Receiver<NetworkRequest>) {
+        let header_hash = header.digest();
+        let peer_id = PeerId::random();
+        headers_tx.send(ReceivedObject::new(header, peer_id)).unwrap();
+        match timeout(Duration::from_millis(10), network_rx.recv()).await {
+            Ok(Some(NetworkRequest::SendTo(sender, RequestPayload::Vote(vote)))) => {
+                assert_eq!(sender, peer_id);
+                let vote_status = vote.verify(&header_hash);
+                assert!(vote_status.is_ok());
+            },
+            _ => {
+                assert!(false);
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[rstest]
+    async fn test_first_round_valid_header_digests_stored() {
+        let (headers_tx, round_state_tx, _incomplete_headers_rx, network_rx, db, _) = launch_header_elector(COMMITTEE_PATH.into(), "/tmp/test_first_round_valid_header_digests_stored_db");
+        let genesis = Certificate::genesis(GENESIS_SEED);
+        let header = random_header(&[genesis.id()], 1);
+        set_header_storage_in_db(&header, &db);
+        publish_round_state(&round_state_tx, 1, &[genesis]);
+        send_header_check_vote(header, headers_tx, network_rx).await;
     }
 }

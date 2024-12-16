@@ -33,69 +33,15 @@ impl DigestReceiver {
 
 #[cfg(test)]
 mod tests {
-    use super::DigestReceiver;
     use crate::{
-        db::{Column, Db},
-        types::{
-            batch::{Batch, BatchId},
-            network::ReceivedObject,
-            traits::{AsHex, Hash, Random},
-            transaction::Transaction,
+        primary::test_utils::fixtures::{
+            check_storage_for_digests, launch_digest_receiver, random_digests,
         },
-        utils::CircularBuffer,
+        types::network::ReceivedObject,
     };
     use libp2p::PeerId;
     use rstest::rstest;
-    use std::{sync::Arc, time::Duration};
-    use tokio::sync::{broadcast, Mutex};
-    use tokio_util::sync::CancellationToken;
-
-    const CHANNEL_CAPACITY: usize = 1000;
-    const BUFFER_CAPACITY: usize = 10;
-    const RANDOM_BATCH_SIZE: usize = 10;
-
-    type DigestReceiverFixture = (
-        broadcast::Sender<ReceivedObject<BatchId>>,
-        Arc<Mutex<CircularBuffer<BatchId>>>,
-        Arc<Db>,
-        CancellationToken,
-    );
-
-    fn launch_digest_receiver(db_path: &str) -> DigestReceiverFixture {
-        let (digest_tx, digest_rx) = broadcast::channel(CHANNEL_CAPACITY);
-        let buffer = Arc::new(Mutex::new(CircularBuffer::new(BUFFER_CAPACITY)));
-        let db = Arc::new(Db::new(db_path.into()).unwrap());
-        let buffer_clone = buffer.clone();
-        let db_clone = db.clone();
-        let token = CancellationToken::new();
-        let token_clone = token.clone();
-        let _ = tokio::spawn(async move {
-            DigestReceiver::spawn(token_clone, digest_rx, buffer_clone, db_clone)
-                .await
-                .unwrap();
-        });
-        (digest_tx, buffer, db, token)
-    }
-
-    fn random_digests(count: usize) -> Vec<BatchId> {
-        (0..count)
-            .map(|_| {
-                Batch::<Transaction>::random(RANDOM_BATCH_SIZE)
-                    .digest()
-                    .into()
-            })
-            .collect()
-    }
-
-    fn check_storage_for_digests(db: &Db, digests: &[BatchId]) {
-        for digest in digests {
-            let stored_digest: BatchId = db
-                .get(Column::Digests, &digest.0.as_hex_string())
-                .unwrap()
-                .unwrap();
-            assert_eq!(stored_digest, *digest);
-        }
-    }
+    use std::time::Duration;
 
     #[tokio::test]
     #[rstest]
