@@ -6,12 +6,16 @@ pub mod fixtures {
     use tokio_util::sync::CancellationToken;
 
     use crate::{
-        db::{Column, Db}, primary::DigestReceiver, settings::parser::{Committee, FileLoader}, types::{
+        db::{Column, Db},
+        primary::DigestReceiver,
+        settings::parser::{Committee, FileLoader},
+        types::{
             batch::{Batch, BatchId},
             network::ReceivedObject,
             traits::{AsHex, Hash, Random},
             transaction::Transaction,
-        }, utils::CircularBuffer
+        },
+        utils::CircularBuffer,
     };
 
     pub const CHANNEL_CAPACITY: usize = 1000;

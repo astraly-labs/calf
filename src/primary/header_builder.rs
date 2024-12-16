@@ -171,7 +171,7 @@ async fn broadcast_certificate(
         .await?;
 
     tracing::info!("🤖 Broadcasting Certificate...");
-    Ok(()) 
+    Ok(())
 }
 
 async fn broadcast_header(
