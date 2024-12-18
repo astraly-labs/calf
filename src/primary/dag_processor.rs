@@ -4,19 +4,12 @@ use crate::{
     db::{self, Db},
     settings::parser::Committee,
     types::{
-        block_header::{BlockHeader, HeaderId},
-        certificate::{Certificate, CertificateId},
-        dag::{Dag, DagError},
-        network::ReceivedObject,
-        traits::AsHex,
-        Round,
+        block_header::{BlockHeader, HeaderId}, certificate::{Certificate, CertificateId}, dag::{Dag, DagError}, network::ReceivedObject, sync::OrphanCertificate, traits::AsHex, Round
     },
 };
 use proc_macros::Spawn;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_util::sync::CancellationToken;
-
-use super::sync_tracker::OrphanCertificate;
 
 const GENESIS_SEED: [u8; 32] = [0; 32];
 

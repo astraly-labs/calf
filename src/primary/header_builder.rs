@@ -184,3 +184,9 @@ async fn broadcast_header(
         .await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+    type HeaderMakerFixture = (
+    );
+}

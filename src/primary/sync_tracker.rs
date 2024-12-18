@@ -5,10 +5,7 @@ use crate::{
     network::{primary::PrimaryConnector, Connect},
     synchronizer::traits::{Fetch, Sourced},
     types::{
-        batch::BatchId,
-        block_header::{BlockHeader, HeaderId},
-        network::RequestPayload,
-        traits::AsHex,
+        batch::BatchId, block_header::{BlockHeader, HeaderId}, network::RequestPayload, sync::{IncompleteHeader, OrphanCertificate}, traits::AsHex
     },
 };
 use derive_more::derive::Constructor;
@@ -39,20 +36,6 @@ pub struct SyncTracker {
     reset_trigger: mpsc::Receiver<()>,
     network_router: PrimaryConnector,
     db: Arc<Db>,
-}
-
-#[derive(Debug, Constructor)]
-pub struct OrphanCertificate {
-    pub id: CertificateId,
-    pub missing_parents: Vec<CertificateId>,
-}
-
-#[derive(Debug, Constructor)]
-pub struct IncompleteHeader {
-    pub missing_certificates: HashSet<CertificateId>,
-    pub missing_batches: HashSet<BatchId>,
-    pub header: BlockHeader,
-    pub sender: PeerId,
 }
 
 impl SyncTracker {

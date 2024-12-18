@@ -111,9 +111,14 @@ where
         requests_rx: mpsc::Receiver<NetworkRequest>,
         cancellation_token: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
+        let token_clone = cancellation_token.clone();
         tokio::spawn(async move {
-            let identify_infos = serde_json::to_string(&peers.read().await.identify())
-                .expect("serialization error, is it possible ?");
+            let identify_infos = serde_json::to_string(&peers.read().await.identify());
+            if identify_infos.is_err() {
+                token_clone.cancel();
+            }
+            //safe unwrap, checked --^
+            let identify_infos = identify_infos.unwrap();
             let keypair_lib = Keypair::from(keypair.clone());
             let mdns = match mdns::tokio::Behaviour::new(
                 mdns::Config::default(),
@@ -186,7 +191,6 @@ where
     }
 
     async fn run(&mut self) -> anyhow::Result<()> {
-        //TODO: committee
         self.swarm
             .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
 

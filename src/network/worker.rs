@@ -122,6 +122,8 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
                     tracing::error!("No primary peer, unable to send request");
                 }
             },
+            //TODO: impl lucky broadcast here
+            _ => {}
         };
         Ok(())
     }

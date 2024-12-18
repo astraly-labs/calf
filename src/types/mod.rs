@@ -8,6 +8,7 @@ pub mod signing;
 pub mod traits;
 pub mod transaction;
 pub mod vote;
+pub mod sync;
 
 use block_header::BlockHeader;
 use serde::{Deserialize, Serialize};

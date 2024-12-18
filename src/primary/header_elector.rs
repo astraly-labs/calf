@@ -9,17 +9,9 @@ use crate::{
     db::{self, Db},
     settings::parser::Committee,
     types::{
-        batch::BatchId,
-        block_header::BlockHeader,
-        certificate::{Certificate, CertificateId},
-        network::{NetworkRequest, ReceivedObject, RequestPayload},
-        traits::AsHex,
-        vote::Vote,
-        Round,
+        batch::BatchId, block_header::BlockHeader, certificate::{Certificate, CertificateId}, network::{NetworkRequest, ReceivedObject, RequestPayload}, sync::IncompleteHeader, traits::AsHex, vote::Vote, Round
     },
 };
-
-use super::sync_tracker::IncompleteHeader;
 
 #[derive(Spawn)]
 pub(crate) struct HeaderElector {
@@ -157,19 +149,12 @@ mod test {
 
     use crate::{
         db::{Column, Db},
-        primary::{
-            sync_tracker::IncompleteHeader,
+        primary::
             test_utils::fixtures::{
                 load_committee, random_digests, CHANNEL_CAPACITY, COMMITTEE_PATH, GENESIS_SEED,
             },
-        },
         types::{
-            batch::BatchId,
-            block_header::BlockHeader,
-            certificate::{Certificate, CertificateId},
-            network::{NetworkRequest, ReceivedObject, RequestPayload},
-            traits::{AsHex, Hash},
-            Round,
+            batch::BatchId, block_header::BlockHeader, certificate::{Certificate, CertificateId}, network::{NetworkRequest, ReceivedObject, RequestPayload}, sync::IncompleteHeader, traits::{AsHex, Hash}, Round
         },
     };
 
@@ -362,7 +347,7 @@ mod test {
     #[tokio::test]
     #[rstest]
     async fn test_first_round_valid_header_missing_certificate_missing_digests() {
-        let (headers_tx, round_state_tx, incomplete_headers_rx, _network_rx, db, _) =
+        let (headers_tx, round_state_tx, incomplete_headers_rx, _network_rx, _db, _) =
             launch_header_elector(
                 COMMITTEE_PATH.into(),
                 "/tmp/test_first_round_valid_header_missing_certificate_missing_digests_db",

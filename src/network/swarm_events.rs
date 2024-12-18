@@ -58,10 +58,7 @@ where
                         let mut peers = peers.write().await;
                         if let Some(addr) = peers.established().get(&peer_id).cloned() {
                             if !peers.add_peer(Peer::Worker(peer_id, addr.clone(), id), pubkey) {
-                                // tracing::info!("disconnecting from worker {peer_id}");
-                                // swarm.disconnect_peer_id(peer_id).map_err(|_| {
-                                //     anyhow::anyhow!("failed to disconned from peer")
-                                // })?;
+                                tracing::info!("connection with {peer_id} already established");
                             }
                         }
                     }
@@ -72,10 +69,7 @@ where
                             if !peers
                                 .add_peer(Peer::Primary(peer_id, addr.clone()), authority_pubkey)
                             {
-                                // tracing::info!("disconnecting from primary {peer_id}");
-                                // swarm.disconnect_peer_id(peer_id).map_err(|_| {
-                                //     anyhow::anyhow!("failed to disconned from peer")
-                                // })?;
+                                tracing::info!("connection with {peer_id}, already established");
                             }
                         }
                     }

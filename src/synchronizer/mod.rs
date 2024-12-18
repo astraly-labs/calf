@@ -5,11 +5,7 @@ use tokio::sync::{broadcast, mpsc};
 use traits::{DataProvider, Fetch, IntoSyncRequest};
 
 use crate::types::{
-    batch::BatchId,
-    block_header::HeaderId,
-    certificate::CertificateId,
-    network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
-    Digest,
+    batch::BatchId, block_header::HeaderId, certificate::CertificateId, network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse}, traits::AsHex, Digest
 };
 
 pub mod fetcher;
@@ -65,7 +61,7 @@ where
         _requests_tx: mpsc::Sender<NetworkRequest>,
         _responses_rx: broadcast::Receiver<ReceivedObject<SyncResponse>>,
     ) -> anyhow::Result<Vec<ReceivedObject<RequestPayload>>> {
-        unimplemented!("random peers broadcast ?")
+        unimplemented!("Lucky Broadcast with retry");
     }
     async fn try_fetch_from(
         &mut self,
@@ -84,7 +80,7 @@ where
                 .send(req)
                 .await
                 .map_err(|_| FetchError::BrokenChannel)?;
-            let wait_for_response = tokio::spawn(async move {
+            let wait_for_response = async move {
                 loop {
                     if let Ok(elm) = responses_rx_clone.recv().await {
                         if elm.object.id() == id {
@@ -92,19 +88,19 @@ where
                         }
                     }
                 }
-            });
+            };
             let (response, sender) = match tokio::time::timeout(
                 std::time::Duration::from_millis(ONE_PEER_FETCH_TIMEOUT),
                 wait_for_response,
             )
             .await
             {
-                Ok(Ok((response, sender))) => (response, sender),
-                Ok(Err(_)) => Err(FetchError::BrokenChannel)?,
+                Ok((response, sender)) => (response, sender),
                 Err(_) => continue,
             };
             match response {
-                SyncResponse::Success(_, data) => {
+                SyncResponse::Success(peer, data) => {
+                    tracing::info!("Succes: all requested data feched from {}", peer.as_hex_string());
                     let payloads = data.into_payloads();
                     return Ok(payloads
                         .into_iter()
@@ -114,7 +110,8 @@ where
                         })
                         .collect());
                 }
-                SyncResponse::Partial(_, data) => {
+                SyncResponse::Partial(peer, data) => {
+                    tracing::info!("requested data partially fetched from {}", peer.as_hex_string());
                     let payloads = data.into_payloads();
                     let reached_data_ids: HashSet<Digest> = payloads
                         .iter()
@@ -126,7 +123,8 @@ where
                         sender: source.clone(),
                     }));
                 }
-                SyncResponse::Failure(_) => {
+                SyncResponse::Failure(peer) => {
+                    tracing::info!("failure: {} doesn't have the requested data", peer.as_hex_string());
                     continue;
                 }
             }
