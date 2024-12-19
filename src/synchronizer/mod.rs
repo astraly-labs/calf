@@ -143,7 +143,7 @@ where
                     }));
                 }
                 SyncResponse::Failure(peer) => {
-                    tracing::info!(
+                    tracing::warn!(
                         "failure: {} doesn't have the requested data",
                         peer.as_hex_string()
                     );

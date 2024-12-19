@@ -50,7 +50,7 @@ where
                         tasks_number += 1;
                     }
                     else {
-                        tracing::info!("fetcher is busy, queueing the command");
+                        tracing::warn!("fetcher is busy, queueing the command");
                     }
                 }
                 Some(res) = tasks.join_next() => {
