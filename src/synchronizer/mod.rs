@@ -37,7 +37,7 @@ where
     T: Fetch + Send + Sync + 'static,
 {
     /// Fetch the RequestedObject from its source
-    async fn fetch(
+    async fn try_fetch(
         &mut self,
         requests_tx: mpsc::Sender<NetworkRequest>,
         responses_rx: broadcast::Receiver<ReceivedObject<SyncResponse>>,
@@ -65,7 +65,7 @@ impl<T> Fetch for T
 where
     T: IntoSyncRequest + Send + Sync + 'static,
 {
-    async fn fetch(
+    async fn try_fetch(
         &mut self,
         _requests_tx: mpsc::Sender<NetworkRequest>,
         _responses_rx: broadcast::Receiver<ReceivedObject<SyncResponse>>,

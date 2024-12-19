@@ -42,7 +42,7 @@ where
                             let network_tx = self.network_tx.clone();
                             let sync_response_rx = self.sync_response_rx.resubscribe();
                             let task = async move {
-                                command.fetch(network_tx, sync_response_rx).await
+                                command.try_fetch(network_tx, sync_response_rx).await
                             };
                             tasks.spawn(task);
                             tracing::info!("new fetch task spawned");

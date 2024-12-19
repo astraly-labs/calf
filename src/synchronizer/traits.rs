@@ -14,7 +14,7 @@ use super::RequestedObject;
 #[async_trait]
 /// Detach the logic of fetching the objects from the logic of the object to fetch
 pub trait Fetch {
-    async fn fetch(
+    async fn try_fetch(
         &mut self,
         requests_tx: mpsc::Sender<NetworkRequest>,
         responses_rx: broadcast::Receiver<ReceivedObject<SyncResponse>>,
