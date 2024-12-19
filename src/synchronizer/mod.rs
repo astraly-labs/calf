@@ -5,7 +5,12 @@ use tokio::sync::{broadcast, mpsc};
 use traits::{DataProvider, Fetch, IntoSyncRequest};
 
 use crate::types::{
-    batch::BatchId, block_header::HeaderId, certificate::CertificateId, network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse}, traits::AsHex, Digest
+    batch::BatchId,
+    block_header::HeaderId,
+    certificate::CertificateId,
+    network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
+    traits::AsHex,
+    Digest,
 };
 
 pub mod fetcher;
@@ -13,12 +18,14 @@ pub mod traits;
 
 const ONE_PEER_FETCH_TIMEOUT: u64 = 100;
 
+/// May be used later, to cancel a fetch task if the searched data is received by another way
 pub enum FetcherCommand {
     Push(Box<dyn Fetch + Send + Sync + 'static>),
     Remove(Box<dyn Fetch + Send + Sync + 'static>),
 }
 
-/// A structure that contains and object to fetch and the source to fetch it from
+/// A structure that contains the id of an object to fetch and the source to fetch it from.
+/// the dataProvider trait provides a list of peers ids (that could provide the data referenced by the 'object')
 pub struct RequestedObject<T> {
     pub object: T,
     pub source: Box<dyn DataProvider + Send + Sync + 'static>,
@@ -29,6 +36,7 @@ impl<T> Fetch for RequestedObject<T>
 where
     T: Fetch + Send + Sync + 'static,
 {
+    /// Fetch the RequestedObject from its source
     async fn fetch(
         &mut self,
         requests_tx: mpsc::Sender<NetworkRequest>,
@@ -38,6 +46,7 @@ where
             .try_fetch_from(requests_tx, responses_rx, &self.source)
             .await
     }
+    /// To "bypass" the RequestedObject source and fecth it from another given source
     async fn try_fetch_from(
         &mut self,
         requests_tx: mpsc::Sender<NetworkRequest>,
@@ -63,6 +72,10 @@ where
     ) -> anyhow::Result<Vec<ReceivedObject<RequestPayload>>> {
         unimplemented!("Lucky Broadcast with retry");
     }
+    /// Try to fetch a set of objects from a set of peers, peer per peer. If a peer answer all the data we need the process is over.
+    /// If a peer provides only a subset of the data, this data is saved and we try to get the remaining missing data from the next peer.
+    /// If a peer answer Failure, it doesn't have the data or is unable to provide it and we can simply try with the next peer.
+    /// Note that self can also be be a single object id and source a single peer id.
     async fn try_fetch_from(
         &mut self,
         requests_tx: mpsc::Sender<NetworkRequest>,
@@ -100,7 +113,10 @@ where
             };
             match response {
                 SyncResponse::Success(peer, data) => {
-                    tracing::info!("Succes: all requested data feched from {}", peer.as_hex_string());
+                    tracing::info!(
+                        "Succes: all requested data feched from {}",
+                        peer.as_hex_string()
+                    );
                     let payloads = data.into_payloads();
                     return Ok(payloads
                         .into_iter()
@@ -111,7 +127,10 @@ where
                         .collect());
                 }
                 SyncResponse::Partial(peer, data) => {
-                    tracing::info!("requested data partially fetched from {}", peer.as_hex_string());
+                    tracing::info!(
+                        "requested data partially fetched from {}",
+                        peer.as_hex_string()
+                    );
                     let payloads = data.into_payloads();
                     let reached_data_ids: HashSet<Digest> = payloads
                         .iter()
@@ -124,7 +143,10 @@ where
                     }));
                 }
                 SyncResponse::Failure(peer) => {
-                    tracing::info!("failure: {} doesn't have the requested data", peer.as_hex_string());
+                    tracing::info!(
+                        "failure: {} doesn't have the requested data",
+                        peer.as_hex_string()
+                    );
                     continue;
                 }
             }

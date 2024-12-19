@@ -18,7 +18,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use sync_tracker::{SyncStatus, SyncTracker};
+use sync_tracker::SyncTracker;
 use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
@@ -31,10 +31,7 @@ use crate::{
     settings::parser::{Committee, FileLoader as _},
     synchronizer::fetcher::{Fetcher, MAX_CONCURENT_FETCH_TASKS},
     types::{
-        agents::{BaseAgent, LoadableFromSettings, Settings},
-        batch::BatchId,
-        certificate::Certificate,
-        Round,
+        agents::{BaseAgent, LoadableFromSettings, Settings}, batch::BatchId, certificate::Certificate, sync::SyncStatus, Round
     },
     utils::{self, CircularBuffer},
     CHANNEL_SIZE,

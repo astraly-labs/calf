@@ -9,7 +9,14 @@ use crate::{
     db::{self, Db},
     settings::parser::Committee,
     types::{
-        batch::BatchId, block_header::BlockHeader, certificate::{Certificate, CertificateId}, network::{NetworkRequest, ReceivedObject, RequestPayload}, sync::IncompleteHeader, traits::AsHex, vote::Vote, Round
+        batch::BatchId,
+        block_header::BlockHeader,
+        certificate::{Certificate, CertificateId},
+        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        sync::IncompleteHeader,
+        traits::AsHex,
+        vote::Vote,
+        Round,
     },
 };
 
@@ -149,12 +156,17 @@ mod test {
 
     use crate::{
         db::{Column, Db},
-        primary::
-            test_utils::fixtures::{
-                load_committee, random_digests, CHANNEL_CAPACITY, COMMITTEE_PATH, GENESIS_SEED,
-            },
+        primary::test_utils::fixtures::{
+            load_committee, random_digests, CHANNEL_CAPACITY, COMMITTEE_PATH, GENESIS_SEED,
+        },
         types::{
-            batch::BatchId, block_header::BlockHeader, certificate::{Certificate, CertificateId}, network::{NetworkRequest, ReceivedObject, RequestPayload}, sync::IncompleteHeader, traits::{AsHex, Hash}, Round
+            batch::BatchId,
+            block_header::BlockHeader,
+            certificate::{Certificate, CertificateId},
+            network::{NetworkRequest, ReceivedObject, RequestPayload},
+            sync::IncompleteHeader,
+            traits::{AsHex, Hash},
+            Round,
         },
     };
 

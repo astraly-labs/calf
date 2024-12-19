@@ -9,25 +9,37 @@ use derive_more::derive::Constructor;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
+/// Represents a network request with different modes of sending.
 #[derive(Debug, PartialEq, Eq)]
 pub enum NetworkRequest {
+    /// Broadcast a payload to all peers.
     Broadcast(RequestPayload),
+    /// Broadcast a payload to a random subset of peers.
     LuckyBroadcast(RequestPayload),
+    /// Send a payload to a specific peer.
     SendTo(PeerId, RequestPayload),
+    /// Send a payload to the primary node.
     SendToPrimary(RequestPayload),
 }
 
+/// Represents the payloads that can be included in a network request.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum RequestPayload {
     Batch(Batch<Transaction>),
+    /// An acknowledgment message for a batch.
     Acknowledgment(Acknowledgment),
+    /// A digest of a transactions batch.
     Digest(Digest),
+    /// A block header.
     Header(BlockHeader),
+    /// A certificate validating a header.
     Certificate(Certificate),
+    /// A vote for a header.
     Vote(Vote),
     SyncRequest(SyncRequest),
     SyncResponse(SyncResponse),
 }
+
 
 impl RequestPayload {
     pub fn id(&self) -> anyhow::Result<RequestId> {
@@ -60,12 +72,13 @@ impl RequestPayload {
     }
 }
 
+///A specific request to ask some data from a peer, the peer will answer with a SyncResponse (exept for SyncDigests)
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum SyncRequest {
-    Certificates(Vec<Digest>), // shortcuts for the feeder
+    Certificates(Vec<Digest>),
     BlockHeaders(Vec<Digest>),
     Batches(Vec<Digest>),
-    // Ask a worker to get the batch corresponding to a digest contained in a header
+    /// Ask a worker to get the batch corresponding to a digest contained in a header. When the worker get the batches, it send the digests to his primary.
     SyncDigests(Vec<Digest>),
 }
 
@@ -112,10 +125,14 @@ impl SyncRequest {
     }
 }
 
+///A response to a SyncRequest, the requestId is the hash of the SyncRequest.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum SyncResponse {
+    ///All the asked data found
     Success(RequestId, SyncData),
+    ///Only a subset of the requested data found
     Partial(RequestId, SyncData),
+    ///None of the requested data found
     Failure(RequestId),
 }
 
@@ -132,6 +149,7 @@ impl SyncResponse {
     }
 }
 
+///The data corresponding to the ids in the SyncRequest
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum SyncData {
     Certificates(Vec<Certificate>),
@@ -158,9 +176,12 @@ impl SyncData {
     }
 }
 
+/// An object received by a peer.
 #[derive(Clone, Debug, Constructor)]
 pub struct ReceivedObject<T> {
+    /// The object that was received.
     pub object: T,
+    /// The id of the peer that sent the object.
     pub sender: PeerId,
 }
 

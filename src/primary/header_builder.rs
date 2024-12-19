@@ -12,18 +12,10 @@ use crate::{
     db::Db,
     settings::parser::Committee,
     types::{
-        batch::BatchId,
-        block_header::BlockHeader,
-        certificate::Certificate,
-        network::{NetworkRequest, ReceivedObject, RequestPayload},
-        traits::Hash,
-        vote::Vote,
-        Round,
+        batch::BatchId, block_header::BlockHeader, certificate::Certificate, network::{NetworkRequest, ReceivedObject, RequestPayload}, sync::SyncStatus, traits::Hash, vote::Vote, Round
     },
     utils::CircularBuffer,
 };
-
-use super::sync_tracker::SyncStatus;
 
 const QUORUM_TIMEOUT: u64 = 1000;
 
@@ -187,6 +179,5 @@ async fn broadcast_header(
 
 #[cfg(test)]
 mod test {
-    type HeaderMakerFixture = (
-    );
+    type HeaderMakerFixture = ();
 }

@@ -4,7 +4,13 @@ use crate::{
     db::{self, Db},
     settings::parser::Committee,
     types::{
-        block_header::{BlockHeader, HeaderId}, certificate::{Certificate, CertificateId}, dag::{Dag, DagError}, network::ReceivedObject, sync::OrphanCertificate, traits::AsHex, Round
+        block_header::{BlockHeader, HeaderId},
+        certificate::{Certificate, CertificateId},
+        dag::{Dag, DagError},
+        network::ReceivedObject,
+        sync::OrphanCertificate,
+        traits::AsHex,
+        Round,
     },
 };
 use proc_macros::Spawn;

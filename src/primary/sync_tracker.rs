@@ -5,10 +5,14 @@ use crate::{
     network::{primary::PrimaryConnector, Connect},
     synchronizer::traits::{Fetch, Sourced},
     types::{
-        batch::BatchId, block_header::{BlockHeader, HeaderId}, network::RequestPayload, sync::{IncompleteHeader, OrphanCertificate}, traits::AsHex
+        batch::BatchId,
+        block_header::{BlockHeader, HeaderId},
+        network::RequestPayload,
+        sync::{IncompleteHeader, OrphanCertificate, SyncStatus},
+        traits::AsHex,
     },
 };
-use derive_more::derive::Constructor;
+
 use libp2p::PeerId;
 use proc_macros::Spawn;
 use tokio::sync::{broadcast, mpsc, watch};
@@ -133,11 +137,6 @@ impl SyncTracker {
             }
         }
     }
-}
-
-pub enum SyncStatus {
-    Complete,
-    Incomplete,
 }
 
 /// check if we have all the data referenced by the header

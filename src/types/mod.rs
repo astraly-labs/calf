@@ -5,10 +5,10 @@ pub mod certificate;
 pub mod dag;
 pub mod network;
 pub mod signing;
+pub mod sync;
 pub mod traits;
 pub mod transaction;
 pub mod vote;
-pub mod sync;
 
 use block_header::BlockHeader;
 use serde::{Deserialize, Serialize};
