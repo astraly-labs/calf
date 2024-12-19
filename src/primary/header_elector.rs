@@ -53,7 +53,7 @@ impl HeaderElector {
                 continue;
             }
             match process_header(header.object.clone(), header.sender, &self.db) {
-                Ok(()) => {
+                Ok(_) => {
                     tracing::info!("✅ header approved");
                 }
                 Err(incomplete_header) => {

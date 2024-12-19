@@ -35,6 +35,7 @@ pub(crate) struct DagProcessor {
 impl DagProcessor {
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let genesis = Certificate::genesis(GENESIS_SEED);
+        self.db.insert(db::Column::Certificates, &genesis.id_as_hex(), &genesis)?;
         let mut dag = Dag::new_with_root(0, genesis.clone());
         self.rounds_tx
             .send((dag.height() + 1, HashSet::from_iter([genesis].into_iter())))?;

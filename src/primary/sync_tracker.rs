@@ -150,8 +150,8 @@ fn header_missing_data(
         .iter()
         .filter(
             |digest| match db.get::<BatchId>(db::Column::Digests, &digest.0.as_hex_string()) {
-                Ok(Some(_)) => true,
-                _ => false,
+                Ok(Some(_)) => false,
+                _ => true,
             },
         )
         .cloned()
@@ -163,8 +163,8 @@ fn header_missing_data(
         .filter(|certificate| {
             match db.get::<CertificateId>(db::Column::Certificates, &certificate.0.as_hex_string())
             {
-                Ok(Some(_)) => true,
-                _ => false,
+                Ok(Some(_)) => false,
+                _ => true,
             }
         })
         .cloned()

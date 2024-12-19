@@ -156,7 +156,7 @@ impl BaseAgent for Worker {
             BatchBroadcaster::spawn(cancellation_token.clone(), batches_rx, network_tx.clone());
 
         let tx_producer_handle =
-            tx_producer_task(transactions_tx.clone(), 100, 100, self.txs_producer);
+            tx_producer_task(transactions_tx.clone(), 1000, 100, self.txs_producer);
 
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
