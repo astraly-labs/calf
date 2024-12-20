@@ -1,8 +1,17 @@
-use super::traits::{AsBytes, Hash, Random};
+use super::{
+    network::RequestPayload,
+    traits::{AsBytes, Hash, Random},
+    transaction::Transaction,
+    Digest,
+};
 use derive_more::derive::Constructor;
+use proc_macros::Id;
 use serde::{Deserialize, Serialize};
 
 const RANDOM_ITEM_SIZE: usize = 32;
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default, Id, Hash)]
+pub struct BatchId(pub Digest);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Constructor, Default)]
 pub struct Batch<T>(pub Vec<T>)
@@ -18,6 +27,17 @@ where
     }
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+}
+
+impl TryFrom<RequestPayload> for Batch<Transaction> {
+    type Error = anyhow::Error;
+
+    fn try_from(payload: RequestPayload) -> Result<Self, Self::Error> {
+        match payload {
+            RequestPayload::Batch(batch) => Ok(batch),
+            _ => Err(anyhow::anyhow!("Invalid payload type")),
+        }
     }
 }
 

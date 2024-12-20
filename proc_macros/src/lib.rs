@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput};
+use syn::{parse_macro_input, Data, DeriveInput, Fields};
 
 #[proc_macro_derive(Spawn)]
 pub fn sub_agent_derive(input: TokenStream) -> TokenStream {
@@ -50,5 +50,32 @@ pub fn sub_agent_derive(input: TokenStream) -> TokenStream {
         _ => panic!("Spawn can only be derived for structs"),
     };
 
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(Id)]
+pub fn derive_id(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+    let is_valid = match input.data {
+        Data::Struct(ref data) => matches!(
+            data.fields,
+            Fields::Unnamed(ref fields) if fields.unnamed.len() == 1
+        ),
+        _ => false,
+    };
+
+    if !is_valid {
+        return syn::Error::new_spanned(name, "Id derive macro can only be used with tuple structs containing a single field.")
+            .to_compile_error()
+            .into();
+    }
+    let expanded = quote! {
+        impl From<Digest> for #name {
+            fn from(digest: Digest) -> Self {
+                Self(digest)
+            }
+        }
+    };
     TokenStream::from(expanded)
 }

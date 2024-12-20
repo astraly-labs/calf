@@ -12,12 +12,7 @@ use crate::{
     db::Db,
     settings::parser::Committee,
     types::{
-        block_header::BlockHeader,
-        certificate::Certificate,
-        network::{NetworkRequest, ReceivedObject, RequestPayload},
-        traits::Hash,
-        vote::Vote,
-        Digest, Round,
+        batch::BatchId, block_header::BlockHeader, certificate::Certificate, network::{NetworkRequest, ReceivedObject, RequestPayload}, sync::SyncStatus, traits::Hash, vote::Vote, Round
     },
     utils::CircularBuffer,
 };
@@ -32,8 +27,9 @@ pub(crate) struct HeaderBuilder {
     _db: Arc<Db>,
     header_trigger_rx: watch::Receiver<(Round, HashSet<Certificate>)>,
     votes_rx: broadcast::Receiver<ReceivedObject<Vote>>,
-    digests_buffer: Arc<Mutex<CircularBuffer<Digest>>>,
+    digests_buffer: Arc<Mutex<CircularBuffer<BatchId>>>,
     committee: Committee,
+    sync_status_rx: watch::Receiver<SyncStatus>,
 }
 
 impl HeaderBuilder {
@@ -41,6 +37,13 @@ impl HeaderBuilder {
         let mut cancellation_token = CancellationToken::new();
         loop {
             let _trigger = self.header_trigger_rx.changed().await?;
+            match *self.sync_status_rx.borrow() {
+                SyncStatus::Complete => {}
+                _ => {
+                    tracing::info!("🚫 Not synchronized, unable to build a header.");
+                    continue;
+                }
+            }
             cancellation_token.cancel();
             let (round, certificates) = self.header_trigger_rx.borrow().clone();
             tracing::info!("🔨 Building Header for round {}", round);
@@ -172,4 +175,9 @@ async fn broadcast_header(
         .send(NetworkRequest::Broadcast(RequestPayload::Header(header)))
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    type HeaderMakerFixture = ();
 }

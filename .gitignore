@@ -30,5 +30,4 @@ db/*
 # Generated files
 .*.json
 key*.json
-*.json
 *.gif
