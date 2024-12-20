@@ -39,12 +39,11 @@ pub fn generate_keypair_and_write_to_file<P: AsRef<Path>>(path: P) -> anyhow::Re
     Ok(())
 }
 
+#[derive(Debug)]
 pub struct CircularBuffer<T> {
     buffer: Vec<Option<T>>,
     size: usize,
     head: usize,
-    tail: usize,
-    count: usize,
 }
 
 impl<T: Clone> CircularBuffer<T> {
@@ -53,30 +52,22 @@ impl<T: Clone> CircularBuffer<T> {
             buffer: vec![None; size],
             size,
             head: 0,
-            tail: 0,
-            count: 0,
         }
     }
 
     pub fn push(&mut self, item: T) {
-        self.buffer[self.tail] = Some(item);
-        if self.count == self.size {
-            self.head = (self.head + 1) % self.size;
+        if self.head == self.size {
+            self.buffer.rotate_left(1);
+            self.buffer[self.head - 1] = Some(item);
         } else {
-            self.count += 1;
+            self.buffer[self.head] = Some(item);
+            self.head += 1;
         }
-        self.tail = (self.tail + 1) % self.size;
     }
 
     pub fn drain(&mut self) -> Vec<T> {
-        let mut result = Vec::with_capacity(self.count);
-        while self.count > 0 {
-            if let Some(item) = self.buffer[self.head].take() {
-                result.push(item);
-            }
-            self.head = (self.head + 1) % self.size;
-            self.count -= 1;
-        }
-        result
+        let res = self.buffer.drain(..).into_iter().flatten().collect();
+        self.buffer = vec![None; self.size];
+        res
     }
 }

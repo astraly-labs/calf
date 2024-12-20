@@ -19,7 +19,6 @@ impl Vote {
             signature,
         })
     }
-    // TODO: warn: this dont works for empty headers
     pub fn verify(&self, header_hash: &Digest) -> anyhow::Result<bool> {
         let pubkey = ed25519::PublicKey::try_from_bytes(&self.authority)?;
         Ok(pubkey.verify(header_hash, &self.signature))

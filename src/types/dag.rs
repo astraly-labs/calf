@@ -13,11 +13,11 @@ where
     T: Hash + AsBytes + Clone,
 {
     vertices: HashMap<String, Vertex<T>>,
-    vertices_by_layers: HashMap<u32, HashSet<String>>,
+    vertices_by_layers: HashMap<u64, HashSet<String>>,
     #[getset(get_copy = "pub")]
-    height: u32,
+    height: u64,
     #[getset(get_copy = "pub")]
-    base_layer: u32,
+    base_layer: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Constructor)]
@@ -27,7 +27,7 @@ where
     T: Hash + AsBytes + Clone,
 {
     data: T,
-    layer: u32,
+    layer: u64,
     parents: HashSet<String>,
     id: String,
 }
@@ -37,7 +37,7 @@ where
     T: Hash + AsBytes + Clone,
 {
     /// Create a new DAG with a base layer value (can be anything).
-    pub fn new(base_layer: u32) -> Self {
+    pub fn new(base_layer: u64) -> Self {
         Self {
             vertices: HashMap::new(),
             vertices_by_layers: HashMap::new(),
@@ -45,7 +45,7 @@ where
             base_layer,
         }
     }
-    pub fn new_with_root(base_layer: u32, root: T) -> Self {
+    pub fn new_with_root(base_layer: u64, root: T) -> Self {
         let vertex = Vertex::from_data(root, base_layer, HashSet::new());
         let mut dag = Self::new(base_layer);
         dag.insert(vertex).unwrap();
@@ -95,21 +95,21 @@ where
         self.insert(vertex)
     }
     /// Get all the vertices for a given layer: if the layer is not yet existing, return an empty vector.
-    pub fn layer_vertices(&self, layer: u32) -> Vec<&Vertex<T>> {
+    pub fn layer_vertices(&self, layer: u64) -> Vec<&Vertex<T>> {
         self.vertices_by_layers
             .get(&layer)
             .map(|keys| keys.iter().flat_map(|key| self.vertices.get(key)).collect())
             .unwrap_or(Vec::new())
     }
     /// Get the number of vertices belonging to a given layer.
-    pub fn layer_size(&self, layer: u32) -> usize {
+    pub fn layer_size(&self, layer: u64) -> usize {
         self.vertices_by_layers
             .get(&layer)
             .map(|keys| keys.len())
             .unwrap_or(0)
     }
     /// Get the cloned data of all vertices for a given layer.
-    pub fn layer_data(&self, layer: u32) -> Vec<T> {
+    pub fn layer_data(&self, layer: u64) -> Vec<T> {
         self.layer_vertices(layer)
             .iter()
             .map(|vertex| vertex.data.clone())
@@ -121,7 +121,7 @@ impl<T> Vertex<T>
 where
     T: Hash + AsBytes + Clone,
 {
-    pub fn from_data(data: T, layer: u32, parents: HashSet<String>) -> Self {
+    pub fn from_data(data: T, layer: u64, parents: HashSet<String>) -> Self {
         let id = data.digest().as_hex_string();
         Self::new(data, layer, parents, id)
     }
@@ -136,7 +136,7 @@ impl From<Certificate> for Vertex<Certificate> {
         let layer = certificate.round();
         let parents = certificate.parents_as_hex();
         let id = certificate.digest().as_hex_string();
-        Self::new(certificate, layer as u32, parents, id)
+        Self::new(certificate, layer, parents, id)
     }
 }
 impl<T> AsBytes for Vertex<T>

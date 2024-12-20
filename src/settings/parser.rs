@@ -30,7 +30,6 @@ pub struct Committee {
     pub authorities: Vec<AuthorityInfo>,
 }
 
-// TODO: reparer
 impl Committee {
     pub fn quorum_threshold(&self) -> u32 {
         if self.authorities.len() == 2 {

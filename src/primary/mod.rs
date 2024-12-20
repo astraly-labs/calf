@@ -2,10 +2,12 @@ pub mod dag_processor;
 pub mod digests_receiver;
 pub mod header_builder;
 pub mod header_elector;
-pub mod synchronizer;
+pub mod sync_tracker;
+pub mod test_utils;
 
 use anyhow::Context;
 use clap::{command, Parser};
+use dag_processor::DagProcessor;
 use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use digests_receiver::DigestReceiver;
 use header_builder::HeaderBuilder;
@@ -16,17 +18,28 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use tokio::sync::{mpsc, watch, Mutex};
+use sync_tracker::SyncTracker;
+use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    db, network::{
-        primary::{PrimaryConnector, PrimaryPeers}, Network, PrimaryNetwork
-    }, settings::parser::{Committee, FileLoader as _}, synchroniser::feeder::Feeder, types::{
+    db,
+    network::{
+        primary::{PrimaryConnector, PrimaryPeers},
+        Network, PrimaryNetwork,
+    },
+    settings::parser::{Committee, FileLoader as _},
+    synchronizer::feeder::Feeder,
+    synchronizer::fetcher::{Fetcher, MAX_CONCURENT_FETCH_TASKS},
+    types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
+        batch::BatchId,
         certificate::Certificate,
+        sync::SyncStatus,
         Digest, Round,
-    }, utils::{self, CircularBuffer}, CHANNEL_SIZE
+    },
+    utils::{self, CircularBuffer},
+    CHANNEL_SIZE,
 };
 
 const MAX_DIGESTS_IN_HEADER: usize = 10;
@@ -107,21 +120,38 @@ impl BaseAgent for Primary {
         let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
         let (round_tx, round_rx) =
             watch::channel::<(Round, HashSet<Certificate>)>((0, HashSet::new()));
-        let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx, sync_req_rx) =
-            PrimaryConnector::new(CHANNEL_SIZE);
+        let (
+            connector,
+            digests_rx,
+            header_rx,
+            vote_rx,
+            peers_certificates_rx,
+            sync_req_rx,
+            sync_responses_rx,
+        ) = PrimaryConnector::new(CHANNEL_SIZE);
         let (certificates_tx, certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
-        let digests_buffer = Arc::new(Mutex::new(CircularBuffer::<Digest>::new(
+        let (orphans_tx, orphans_rx) = mpsc::channel(CHANNEL_SIZE);
+        let (missing_headers_tx, missing_headers_rx) = mpsc::channel(CHANNEL_SIZE);
+        let (incomplete_headers_tx, incomplete_headers_rx) = mpsc::channel(CHANNEL_SIZE);
+        let (received_certificates_tx, received_certificates_rx) = mpsc::channel(CHANNEL_SIZE);
+
+        let (sync_status_tx, sync_status_rx) = watch::channel(SyncStatus::Complete);
+        let (fetcher_commands_tx, fetcher_commands_rx) = mpsc::channel(CHANNEL_SIZE);
+
+        let (sync_reset_trigger_tx, sync_reset_trigger_rx) = mpsc::channel(CHANNEL_SIZE);
+
+        let digests_buffer = Arc::new(Mutex::new(CircularBuffer::<BatchId>::new(
             MAX_DIGESTS_IN_HEADER,
         )));
         let cancellation_token = CancellationToken::new();
 
-        let peers = PrimaryPeers {
+        let peers = Arc::new(RwLock::new(PrimaryPeers {
             authority_pubkey: hex::encode(self.validator_keypair.public().to_bytes()),
             workers: vec![],
             primaries: HashMap::new(),
             established: HashMap::new(),
-        };
+        }));
 
         tracing::info!(
             "launched with validator keypair: {}",
@@ -130,7 +160,7 @@ impl BaseAgent for Primary {
 
         let digests_receiver_handle = DigestReceiver::spawn(
             cancellation_token.clone(),
-            digests_rx,
+            digests_rx.resubscribe(),
             digests_buffer.clone(),
             self.db.clone(),
         );
@@ -142,38 +172,68 @@ impl BaseAgent for Primary {
             self.keypair.clone(),
             self.db.clone(),
             round_rx.clone(),
-            vote_rx,
+            vote_rx.resubscribe(),
             digests_buffer.clone(),
             self.commitee.clone(),
+            sync_status_rx,
         );
 
         let header_elector_handle = HeaderElector::spawn(
             cancellation_token.clone(),
             network_tx.clone(),
-            header_rx,
+            header_rx.resubscribe(),
             round_rx.clone(),
             self.validator_keypair.clone(),
             self.db.clone(),
             self.commitee.clone(),
+            incomplete_headers_tx,
         );
 
         let network_handle = Network::<PrimaryNetwork, PrimaryConnector, PrimaryPeers>::spawn(
             self.commitee.clone(),
-            connector,
+            connector.clone(),
             self.keypair.clone(),
             self.keypair.clone(),
-            peers,
+            peers.clone(),
             network_rx,
             cancellation_token.clone(),
         );
 
-        let dag_processor_handle = dag_processor::DagProcessor::spawn(
+        let dag_processor_handle = DagProcessor::spawn(
             cancellation_token.clone(),
             peers_certificates_rx,
             certificates_rx,
+            received_certificates_tx,
+            orphans_tx,
+            missing_headers_tx,
             round_tx,
             self.commitee.clone(),
             self.db.clone(),
+            sync_reset_trigger_tx,
+        );
+
+        let sync_tracker_handle = SyncTracker::spawn(
+            cancellation_token.clone(),
+            received_certificates_rx,
+            header_rx.resubscribe(),
+            digests_rx.resubscribe(),
+            orphans_rx,
+            incomplete_headers_rx,
+            missing_headers_rx,
+            fetcher_commands_tx,
+            sync_status_tx,
+            sync_reset_trigger_rx,
+            connector.clone(),
+            self.db.clone(),
+        );
+
+        let fetcher_handle = Fetcher::spawn(
+            cancellation_token.clone(),
+            network_tx.clone(),
+            fetcher_commands_rx,
+            sync_responses_rx,
+            connector.clone(),
+            MAX_CONCURENT_FETCH_TASKS,
         );
 
         let feeder_handle = Feeder::spawn(
@@ -184,6 +244,8 @@ impl BaseAgent for Primary {
         );
 
         let res = tokio::try_join!(
+            fetcher_handle,
+            sync_tracker_handle,
             network_handle,
             digests_receiver_handle,
             header_builder_handle,

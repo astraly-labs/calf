@@ -22,6 +22,10 @@ pub trait AsHex {
     fn as_hex_string(&self) -> String;
 }
 
+pub trait ObjectId {
+    fn id(&self) -> Digest;
+}
+
 impl<T: Hash> Sign for T {
     fn sign_with(&self, keypair: &Keypair) -> anyhow::Result<Signature> {
         Ok(keypair.sign(&self.digest()))
@@ -40,6 +44,12 @@ where
 impl AsBytes for [u8; 32] {
     fn bytes(&self) -> Vec<u8> {
         self.to_vec()
+    }
+}
+
+impl AsBytes for Vec<u8> {
+    fn bytes(&self) -> Vec<u8> {
+        self.clone()
     }
 }
 
