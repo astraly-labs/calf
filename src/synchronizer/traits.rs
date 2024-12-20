@@ -13,8 +13,7 @@ use super::RequestedObject;
 
 #[async_trait]
 /// Detach the logic of fetching the objects from the logic of the object to fetch
-pub trait Fetch
-{
+pub trait Fetch {
     async fn try_fetch(
         &mut self,
         requests_tx: mpsc::Sender<NetworkRequest>,

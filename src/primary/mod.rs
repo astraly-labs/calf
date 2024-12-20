@@ -29,9 +29,14 @@ use crate::{
         Network, PrimaryNetwork,
     },
     settings::parser::{Committee, FileLoader as _},
+    synchronizer::feeder::Feeder,
     synchronizer::fetcher::{Fetcher, MAX_CONCURENT_FETCH_TASKS},
     types::{
-        agents::{BaseAgent, LoadableFromSettings, Settings}, batch::BatchId, certificate::Certificate, sync::SyncStatus, Round
+        agents::{BaseAgent, LoadableFromSettings, Settings},
+        batch::BatchId,
+        certificate::Certificate,
+        sync::SyncStatus,
+        Digest, Round,
     },
     utils::{self, CircularBuffer},
     CHANNEL_SIZE,
@@ -115,8 +120,15 @@ impl BaseAgent for Primary {
         let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
         let (round_tx, round_rx) =
             watch::channel::<(Round, HashSet<Certificate>)>((0, HashSet::new()));
-        let (connector, digests_rx, header_rx, vote_rx, peers_certificates_rx, sync_responses_rx) =
-            PrimaryConnector::new(CHANNEL_SIZE);
+        let (
+            connector,
+            digests_rx,
+            header_rx,
+            vote_rx,
+            peers_certificates_rx,
+            sync_req_rx,
+            sync_responses_rx,
+        ) = PrimaryConnector::new(CHANNEL_SIZE);
         let (certificates_tx, certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
         let (orphans_tx, orphans_rx) = mpsc::channel(CHANNEL_SIZE);
@@ -224,6 +236,13 @@ impl BaseAgent for Primary {
             MAX_CONCURENT_FETCH_TASKS,
         );
 
+        let feeder_handle = Feeder::spawn(
+            cancellation_token.clone(),
+            sync_req_rx,
+            network_tx.clone(),
+            self.db.clone(),
+        );
+
         let res = tokio::try_join!(
             fetcher_handle,
             sync_tracker_handle,
@@ -232,6 +251,7 @@ impl BaseAgent for Primary {
             header_builder_handle,
             header_elector_handle,
             dag_processor_handle,
+            feeder_handle,
         );
         match res {
             Ok(_) => tracing::info!("Primary exited successfully"),

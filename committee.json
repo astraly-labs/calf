@@ -1,0 +1,49 @@
+{
+    "authorities": [
+        {
+            "authority_id": "12D3KooWAmPpJpekEeWSMrEp1yMJNewRHPqgnmCMqez3Jos6sQRa",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWRgmQBgyiVJscrjGjnj8x3iM8dPJroMmSY1HVTr6NZppQ",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWPyT4y1B3XXstrW4yVvdJLRFV5bzKSXjxWFpsK9S2ZswM",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        }
+    ]
+}

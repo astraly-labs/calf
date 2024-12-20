@@ -23,7 +23,7 @@ pub type Round = u64;
 pub type SignedBlockHeader = SignedType<BlockHeader>;
 pub type RequestId = Digest;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Acknowledgment(Digest);
 
 impl Acknowledgment {

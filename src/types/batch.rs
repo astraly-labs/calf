@@ -13,7 +13,7 @@ const RANDOM_ITEM_SIZE: usize = 32;
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default, Id, Hash)]
 pub struct BatchId(pub Digest);
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Constructor, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Constructor, Default, Hash)]
 pub struct Batch<T>(pub Vec<T>)
 where
     T: AsBytes + Clone + Hash;

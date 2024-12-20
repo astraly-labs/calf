@@ -4,7 +4,7 @@ use crate::{
         batch::BatchId,
         block_header::BlockHeader,
         certificate::Certificate,
-        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncResponse},
+        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
         vote::Vote,
     },
 };
@@ -24,6 +24,7 @@ pub struct PrimaryConnector {
     headers_tx: broadcast::Sender<ReceivedObject<BlockHeader>>,
     vote_tx: broadcast::Sender<ReceivedObject<Vote>>,
     certificates_tx: broadcast::Sender<ReceivedObject<Certificate>>,
+    sync_req_tx: broadcast::Sender<ReceivedObject<SyncRequest>>,
     sync_responses_tx: broadcast::Sender<ReceivedObject<SyncResponse>>,
 }
 
@@ -36,12 +37,14 @@ impl PrimaryConnector {
         broadcast::Receiver<ReceivedObject<BlockHeader>>,
         broadcast::Receiver<ReceivedObject<Vote>>,
         broadcast::Receiver<ReceivedObject<Certificate>>,
+        broadcast::Receiver<ReceivedObject<SyncRequest>>,
         broadcast::Receiver<ReceivedObject<SyncResponse>>,
     ) {
         let (digest_tx, digest_rx) = broadcast::channel(buffer);
         let (headers_tx, headers_rx) = broadcast::channel(buffer);
         let (vote_tx, vote_rx) = broadcast::channel(buffer);
         let (certificates_tx, certificates_rx) = broadcast::channel(buffer);
+        let (sync_req_tx, sync_req_rx) = broadcast::channel(buffer);
         let (sync_responses_tx, sync_responses_rx) = broadcast::channel(buffer);
 
         (
@@ -50,12 +53,14 @@ impl PrimaryConnector {
                 headers_tx,
                 vote_tx,
                 certificates_tx,
+                sync_req_tx,
                 sync_responses_tx,
             },
             digest_rx,
             headers_rx,
             vote_rx,
             certificates_rx,
+            sync_req_rx,
             sync_responses_rx,
         )
     }
@@ -91,6 +96,10 @@ impl Connect for PrimaryConnector {
             RequestPayload::SyncResponse(sync_response) => {
                 self.sync_responses_tx
                     .send(ReceivedObject::new(sync_response.clone(), sender))?;
+            }
+            RequestPayload::SyncRequest(request) => {
+                self.sync_req_tx
+                    .send(ReceivedObject::new(request.clone(), sender))?;
             }
             _ => {}
         }

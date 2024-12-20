@@ -1,16 +1,21 @@
 use std::collections::HashSet;
 
 use super::{
-    batch::Batch, block_header::BlockHeader, certificate::Certificate, signing::SignedType,
-    traits::Hash, transaction::Transaction, vote::Vote, Acknowledgment, Digest, RequestId,
-    WorkerId,
+    batch::Batch,
+    block_header::BlockHeader,
+    certificate::Certificate,
+    signing::SignedType,
+    traits::{AsBytes, Hash},
+    transaction::Transaction,
+    vote::Vote,
+    Acknowledgment, Digest, RequestId, WorkerId,
 };
 use derive_more::derive::Constructor;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
 /// Represents a network request with different modes of sending.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum NetworkRequest {
     /// Broadcast a payload to all peers.
     Broadcast(RequestPayload),
@@ -23,7 +28,7 @@ pub enum NetworkRequest {
 }
 
 /// Represents the payloads that can be included in a network request.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum RequestPayload {
     Batch(Batch<Transaction>),
     /// An acknowledgment message for a batch.
@@ -39,7 +44,6 @@ pub enum RequestPayload {
     SyncRequest(SyncRequest),
     SyncResponse(SyncResponse),
 }
-
 
 impl RequestPayload {
     pub fn id(&self) -> anyhow::Result<RequestId> {
@@ -73,7 +77,7 @@ impl RequestPayload {
 }
 
 ///A specific request to ask some data from a peer, the peer will answer with a SyncResponse (exept for SyncDigests)
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum SyncRequest {
     Certificates(Vec<Digest>),
     BlockHeaders(Vec<Digest>),
@@ -125,8 +129,20 @@ impl SyncRequest {
     }
 }
 
+impl AsBytes for SyncRequest {
+    fn bytes(&self) -> Vec<u8> {
+        match bincode::serialize(self) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                tracing::error!("Error serializing SyncRequest: {:?}", e);
+                vec![]
+            }
+        }
+    }
+}
+
 ///A response to a SyncRequest, the requestId is the hash of the SyncRequest.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum SyncResponse {
     ///All the asked data found
     Success(RequestId, SyncData),
@@ -150,7 +166,7 @@ impl SyncResponse {
 }
 
 ///The data corresponding to the ids in the SyncRequest
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum SyncData {
     Certificates(Vec<Certificate>),
     Headers(Vec<BlockHeader>),

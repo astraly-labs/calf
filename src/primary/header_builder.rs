@@ -12,7 +12,14 @@ use crate::{
     db::Db,
     settings::parser::Committee,
     types::{
-        batch::BatchId, block_header::BlockHeader, certificate::Certificate, network::{NetworkRequest, ReceivedObject, RequestPayload}, sync::SyncStatus, traits::Hash, vote::Vote, Round
+        batch::BatchId,
+        block_header::BlockHeader,
+        certificate::Certificate,
+        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        sync::SyncStatus,
+        traits::Hash,
+        vote::Vote,
+        Round,
     },
     utils::CircularBuffer,
 };

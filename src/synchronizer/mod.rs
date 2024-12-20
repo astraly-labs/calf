@@ -13,6 +13,7 @@ use crate::types::{
     Digest,
 };
 
+pub mod feeder;
 pub mod fetcher;
 pub mod traits;
 
