@@ -15,7 +15,7 @@ use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
 /// Represents a network request with different modes of sending.
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum NetworkRequest {
     /// Broadcast a payload to all peers.
     Broadcast(RequestPayload),

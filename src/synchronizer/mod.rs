@@ -9,7 +9,7 @@ use crate::types::{
     block_header::HeaderId,
     certificate::CertificateId,
     network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
-    traits::AsHex,
+    traits::{AsHex, Hash},
     Digest,
 };
 
@@ -87,7 +87,7 @@ where
         let mut responses: Vec<ReceivedObject<RequestPayload>> = vec![];
         for source in source.sources().await {
             let payload = RequestPayload::SyncRequest(request.clone());
-            let id = payload.id().map_err(|_| FetchError::IdError)?;
+            let id = request.digest();
             let req = NetworkRequest::SendTo(source, payload);
             let mut responses_rx_clone = responses_rx.resubscribe();
             requests_tx
@@ -97,12 +97,15 @@ where
             let wait_for_response = async move {
                 loop {
                     if let Ok(elm) = responses_rx_clone.recv().await {
+                        tracing::info!("Fetcher: received response");
                         if elm.object.id() == id {
+                            tracing::info!("Fetcher: response matches request");
                             return (elm.object, elm.sender);
                         }
                     }
                 }
             };
+            tracing::info!("FETCHER: waiting for response");
             let (response, sender) = match tokio::time::timeout(
                 std::time::Duration::from_millis(ONE_PEER_FETCH_TIMEOUT),
                 wait_for_response,

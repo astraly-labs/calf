@@ -54,7 +54,9 @@ pub(crate) struct Feeder {
 impl Feeder {
     pub async fn run(mut self) -> anyhow::Result<()> {
         loop {
-            match self.req_rx.recv().await {
+            let req = self.req_rx.recv().await;
+            tracing::info!("Feeder: Received a request");
+            match req {
                 Ok(request) => {
                     let request_id = request.object.digest();
                     match request.object {
@@ -126,9 +128,10 @@ impl Feeder {
 
         let response = NetworkRequest::SendTo(peer_id, RequestPayload::SyncResponse(response));
         self.network_tx
-            .send(response)
+            .send(response.clone())
             .await
             .context("Failed to send batches data over the channel")?;
+        tracing::info!("Feeder: Sent response to {}", peer_id);
         Ok(())
     }
 }
