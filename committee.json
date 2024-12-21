@@ -1,7 +1,7 @@
 {
     "authorities": [
         {
-            "authority_id": "12D3KooWAmPpJpekEeWSMrEp1yMJNewRHPqgnmCMqez3Jos6sQRa",
+            "authority_id": "12D3KooWDbgLBsB8vGaWw9igw7At8WoNjd8eAjB7x69KFdbZzHxr",
             "authority_pubkey": "00000000000000000000000000000000",
             "primary_address": [
                 "0.0.0.0",
@@ -16,7 +16,7 @@
             ]
         },
         {
-            "authority_id": "12D3KooWRgmQBgyiVJscrjGjnj8x3iM8dPJroMmSY1HVTr6NZppQ",
+            "authority_id": "12D3KooWGczMptjGVP27WfCdgVryf451NL2Ls1eC81TWCYcXhw26",
             "authority_pubkey": "00000000000000000000000000000000",
             "primary_address": [
                 "0.0.0.0",
@@ -31,7 +31,112 @@
             ]
         },
         {
-            "authority_id": "12D3KooWPyT4y1B3XXstrW4yVvdJLRFV5bzKSXjxWFpsK9S2ZswM",
+            "authority_id": "12D3KooWE4XbmLgsiHguv4XcUrSA8kXwrwZvVgqgfCsxs6mSKYNP",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWNSju3Gmxgf2sjk1UiP39x8h7TJcsBjt6Hjkbm4YtkAEp",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWP4MT9PJKjk9mahgV1WdcEAtrYF7FAw4nUua4GD1D1mjU",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWNzZeDtDCjF9sTpSLuZ2Nq46X1xTuezd2eEv98jpPR3BE",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWJffyED9JZGSMBBof5e8zzwowmAG13BjYoE7tfayfQiF5",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWMQkCrniveWm13w1mCS1X38HPX4Wph9WgtcUbbnXeZvC2",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWGfjhDu57fVaWKtq7qrY73ydVGYufS8pATZbN6HgSqYmr",
+            "authority_pubkey": "00000000000000000000000000000000",
+            "primary_address": [
+                "0.0.0.0",
+                "0"
+            ],
+            "stake": 0,
+            "workers_addresses": [
+                [
+                    "0.0.0.0",
+                    "0"
+                ]
+            ]
+        },
+        {
+            "authority_id": "12D3KooWN9hHiKnzuZJCbuMZp1qZA7uqvV4dzaUyzBBeg94z9weR",
             "authority_pubkey": "00000000000000000000000000000000",
             "primary_address": [
                 "0.0.0.0",

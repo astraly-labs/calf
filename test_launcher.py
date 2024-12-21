@@ -151,5 +151,7 @@ if __name__ == '__main__':
     output_files = workers_processes_output(n_validators, n_workers, test_id) + primaries_processes_output(n_validators, test_id)
 
     commands[0].append('--txs-producer')
-    with multiprocessing.Pool() as pool:
-        pool.starmap(run_command, zip(commands, output_files))
+    
+    for command, output_file in zip(commands, output_files):
+        multiprocessing.Process(target=run_command, args=(command, output_file)).start()
+        logging.info(f"Process started with command: {command}")
