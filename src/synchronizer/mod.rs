@@ -105,7 +105,6 @@ where
                     }
                 }
             };
-            tracing::info!("FETCHER: waiting for response");
             let (response, sender) = match tokio::time::timeout(
                 std::time::Duration::from_millis(ONE_PEER_FETCH_TIMEOUT),
                 wait_for_response,
