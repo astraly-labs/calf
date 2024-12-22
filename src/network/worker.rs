@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use crate::{
     network::PeerIdentifyInfos,
@@ -107,8 +110,10 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
         peers: Arc<RwLock<WorkerPeers>>,
     ) -> anyhow::Result<()> {
         match request {
-            NetworkRequest::Broadcast(req) => {
-                swarm_actions::broadcast(swarm, peers, req).await?;
+            NetworkRequest::BroadcastCounterparts(req) => {
+                //TODO: same here
+                let peers = peers.read().await.get_broadcast_peers_counterparts();
+                swarm_actions::broadcast(swarm, peers, req)?;
             }
             NetworkRequest::SendTo(id, req) => {
                 swarm_actions::send(swarm, id, req)?;
@@ -122,6 +127,10 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
                     tracing::error!("No primary peer, unable to send request");
                 }
             },
+            NetworkRequest::BroadcastSameNode(req) => {
+                let peers = peers.read().await.get_broadcast_peers_same_node();
+                swarm_actions::broadcast(swarm, peers, req)?;
+            }
             //TODO: impl lucky broadcast here
             _ => {}
         };
@@ -173,10 +182,19 @@ impl ManagePeers for WorkerPeers {
     fn identify(&self) -> PeerIdentifyInfos {
         PeerIdentifyInfos::Worker(self.this_id.0, self.this_id.1.clone())
     }
-    fn get_broadcast_peers(&self) -> Vec<(PeerId, Multiaddr)> {
+    fn get_broadcast_peers_counterparts(&self) -> HashSet<(PeerId, Multiaddr)> {
         self.workers
             .iter()
             .map(|(id, addr)| (*id, addr.clone()))
+            .collect()
+    }
+
+    fn get_broadcast_peers_same_node(&self) -> HashSet<(PeerId, Multiaddr)> {
+        self.primary
+            .clone()
+            .map(|(id, addr)| vec![(id, addr)])
+            .unwrap_or_default()
+            .into_iter()
             .collect()
     }
 

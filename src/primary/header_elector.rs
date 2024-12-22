@@ -57,10 +57,7 @@ impl HeaderElector {
                     tracing::info!("✅ header approved");
                 }
                 Err(incomplete_header) => {
-                    tracing::info!("🚫 header incomplete, sending to the sync tracker");
-                    self.incomplete_headers_tx
-                        .send(ReceivedObject::new(incomplete_header, header.sender))
-                        .await?;
+                    tracing::info!("🚫 header incomplete: rejected");
                     continue;
                 }
             }

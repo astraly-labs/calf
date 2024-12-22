@@ -11,7 +11,7 @@ use crate::{
 
 use super::Fetch;
 
-pub const MAX_CONCURENT_FETCH_TASKS: usize = 10;
+pub const MAX_CONCURENT_FETCH_TASKS: usize = 100;
 
 pub struct Fetcher<R>
 where

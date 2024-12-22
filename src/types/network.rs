@@ -14,12 +14,14 @@ use derive_more::derive::Constructor;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
-/// Represents a network request with different modes of sending.
+/// Represents a network request with different modes of sensding.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum NetworkRequest {
-    /// Broadcast a payload to all peers.
-    Broadcast(RequestPayload),
-    /// Broadcast a payload to a random subset of peers.
+    /// Broadcast a payload to all counterparts (same role (worker - worker or primary - primary)) peers.
+    BroadcastCounterparts(RequestPayload),
+    /// Broadcast a payload to all peers on the same node.
+    BroadcastSameNode(RequestPayload),
+    /// Broadcast a payload to a random subset of counterparts peers.
     LuckyBroadcast(RequestPayload),
     /// Send a payload to a specific peer.
     SendTo(PeerId, RequestPayload),

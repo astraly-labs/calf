@@ -25,13 +25,16 @@ use crate::{
         Network, WorkerNetwork,
     },
     settings::parser::{AuthorityInfo, Committee, FileLoader as _},
-    synchronizer::fetcher::{Fetcher, MAX_CONCURENT_FETCH_TASKS},
+    synchronizer::{
+        feeder::Feeder,
+        fetcher::{Fetcher, MAX_CONCURENT_FETCH_TASKS},
+    },
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         traits::Random,
         transaction::Transaction,
     },
-    utils,
+    utils, CHANNEL_SIZE,
 };
 
 const TIMEOUT: u64 = 1000;
@@ -134,13 +137,13 @@ impl BaseAgent for Worker {
     }
 
     async fn run(mut self) {
-        let (batches_tx, batches_rx) = broadcast::channel(100);
-        let (transactions_tx, transactions_rx) = mpsc::channel(100);
+        let (batches_tx, batches_rx) = broadcast::channel(CHANNEL_SIZE);
+        let (transactions_tx, transactions_rx) = mpsc::channel(CHANNEL_SIZE);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
-        let (network_tx, network_rx) = mpsc::channel(100);
+        let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
         let (p2p_connector, acks_rx, received_batches_rx, sync_requests_rx, sync_responses_rx) =
-            WorkerConnector::new(100);
-        let (fetcher_commands_tx, commands_rx) = mpsc::channel(100);
+            WorkerConnector::new(CHANNEL_SIZE);
+        let (fetcher_commands_tx, commands_rx) = mpsc::channel(CHANNEL_SIZE);
 
         let cancellation_token = CancellationToken::new();
 
@@ -156,7 +159,7 @@ impl BaseAgent for Worker {
             BatchBroadcaster::spawn(cancellation_token.clone(), batches_rx, network_tx.clone());
 
         let tx_producer_handle =
-            tx_producer_task(transactions_tx.clone(), 1000, 100, self.txs_producer);
+            tx_producer_task(transactions_tx.clone(), 100, 100, self.txs_producer);
 
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
@@ -202,7 +205,7 @@ impl BaseAgent for Worker {
             cancellation_token.clone(),
             network_tx.clone(),
             commands_rx,
-            sync_responses_rx,
+            sync_responses_rx.resubscribe(),
             p2p_connector.clone(),
             MAX_CONCURENT_FETCH_TASKS,
         );
@@ -210,8 +213,15 @@ impl BaseAgent for Worker {
         let sync_relayer_handle = sync_relayer::SyncRelayer::spawn(
             cancellation_token.clone(),
             fetcher_commands_tx,
-            sync_requests_rx,
+            sync_requests_rx.resubscribe(),
             peers.clone(),
+        );
+
+        let feeder_handle = Feeder::spawn(
+            cancellation_token.clone(),
+            sync_requests_rx.resubscribe(),
+            network_tx.clone(),
+            self.db.clone(),
         );
 
         let res = tokio::try_join!(
@@ -223,6 +233,7 @@ impl BaseAgent for Worker {
             batch_acknowledger_handle,
             tx_producer_handle,
             sync_relayer_handle,
+            feeder_handle,
             fetcher_handle,
         );
 
@@ -240,7 +251,7 @@ fn tx_producer_task(
     flag: bool,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        if flag {
+        if true {
             loop {
                 let tx = Transaction::random(size);
                 txs_tx.send(tx).await.unwrap();

@@ -164,9 +164,9 @@ async fn broadcast_certificate(
 ) -> anyhow::Result<()> {
     certificate_tx.send(certificate.clone()).await?;
     network_tx
-        .send(NetworkRequest::Broadcast(RequestPayload::Certificate(
-            certificate,
-        )))
+        .send(NetworkRequest::BroadcastCounterparts(
+            RequestPayload::Certificate(certificate),
+        ))
         .await?;
 
     tracing::info!("🤖 Broadcasting Certificate...");
@@ -179,7 +179,9 @@ async fn broadcast_header(
 ) -> anyhow::Result<()> {
     tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()));
     network_tx
-        .send(NetworkRequest::Broadcast(RequestPayload::Header(header)))
+        .send(NetworkRequest::BroadcastCounterparts(
+            RequestPayload::Header(header),
+        ))
         .await?;
     Ok(())
 }

@@ -19,7 +19,9 @@ impl BatchBroadcaster {
         while let Ok(batch) = self.batches_rx.recv().await {
             tracing::info!("Broadcasting batch: {:?}", batch);
             self.network_tx
-                .send(NetworkRequest::Broadcast(RequestPayload::Batch(batch)))
+                .send(NetworkRequest::BroadcastCounterparts(
+                    RequestPayload::Batch(batch),
+                ))
                 .await?;
         }
         Ok(())

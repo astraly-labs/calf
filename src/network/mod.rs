@@ -14,7 +14,12 @@ use libp2p::{
     PeerId, StreamProtocol, Swarm,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::{mpsc, RwLock};
 use tokio_util::sync::CancellationToken;
 
@@ -57,7 +62,8 @@ pub trait ManagePeers {
     fn established(&self) -> &HashMap<PeerId, Multiaddr>;
     fn contains_peer(&self, id: PeerId) -> bool;
     fn identify(&self) -> PeerIdentifyInfos;
-    fn get_broadcast_peers(&self) -> Vec<(PeerId, Multiaddr)>;
+    fn get_broadcast_peers_counterparts(&self) -> HashSet<(PeerId, Multiaddr)>;
+    fn get_broadcast_peers_same_node(&self) -> HashSet<(PeerId, Multiaddr)>;
     fn get_send_peer(&self, id: PeerId) -> Option<(PeerId, Multiaddr)>;
     fn get_to_dial_peers(&self, committee: &Committee) -> Vec<(PeerId, Multiaddr)>;
 }

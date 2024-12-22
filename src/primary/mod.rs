@@ -225,6 +225,7 @@ impl BaseAgent for Primary {
             sync_reset_trigger_rx,
             connector.clone(),
             self.db.clone(),
+            network_tx.clone(),
         );
 
         let fetcher_handle = Fetcher::spawn(

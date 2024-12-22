@@ -10,7 +10,10 @@ use crate::{
 };
 use async_trait::async_trait;
 use libp2p::{Multiaddr, PeerId, Swarm};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tokio::sync::{broadcast, RwLock};
 
 use super::{
@@ -145,8 +148,14 @@ impl ManagePeers for PrimaryPeers {
     fn identify(&self) -> PeerIdentifyInfos {
         PeerIdentifyInfos::Primary(self.authority_pubkey.clone())
     }
-    fn get_broadcast_peers(&self) -> Vec<(PeerId, Multiaddr)> {
+    fn get_broadcast_peers_counterparts(&self) -> HashSet<(PeerId, Multiaddr)> {
         self.primaries
+            .iter()
+            .map(|(id, addr)| (*id, addr.clone()))
+            .collect()
+    }
+    fn get_broadcast_peers_same_node(&self) -> HashSet<(PeerId, Multiaddr)> {
+        self.workers
             .iter()
             .map(|(id, addr)| (*id, addr.clone()))
             .collect()
@@ -178,11 +187,17 @@ impl HandleEvent<PrimaryPeers, PrimaryConnector> for PrimaryNetwork {
         peers: Arc<RwLock<PrimaryPeers>>,
     ) -> anyhow::Result<()> {
         match request {
-            NetworkRequest::Broadcast(req) => {
-                swarm_actions::broadcast(swarm, peers, req).await?;
+            NetworkRequest::BroadcastCounterparts(req) => {
+                //TODO: obsolete since there is now to types of broadcast
+                let peers = peers.read().await.get_broadcast_peers_counterparts();
+                swarm_actions::broadcast(swarm, peers, req)?;
             }
             NetworkRequest::SendTo(id, req) => {
                 swarm_actions::send(swarm, id, req)?;
+            }
+            NetworkRequest::BroadcastSameNode(req) => {
+                let peers = peers.read().await.get_broadcast_peers_same_node();
+                swarm_actions::broadcast(swarm, peers, req)?;
             }
             _ => {}
         };

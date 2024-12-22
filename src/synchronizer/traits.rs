@@ -74,7 +74,7 @@ where
         Box::new(
             self.read()
                 .await
-                .get_broadcast_peers()
+                .get_broadcast_peers_counterparts()
                 .into_iter()
                 .map(|(id, _)| id),
         )

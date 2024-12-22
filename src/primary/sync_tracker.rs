@@ -7,7 +7,7 @@ use crate::{
     types::{
         batch::BatchId,
         block_header::{BlockHeader, HeaderId},
-        network::RequestPayload,
+        network::{NetworkRequest, RequestPayload, SyncRequest},
         sync::{IncompleteHeader, OrphanCertificate, SyncStatus},
         traits::AsHex,
     },
@@ -40,6 +40,7 @@ pub struct SyncTracker {
     reset_trigger: mpsc::Receiver<()>,
     network_router: PrimaryConnector,
     db: Arc<Db>,
+    network_tx: mpsc::Sender<NetworkRequest>,
 }
 
 impl SyncTracker {
@@ -72,14 +73,6 @@ impl SyncTracker {
 
                     self.fetcher_commands_tx.send(missing_parents.requested_with_source(orphan.sender.clone())).await?;
                     orphans_certificates.push(orphan.object);
-                }
-                Some(incomplete_header) = self.incomplete_headers_rx.recv() => {
-                    tracing::info!("📡 Received incomplete header {}", incomplete_header.object.header.id().as_hex_string());
-                    // Send fetch commands for missing certificates and batches
-                    self.fetcher_commands_tx.send(incomplete_header.object.missing_certificates.clone().requested_with_source(incomplete_header.sender.clone())).await?;
-                    self.fetcher_commands_tx.send(incomplete_header.object.missing_batches.clone().requested_with_source(incomplete_header.sender.clone())).await?;
-                    // add the header in the tracked list
-                    incomplete_headers.push(incomplete_header.object);
                 }
                 Some(missing_header) = self.missing_headers_rx.recv() => {
                     tracing::info!("📡 Received missing header {}", missing_header.object.0.as_hex_string());
@@ -119,8 +112,15 @@ impl SyncTracker {
                     match header_missing_data(&header.object, header.sender, self.db.clone()) {
                         Some(incomplete_header) => {
                             tracing::info!("📡 Header {} is incomplete", header.object.id().as_hex_string());
-                            self.fetcher_commands_tx.send(incomplete_header.missing_certificates.clone().requested_with_source(incomplete_header.sender.clone())).await?;
-                            self.fetcher_commands_tx.send(incomplete_header.missing_batches.clone().requested_with_source(incomplete_header.sender.clone())).await?;
+                            if !incomplete_header.missing_certificates.is_empty() {
+                                tracing::info!("📡 Requesting missing certificates for header {}", header.object.id().as_hex_string());
+                                self.fetcher_commands_tx.send(incomplete_header.missing_certificates.clone().requested_with_source(incomplete_header.sender.clone())).await?;
+                            }
+                            if !incomplete_header.missing_batches.is_empty() {
+                                tracing::info!("📡 Requesting missing batches for header {}", header.object.id().as_hex_string());
+                                let req = RequestPayload::SyncRequest(SyncRequest::SyncDigests(incomplete_header.missing_batches.iter().map(|elm| elm.0).collect()));
+                                self.network_tx.send(NetworkRequest::BroadcastSameNode(req)).await?;
+                            }
                             incomplete_headers.push(incomplete_header);
                         }
                         None => {

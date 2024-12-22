@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use libp2p::{
     swarm::{
@@ -27,12 +27,12 @@ pub(crate) fn send(
 }
 
 /// Broadcasts a message to all connected peers.
-pub(crate) async fn broadcast<P: ManagePeers + Send>(
+pub(crate) fn broadcast(
+    //TODO: call get_bracast_peers_counterparts etc. in the swarm events instead of here: one broadcast for all cases
     swarm: &mut Swarm<CalfBehavior>,
-    peers: Arc<RwLock<P>>,
+    peers: HashSet<(PeerId, Multiaddr)>,
     message: RequestPayload,
 ) -> anyhow::Result<()> {
-    let peers = peers.read().await.get_broadcast_peers();
     for (id, _) in peers {
         send(swarm, id, message.clone())?;
     }
