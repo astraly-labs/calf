@@ -27,8 +27,8 @@ impl DigestReceiver {
             let digest = self.digest_rx.recv().await?;
             self.db.insert(
                 db::Column::Digests,
-                &digest.object.0 .0.as_hex_string(),
-                &digest.object,
+                &digest.object.0.0.as_hex_string(),
+                &digest.object.0,
             )?;
             // Dont create a header with other nodes batches
             if digest.object.1 == ObjectSource::SameNode {

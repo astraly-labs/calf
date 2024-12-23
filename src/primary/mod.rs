@@ -42,7 +42,7 @@ use crate::{
     CHANNEL_SIZE,
 };
 
-const MAX_DIGESTS_IN_HEADER: usize = 10;
+const MAX_DIGESTS_IN_HEADER: usize = 100;
 
 /// CLI arguments for Primary
 #[derive(Parser, Debug)]

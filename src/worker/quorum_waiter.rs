@@ -74,10 +74,7 @@ impl QuorumWaiter {
                             }
                             if batch.acknowledgers.len() as u32 >= self.quorum_threshold {
                                 tracing::info!("sending a digest to the primary: {}", hex::encode(batch.digest));
-                                self.network_tx.send(NetworkRequest::SendToPrimary(RequestPayload::Digest(batch.digest, ObjectSource::SameNode))).await?;
-                                tracing::info!("{:?} batches remaining 1", batches.len());
-                                let _ = self.insert_batch_in_db(batches.remove(batch_index));
-                                tracing::info!("{:?} batches remaining", batches.len());
+                                self.network_tx.send(NetworkRequest::SendToPrimary(RequestPayload::Digest(batch.digest, ObjectSource::SameNode))).await?;                                let _ = self.insert_batch_in_db(batches.remove(batch_index));
                             }
                     };
                 }

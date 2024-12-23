@@ -38,8 +38,9 @@ impl DagProcessor {
         self.db
             .insert(db::Column::Certificates, &genesis.id_as_hex(), &genesis)?;
         let mut dag = Dag::new_with_root(0, genesis.clone());
+        let mut current_round = dag.height() + 1;
         self.rounds_tx
-            .send((dag.height() + 1, HashSet::from_iter([genesis].into_iter())))?;
+            .send((current_round, HashSet::from_iter([genesis].into_iter())))?;
         loop {
             tokio::select! {
                 Some(certificate) = self.certificates_rx.recv() => {
@@ -94,16 +95,17 @@ impl DagProcessor {
                 else => break,
             }
 
-            let round_certificates_number = dag.layer_size(dag.height());
+            let round_certificates_number = dag.layer_size(current_round);
             if round_certificates_number >= self.committee.quorum_threshold() as usize {
                 let certificates: HashSet<Certificate> =
-                    dag.layer_data(dag.height()).into_iter().collect();
+                    dag.layer_data(current_round).into_iter().collect();
                 tracing::info!(
                     "🎉 round {} completed with {} certificates",
-                    dag.height(),
+                    current_round,
                     round_certificates_number
                 );
-                self.rounds_tx.send((dag.height() + 1, certificates))?;
+                current_round += 1;
+                self.rounds_tx.send((current_round, certificates))?;
             }
         }
         Ok(())

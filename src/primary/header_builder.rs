@@ -177,7 +177,7 @@ async fn broadcast_header(
     header: BlockHeader,
     network_tx: &mpsc::Sender<NetworkRequest>,
 ) -> anyhow::Result<()> {
-    tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()));
+    tracing::info!("🤖 Broadcasting Header {} for round {}", hex::encode(header.digest()), header.round);
     network_tx
         .send(NetworkRequest::BroadcastCounterparts(
             RequestPayload::Header(header),

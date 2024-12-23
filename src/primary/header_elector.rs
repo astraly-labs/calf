@@ -56,7 +56,7 @@ impl HeaderElector {
                 Ok(_) => {
                     tracing::info!("✅ header approved");
                 }
-                Err(incomplete_header) => {
+                Err(_) => {
                     tracing::info!("🚫 header incomplete: rejected");
                     continue;
                 }
