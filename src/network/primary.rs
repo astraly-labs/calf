@@ -4,7 +4,9 @@ use crate::{
         batch::BatchId,
         block_header::BlockHeader,
         certificate::Certificate,
-        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse},
+        network::{
+            NetworkRequest, ObjectSource, ReceivedObject, RequestPayload, SyncRequest, SyncResponse,
+        },
         vote::Vote,
     },
 };
@@ -23,7 +25,7 @@ use super::{
 
 #[derive(Clone)]
 pub struct PrimaryConnector {
-    digest_tx: broadcast::Sender<ReceivedObject<BatchId>>,
+    digest_tx: broadcast::Sender<ReceivedObject<(BatchId, ObjectSource)>>,
     headers_tx: broadcast::Sender<ReceivedObject<BlockHeader>>,
     vote_tx: broadcast::Sender<ReceivedObject<Vote>>,
     certificates_tx: broadcast::Sender<ReceivedObject<Certificate>>,
@@ -36,7 +38,7 @@ impl PrimaryConnector {
         buffer: usize,
     ) -> (
         Self,
-        broadcast::Receiver<ReceivedObject<BatchId>>,
+        broadcast::Receiver<ReceivedObject<(BatchId, ObjectSource)>>,
         broadcast::Receiver<ReceivedObject<BlockHeader>>,
         broadcast::Receiver<ReceivedObject<Vote>>,
         broadcast::Receiver<ReceivedObject<Certificate>>,
@@ -80,9 +82,9 @@ pub struct PrimaryPeers {
 impl Connect for PrimaryConnector {
     async fn dispatch(&self, payload: &RequestPayload, sender: PeerId) -> anyhow::Result<()> {
         match payload {
-            RequestPayload::Digest(digest) => {
+            RequestPayload::Digest(digest, node) => {
                 self.digest_tx
-                    .send(ReceivedObject::new(digest.clone().into(), sender))?;
+                    .send(ReceivedObject::new((digest.clone().into(), *node), sender))?;
             }
             RequestPayload::Header(header) => {
                 self.headers_tx

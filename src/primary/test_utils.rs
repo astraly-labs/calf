@@ -11,7 +11,7 @@ pub mod fixtures {
         settings::parser::{Committee, FileLoader},
         types::{
             batch::{Batch, BatchId},
-            network::ReceivedObject,
+            network::{ObjectSource, ReceivedObject},
             traits::{AsHex, Hash, Random},
             transaction::Transaction,
         },
@@ -25,7 +25,7 @@ pub mod fixtures {
     pub const GENESIS_SEED: [u8; 32] = [0; 32];
 
     pub type DigestReceiverFixture = (
-        broadcast::Sender<ReceivedObject<BatchId>>,
+        broadcast::Sender<ReceivedObject<(BatchId, ObjectSource)>>,
         Arc<Mutex<CircularBuffer<BatchId>>>,
         Arc<Db>,
         CancellationToken,

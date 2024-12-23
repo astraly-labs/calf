@@ -7,7 +7,7 @@ use crate::{
     types::{
         batch::BatchId,
         block_header::{BlockHeader, HeaderId},
-        network::{NetworkRequest, RequestPayload, SyncRequest},
+        network::{NetworkRequest, ObjectSource, RequestPayload, SyncRequest},
         sync::{IncompleteHeader, OrphanCertificate, SyncStatus},
         traits::AsHex,
     },
@@ -28,7 +28,7 @@ pub struct SyncTracker {
     // --v received data v--
     certificates_rx: mpsc::Receiver<ReceivedObject<Certificate>>,
     headers_rx: broadcast::Receiver<ReceivedObject<BlockHeader>>,
-    digests_rx: broadcast::Receiver<ReceivedObject<BatchId>>,
+    digests_rx: broadcast::Receiver<ReceivedObject<(BatchId, ObjectSource)>>,
     // --v data to sync v--
     orphans_rx: mpsc::Receiver<ReceivedObject<OrphanCertificate>>,
     incomplete_headers_rx: mpsc::Receiver<ReceivedObject<IncompleteHeader>>,
@@ -99,7 +99,7 @@ impl SyncTracker {
                 Ok(digest) = self.digests_rx.recv() => {
                     // if an incomplete header depends on this digest, we remove it from the missing batches
                     incomplete_headers.iter_mut().for_each(|elm| {
-                        elm.missing_batches.retain(|batch| batch != &digest.object);
+                        elm.missing_batches.retain(|batch| batch != &digest.object.0);
                     });
                     process_incomplete_headers(&mut incomplete_headers, &self.network_router).await?;
                 }

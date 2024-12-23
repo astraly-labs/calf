@@ -120,7 +120,7 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
             }
             NetworkRequest::SendToPrimary(req) => match peers.read().await.primary {
                 Some((id, _)) => {
-                    if let RequestPayload::Digest(_) = req.clone() {}
+                    if let RequestPayload::Digest(_, _) = req.clone() {}
                     swarm_actions::send(swarm, id, req)?;
                 }
                 None => {

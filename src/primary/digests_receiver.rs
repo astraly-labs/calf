@@ -6,13 +6,17 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     db::{self, Db},
-    types::{batch::BatchId, network::ReceivedObject, traits::AsHex},
+    types::{
+        batch::BatchId,
+        network::{ObjectSource, ReceivedObject},
+        traits::AsHex,
+    },
     utils::CircularBuffer,
 };
 
 #[derive(Spawn)]
 pub(crate) struct DigestReceiver {
-    pub digest_rx: broadcast::Receiver<ReceivedObject<BatchId>>,
+    pub digest_rx: broadcast::Receiver<ReceivedObject<(BatchId, ObjectSource)>>,
     pub buffer: Arc<Mutex<CircularBuffer<BatchId>>>,
     pub db: Arc<Db>,
 }
@@ -23,10 +27,13 @@ impl DigestReceiver {
             let digest = self.digest_rx.recv().await?;
             self.db.insert(
                 db::Column::Digests,
-                &digest.object.0.as_hex_string(),
+                &digest.object.0 .0.as_hex_string(),
                 &digest.object,
             )?;
-            self.buffer.lock().await.push(digest.object.clone());
+            // Dont create a header with other nodes batches
+            if digest.object.1 == ObjectSource::SameNode {
+                self.buffer.lock().await.push(digest.object.0.clone());
+            }
         }
     }
 }
@@ -37,7 +44,7 @@ mod tests {
         primary::test_utils::fixtures::{
             check_storage_for_digests, launch_digest_receiver, random_digests,
         },
-        types::network::ReceivedObject,
+        types::network::{ObjectSource::SameNode, ReceivedObject},
     };
     use libp2p::PeerId;
     use rstest::rstest;
@@ -52,7 +59,7 @@ mod tests {
         {
             for digest in digests.clone() {
                 digest_tx
-                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .send(ReceivedObject::new((digest, SameNode), PeerId::random()))
                     .unwrap();
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -66,7 +73,7 @@ mod tests {
             let digests = random_digests(1);
             for digest in digests.clone() {
                 digest_tx
-                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .send(ReceivedObject::new((digest, SameNode), PeerId::random()))
                     .unwrap();
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -87,7 +94,7 @@ mod tests {
         {
             for digest in digests.clone() {
                 digest_tx
-                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .send(ReceivedObject::new((digest, SameNode), PeerId::random()))
                     .unwrap();
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -101,7 +108,7 @@ mod tests {
             let digests = random_digests(10);
             for digest in digests.clone() {
                 digest_tx
-                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .send(ReceivedObject::new((digest, SameNode), PeerId::random()))
                     .unwrap();
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -122,7 +129,7 @@ mod tests {
         {
             for digest in digests.clone() {
                 digest_tx
-                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .send(ReceivedObject::new((digest, SameNode), PeerId::random()))
                     .unwrap();
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -136,7 +143,7 @@ mod tests {
             let digests = random_digests(20);
             for digest in digests.clone() {
                 digest_tx
-                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .send(ReceivedObject::new((digest, SameNode), PeerId::random()))
                     .unwrap();
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -157,7 +164,7 @@ mod tests {
         {
             for digest in digests.clone() {
                 digest_tx
-                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .send(ReceivedObject::new((digest, SameNode), PeerId::random()))
                     .unwrap();
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -171,7 +178,7 @@ mod tests {
             let digests = random_digests(100);
             for digest in digests.clone() {
                 digest_tx
-                    .send(ReceivedObject::new(digest, PeerId::random()))
+                    .send(ReceivedObject::new((digest, SameNode), PeerId::random()))
                     .unwrap();
             }
             tokio::time::sleep(Duration::from_millis(10)).await;

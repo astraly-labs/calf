@@ -7,7 +7,7 @@ use crate::{
     db::Db,
     types::{
         batch::Batch,
-        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        network::{NetworkRequest, ObjectSource, ReceivedObject, RequestPayload},
         traits::Hash,
         transaction::Transaction,
         Acknowledgment, Digest,
@@ -74,7 +74,7 @@ impl QuorumWaiter {
                             }
                             if batch.acknowledgers.len() as u32 >= self.quorum_threshold {
                                 tracing::info!("sending a digest to the primary: {}", hex::encode(batch.digest));
-                                self.network_tx.send(NetworkRequest::SendToPrimary(RequestPayload::Digest(batch.digest))).await?;
+                                self.network_tx.send(NetworkRequest::SendToPrimary(RequestPayload::Digest(batch.digest, ObjectSource::SameNode))).await?;
                                 tracing::info!("{:?} batches remaining 1", batches.len());
                                 let _ = self.insert_batch_in_db(batches.remove(batch_index));
                                 tracing::info!("{:?} batches remaining", batches.len());
@@ -114,7 +114,7 @@ mod test {
         db::Db,
         types::{
             batch::Batch,
-            network::{NetworkRequest, ReceivedObject, RequestPayload},
+            network::{NetworkRequest, ObjectSource, ReceivedObject, RequestPayload},
             traits::{Hash, Random},
             transaction::Transaction,
             Acknowledgment,
@@ -195,7 +195,10 @@ mod test {
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
         assert!(
             res.unwrap().unwrap()
-                == NetworkRequest::SendToPrimary(RequestPayload::Digest(batch.digest()))
+                == NetworkRequest::SendToPrimary(RequestPayload::Digest(
+                    batch.digest(),
+                    ObjectSource::SameNode
+                ))
         );
         token.cancel();
         handle.await.expect("failed to await handle");
@@ -223,7 +226,11 @@ mod test {
         }
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
         assert!(
-            res.unwrap().unwrap() == NetworkRequest::SendToPrimary(RequestPayload::Digest(digest))
+            res.unwrap().unwrap()
+                == NetworkRequest::SendToPrimary(RequestPayload::Digest(
+                    digest,
+                    ObjectSource::SameNode
+                ))
         );
 
         for _ in 0..3 {
@@ -265,7 +272,12 @@ mod test {
             .unwrap()
             .unwrap();
 
-        assert!(res == NetworkRequest::SendToPrimary(RequestPayload::Digest(digest)));
+        assert!(
+            res == NetworkRequest::SendToPrimary(RequestPayload::Digest(
+                digest,
+                ObjectSource::SameNode
+            ))
+        );
         let res = tokio::time::timeout(Duration::from_millis(10), digest_rx.recv()).await;
 
         assert!(res.is_err());

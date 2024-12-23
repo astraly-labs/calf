@@ -36,7 +36,7 @@ pub enum RequestPayload {
     /// An acknowledgment message for a batch.
     Acknowledgment(Acknowledgment),
     /// A digest of a transactions batch.
-    Digest(Digest),
+    Digest(Digest, ObjectSource),
     /// A block header.
     Header(BlockHeader),
     /// A certificate validating a header.
@@ -45,6 +45,12 @@ pub enum RequestPayload {
     Vote(Vote),
     SyncRequest(SyncRequest),
     SyncResponse(SyncResponse),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Copy)]
+pub enum ObjectSource {
+    SameNode,
+    Counterpart,
 }
 
 impl RequestPayload {
@@ -60,7 +66,7 @@ impl RequestPayload {
             RequestPayload::Batch(batch) => Box::new(batch),
             RequestPayload::Vote(vote) => Box::new(vote),
             RequestPayload::Acknowledgment(ack) => Box::new(ack),
-            RequestPayload::Digest(digest) => Box::new(digest),
+            RequestPayload::Digest(digest, source) => Box::new((digest, source)),
             RequestPayload::SyncRequest(sync_req) => Box::new(sync_req),
             RequestPayload::SyncResponse(sync_resp) => Box::new(sync_resp),
         }
@@ -72,7 +78,7 @@ impl RequestPayload {
             RequestPayload::Batch(batch) => Ok(batch.digest()),
             RequestPayload::Vote(vote) => Ok(vote.digest()),
             RequestPayload::Acknowledgment(ack) => Ok(ack.digest()),
-            RequestPayload::Digest(digest) => Ok(*digest),
+            RequestPayload::Digest(digest, _) => Ok(*digest),
             _ => Err(anyhow::anyhow!("Invalid payload type")),
         }
     }
