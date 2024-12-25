@@ -65,12 +65,6 @@ impl DagProcessor {
                             continue;
                         }
                     }
-                    if let Some(id) = certificate.object.header() {
-                        if !check_header_storage(&id, &self.db) {
-                            self.missing_headers_tx.send(ReceivedObject::new(id, certificate.sender)).await?;
-                            tracing::info!("missing header referenced in {} certificate, sending to the tracker", certificate.object.id().0.as_hex_string());
-                        }
-                    }
                     match dag.check_parents(&certificate.object.clone().into()) {
                         Ok(()) => {
                             tracing::info!("💾 certificate from {} inserted in the DAG", certificate.sender);
@@ -109,13 +103,5 @@ impl DagProcessor {
             }
         }
         Ok(())
-    }
-}
-
-fn check_header_storage(id: &HeaderId, db: &Db) -> bool {
-    if let Ok(Some(_)) = db.get::<BlockHeader>(db::Column::Headers, &id.0.as_hex_string()) {
-        true
-    } else {
-        false
     }
 }

@@ -44,13 +44,17 @@ impl HeaderBuilder {
         let mut cancellation_token = CancellationToken::new();
         loop {
             let _trigger = self.header_trigger_rx.changed().await?;
-            match *self.sync_status_rx.borrow() {
-                SyncStatus::Complete => {}
-                _ => {
-                    tracing::info!("🚫 Not synchronized, unable to build a header.");
-                    continue;
+
+            if *self.sync_status_rx.borrow() == SyncStatus::Incomplete {
+                tracing::info!("🔨 Syncing, unable t build a header, waiting for sync to finish");
+                loop {
+                    if *self.sync_status_rx.borrow() == SyncStatus::Complete {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
                 }
             }
+
             cancellation_token.cancel();
             let (round, certificates) = self.header_trigger_rx.borrow().clone();
             tracing::info!("🔨 Building Header for round {}", round);
@@ -177,7 +181,11 @@ async fn broadcast_header(
     header: BlockHeader,
     network_tx: &mpsc::Sender<NetworkRequest>,
 ) -> anyhow::Result<()> {
-    tracing::info!("🤖 Broadcasting Header {} for round {}", hex::encode(header.digest()), header.round);
+    tracing::info!(
+        "🤖 Broadcasting Header {} for round {}",
+        hex::encode(header.digest()),
+        header.round
+    );
     network_tx
         .send(NetworkRequest::BroadcastCounterparts(
             RequestPayload::Header(header),

@@ -15,7 +15,7 @@ use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
 /// Represents a network request with different modes of sensding.
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum NetworkRequest {
     /// Broadcast a payload to all counterparts (same role (worker - worker or primary - primary)) peers.
     BroadcastCounterparts(RequestPayload),

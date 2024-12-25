@@ -38,7 +38,7 @@ use crate::{
 };
 
 const TIMEOUT: u64 = 1000;
-const BATCH_SIZE: usize = 100;
+const BATCH_SIZE: usize = 1024 * 100;
 const QUORUM_TIMEOUT: u128 = 1000;
 
 // Wrapper
@@ -159,7 +159,7 @@ impl BaseAgent for Worker {
             BatchBroadcaster::spawn(cancellation_token.clone(), batches_rx, network_tx.clone());
 
         let tx_producer_handle =
-            tx_producer_task(transactions_tx.clone(), 100, 100, self.txs_producer);
+            tx_producer_task(transactions_tx.clone(), 1024 * 10, 100, self.txs_producer);
 
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());

@@ -88,6 +88,7 @@ where
         for source in source.sources().await {
             let payload = RequestPayload::SyncRequest(request.clone());
             let id = request.digest();
+            tracing::info!("Fetcher: sending a request of id: {}", id.as_hex_string());
             let req = NetworkRequest::SendTo(source, payload);
             let mut responses_rx_clone = responses_rx.resubscribe();
             requests_tx
@@ -97,10 +98,18 @@ where
             let wait_for_response = async move {
                 loop {
                     if let Ok(elm) = responses_rx_clone.recv().await {
-                        tracing::info!("Fetcher: received response");
                         if elm.object.id() == id {
-                            tracing::info!("Fetcher: response matches request");
+                            tracing::info!(
+                                "Fetcher: response matches request: {}",
+                                elm.object.id().as_hex_string()
+                            );
                             return (elm.object, elm.sender);
+                        } else {
+                            tracing::info!(
+                                "Fetcher: response doesn't match request: {} != {}",
+                                elm.object.id().as_hex_string(),
+                                id.as_hex_string()
+                            );
                         }
                     }
                 }
@@ -120,6 +129,7 @@ where
                         "Succes: all requested data feched from {}",
                         peer.as_hex_string()
                     );
+                    tracing::info!("fecthed {} objects", data.into_payloads().len());
                     let payloads = data.into_payloads();
                     return Ok(payloads
                         .into_iter()

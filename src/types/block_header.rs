@@ -44,6 +44,7 @@ impl BlockHeader {
             certificates_ids,
         }
     }
+    //TODO: rewrite with error details
     pub fn verify_parents(
         &self,
         potential_parents: HashSet<CertificateId>,
@@ -71,7 +72,7 @@ impl BlockHeader {
             potential_parents
                 .intersection(&parents)
                 .count()
-                .checked_sub(quorum_threshold as usize)
+                .checked_sub(quorum_threshold as usize - 1)
                 .map_or(Err(HeaderError::NotEnoughParents), |_| Ok(()))
         }
     }

@@ -131,7 +131,12 @@ impl Feeder {
             .send(response.clone())
             .await
             .context("Failed to send batches data over the channel")?;
-        tracing::info!("Feeder: Sent response to {}: {:?}", peer_id, response);
+        tracing::info!(
+            "Feeder: Sent response to {}: size: {} bytes id: {}",
+            peer_id,
+            bincode::serialize(&response)?.len(),
+            req_id.as_hex_string()
+        );
         Ok(())
     }
 }

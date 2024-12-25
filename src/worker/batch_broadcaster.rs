@@ -5,6 +5,7 @@ use tokio_util::sync::CancellationToken;
 use crate::types::{
     batch::Batch,
     network::{NetworkRequest, RequestPayload},
+    traits::{AsHex, Hash},
     transaction::Transaction,
 };
 
@@ -17,7 +18,7 @@ pub(crate) struct BatchBroadcaster {
 impl BatchBroadcaster {
     pub async fn run(mut self) -> anyhow::Result<()> {
         while let Ok(batch) = self.batches_rx.recv().await {
-            tracing::info!("Broadcasting batch: {:?}", batch);
+            tracing::info!("Broadcasting batch: {}", batch.digest().as_hex_string());
             self.network_tx
                 .send(NetworkRequest::BroadcastCounterparts(
                     RequestPayload::Batch(batch),

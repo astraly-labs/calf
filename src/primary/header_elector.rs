@@ -31,6 +31,8 @@ pub(crate) struct HeaderElector {
     incomplete_headers_tx: mpsc::Sender<ReceivedObject<IncompleteHeader>>,
 }
 
+//TODO: if authority has already produced a header for this round: reject, retrying broadcast for a header builder: dont re broadcast to nodes that sent a vote: save votes
+
 impl HeaderElector {
     pub async fn run(mut self) -> anyhow::Result<()> {
         loop {
