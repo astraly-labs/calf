@@ -5,3 +5,4 @@ networkx
 pygraphviz
 pydot
 termcolor
+mplcursors

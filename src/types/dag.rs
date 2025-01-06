@@ -1,5 +1,5 @@
 use derive_more::derive::Constructor;
-use getset::CopyGetters;
+use getset::{CopyGetters, Getters};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -20,15 +20,19 @@ where
     base_layer: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Constructor)]
+#[derive(Serialize, Deserialize, Debug, Clone, Constructor, Getters)]
 /// A particular type of vertex for a particular type of DAG.
 pub struct Vertex<T>
 where
     T: Hash + AsBytes + Clone,
 {
+    #[getset(get = "pub")]
     data: T,
+    #[getset(get = "pub")]
     layer: u64,
+    #[getset(get = "pub")]
     parents: HashSet<String>,
+    #[getset(get = "pub")]
     id: String,
 }
 

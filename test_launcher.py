@@ -124,13 +124,13 @@ class LogMonitor:
             "🎉 round",  # Round completion
             "🔨 Building Header for round",  # New round start
             "💾 certificate",  # Certificate creation
-            "✨ header accepted",  # Header acceptance
+            # "✨ header accepted",  # Header acceptance
             "🚫",  # Errors
             "⚠️",  # Warnings
             "Error",
             "Warning",
             "✅ Quorum reached",  # Quorum reached
-            "🤖 Broadcasting Certificate",  # Certificate broadcast
+            # "🤖 Broadcasting Certificate",  # Certificate broadcast
         ]
 
     def is_important_log(self, line):

@@ -138,6 +138,13 @@ impl Certificate {
     pub fn genesis(seed: Seed) -> Self {
         Certificate::Genesis(seed)
     }
+    pub fn author(&self) -> Option<PublicKey> {
+        match self {
+            Certificate::Genesis(_) => None,
+            Certificate::Derived(derived) => Some(derived.author),
+            Certificate::Dummy => None,
+        }
+    }
 }
 
 impl AsBytes for Certificate {

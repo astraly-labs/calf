@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, fs::OpenOptions, io::Write};
 
 use crate::{
     db::{self, Db},
@@ -16,8 +16,10 @@ use crate::{
 use proc_macros::Spawn;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_util::sync::CancellationToken;
+use serde_json::json;
 
 const GENESIS_SEED: [u8; 32] = [0; 32];
+const DAG_OUTPUT_FILE: &str = "output.dag";
 
 #[derive(Spawn)]
 pub(crate) struct DagProcessor {
@@ -41,6 +43,10 @@ impl DagProcessor {
         let mut current_round = dag.height() + 1;
         self.rounds_tx
             .send((current_round, HashSet::from_iter([genesis].into_iter())))?;
+        
+        // Create/truncate the DAG output file
+        let _ = std::fs::File::create(DAG_OUTPUT_FILE)?;
+        
         loop {
             tokio::select! {
                 Some(certificate) = self.certificates_rx.recv() => {
@@ -48,6 +54,7 @@ impl DagProcessor {
                         Ok(()) => {
                             tracing::info!("💾 current header certificate inserted in the DAG");
                             self.db.insert(db::Column::Certificates, &certificate.id_as_hex(), &certificate)?;
+                            self.write_dag_state(&dag, current_round)?;
                         },
                         Err(error) => {
                             tracing::warn!("error inserting certificate: {}", error);
@@ -70,6 +77,7 @@ impl DagProcessor {
                             tracing::info!("💾 certificate from {} inserted in the DAG", certificate.sender);
                             let _ = dag.insert(certificate.object.clone().into());
                             self.db.insert(db::Column::Certificates, &certificate.object.id_as_hex(), &certificate.object)?;
+                            self.write_dag_state(&dag, current_round)?;
                         },
                         Err(error) => {
                             match error {
@@ -100,8 +108,51 @@ impl DagProcessor {
                 );
                 current_round += 1;
                 self.rounds_tx.send((current_round, certificates))?;
+                self.write_dag_state(&dag, current_round)?;
             }
         }
+        Ok(())
+    }
+
+    fn write_dag_state(&self, dag: &Dag<Certificate>, current_round: Round) -> Result<(), anyhow::Error> {
+        let mut vertices = Vec::new();
+        let mut edges = Vec::new();
+
+        // Collect vertices and edges for each round up to current_round
+        for round in 0..=current_round {
+            for vertex in dag.layer_vertices(round) {
+                let vertex_data = json!({
+                    "id": vertex.id(),
+                    "round": vertex.layer(),
+                    "author": hex::encode(&vertex.data().author().unwrap_or([0; 32])),
+                    "timestamp": chrono::Utc::now().timestamp_millis()
+                });
+                vertices.push(vertex_data);
+
+                // Add edges from this vertex to its parents
+                for parent_id in vertex.parents() {
+                    edges.push(json!({
+                        "from": parent_id,
+                        "to": vertex.id()
+                    }));
+                }
+            }
+        }
+
+        let dag_state = json!({
+            "current_round": current_round,
+            "vertices": vertices,
+            "edges": edges,
+            "timestamp": chrono::Utc::now().timestamp_millis()
+        });
+
+        // Write to file with append mode
+        let mut file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(DAG_OUTPUT_FILE)?;
+
+        writeln!(file, "{}", dag_state.to_string())?;
         Ok(())
     }
 }
