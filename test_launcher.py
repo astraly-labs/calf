@@ -86,7 +86,7 @@ def workers_processes_output(n_validators, n_workers, base_path):
 def run_worker_cmd(id, validator_keypair_path, keypair_path, db_path, exec_path):
     dir_path = os.path.dirname(exec_path)
     exec_name = os.path.basename(exec_path)
-    return ['bash', '-c', f'cd {dir_path} && ./{exec_name} run primary --db-path {db_path} --keypair-path {keypair_path} --validator-keypair-path {validator_keypair_path} --worker-id {str(id)}']
+    return ['bash', '-c', f'cd {dir_path} && ./{exec_name} run worker --db-path {db_path} --keypair-path {keypair_path} --validator-keypair-path {validator_keypair_path} --id {str(id)}']
 
 def run_primary_cmd(validator_keypair_path, keypair_path, db_path, exec_path):
     dir_path = os.path.dirname(exec_path)
@@ -94,7 +94,7 @@ def run_primary_cmd(validator_keypair_path, keypair_path, db_path, exec_path):
     return ['bash', '-c', f'cd {dir_path} && ./{exec_name} run primary --db-path {db_path} --keypair-path {keypair_path} --validator-keypair-path {validator_keypair_path}']
 
 def worker_processes_commands(n_validators, n_workers, base_path, exec_name):
-    return [run_worker_cmd(0, "validator-keypair.json", "keypair.json", "db", f"{base_path}/validator_{i}/primary/{exec_name}") for i in range(n_validators) for j in range(n_workers)]
+    return [run_worker_cmd(0, "validator-keypair.json", "keypair.json", "db", f"{base_path}/validator_{i}/worker_{j}/{exec_name}") for i in range(n_validators) for j in range(n_workers)]
 
 def primary_processes_commands(n_validators, base_path, exec_name):
     return [run_primary_cmd("validator-keypair.json", "keypair.json", "db", f"{base_path}/validator_{i}/primary/{exec_name}") for i in range(n_validators)]
@@ -151,5 +151,7 @@ if __name__ == '__main__':
     output_files = workers_processes_output(n_validators, n_workers, test_id) + primaries_processes_output(n_validators, test_id)
 
     commands[0].append('--txs-producer')
-    with multiprocessing.Pool() as pool:
-        pool.starmap(run_command, zip(commands, output_files))
+    
+    for command, output_file in zip(commands, output_files):
+        multiprocessing.Process(target=run_command, args=(command, output_file)).start()
+        logging.info(f"Process started with command: {command}")

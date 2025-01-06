@@ -12,12 +12,14 @@ use crate::{
     db::Db,
     settings::parser::Committee,
     types::{
+        batch::BatchId,
         block_header::BlockHeader,
         certificate::Certificate,
         network::{NetworkRequest, ReceivedObject, RequestPayload},
+        sync::SyncStatus,
         traits::Hash,
         vote::Vote,
-        Digest, Round,
+        Round,
     },
     utils::CircularBuffer,
 };
@@ -32,8 +34,9 @@ pub(crate) struct HeaderBuilder {
     _db: Arc<Db>,
     header_trigger_rx: watch::Receiver<(Round, HashSet<Certificate>)>,
     votes_rx: broadcast::Receiver<ReceivedObject<Vote>>,
-    digests_buffer: Arc<Mutex<CircularBuffer<Digest>>>,
+    digests_buffer: Arc<Mutex<CircularBuffer<BatchId>>>,
     committee: Committee,
+    sync_status_rx: watch::Receiver<SyncStatus>,
 }
 
 impl HeaderBuilder {
@@ -41,6 +44,17 @@ impl HeaderBuilder {
         let mut cancellation_token = CancellationToken::new();
         loop {
             let _trigger = self.header_trigger_rx.changed().await?;
+
+            if *self.sync_status_rx.borrow() == SyncStatus::Incomplete {
+                tracing::info!("🔨 Syncing, unable t build a header, waiting for sync to finish");
+                loop {
+                    if *self.sync_status_rx.borrow() == SyncStatus::Complete {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                }
+            }
+
             cancellation_token.cancel();
             let (round, certificates) = self.header_trigger_rx.borrow().clone();
             tracing::info!("🔨 Building Header for round {}", round);
@@ -154,9 +168,9 @@ async fn broadcast_certificate(
 ) -> anyhow::Result<()> {
     certificate_tx.send(certificate.clone()).await?;
     network_tx
-        .send(NetworkRequest::Broadcast(RequestPayload::Certificate(
-            certificate,
-        )))
+        .send(NetworkRequest::BroadcastCounterparts(
+            RequestPayload::Certificate(certificate),
+        ))
         .await?;
 
     tracing::info!("🤖 Broadcasting Certificate...");
@@ -167,9 +181,15 @@ async fn broadcast_header(
     header: BlockHeader,
     network_tx: &mpsc::Sender<NetworkRequest>,
 ) -> anyhow::Result<()> {
-    tracing::info!("🤖 Broadcasting Header {}", hex::encode(header.digest()));
+    tracing::info!(
+        "🤖 Broadcasting Header {} for round {}",
+        hex::encode(header.digest()),
+        header.round
+    );
     network_tx
-        .send(NetworkRequest::Broadcast(RequestPayload::Header(header)))
+        .send(NetworkRequest::BroadcastCounterparts(
+            RequestPayload::Header(header),
+        ))
         .await?;
     Ok(())
 }

@@ -8,7 +8,7 @@ use crate::{
     db::{self, Db},
     types::{
         batch::Batch,
-        network::{NetworkRequest, ReceivedObject, RequestPayload},
+        network::{NetworkRequest, ObjectSource, ReceivedObject, RequestPayload},
         traits::Hash,
         transaction::Transaction,
         Acknowledgment,
@@ -36,6 +36,7 @@ impl BatchReceiver {
             self.requests_tx
                 .send(NetworkRequest::SendToPrimary(RequestPayload::Digest(
                     digest,
+                    ObjectSource::Counterpart,
                 )))
                 .await?;
             self.db

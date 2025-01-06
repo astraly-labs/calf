@@ -25,12 +25,13 @@ pub enum Column {
     Batches,
     Headers,
     Digests,
+    Certificates,
 }
 
 impl Column {
     pub const ALL: &'static [Self] = {
         use Column::*;
-        &[Batches, Headers, Digests]
+        &[Batches, Headers, Digests, Certificates]
     };
 
     fn as_str(&self) -> &'static str {
@@ -38,6 +39,7 @@ impl Column {
             Column::Batches => "batches",
             Column::Headers => "headers",
             Column::Digests => "digests",
+            Column::Certificates => "certificates",
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::{collections::HashSet, sync::Arc};
+
 use libp2p::{
     swarm::{
         dial_opts::{DialOpts, PeerCondition},
@@ -5,6 +7,7 @@ use libp2p::{
     },
     Multiaddr, PeerId, Swarm,
 };
+use tokio::sync::RwLock;
 
 use crate::types::network::RequestPayload;
 
@@ -24,12 +27,12 @@ pub(crate) fn send(
 }
 
 /// Broadcasts a message to all connected peers.
-pub(crate) fn broadcast<P: ManagePeers + Send>(
+pub(crate) fn broadcast(
+    //TODO: call get_bracast_peers_counterparts etc. in the swarm events instead of here: one broadcast for all cases
     swarm: &mut Swarm<CalfBehavior>,
-    peers: &P,
+    peers: HashSet<(PeerId, Multiaddr)>,
     message: RequestPayload,
 ) -> anyhow::Result<()> {
-    let peers = peers.get_broadcast_peers();
     for (id, _) in peers {
         send(swarm, id, message.clone())?;
     }
