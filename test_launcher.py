@@ -7,6 +7,12 @@ import logging
 import shutil
 import multiprocessing
 import subprocess
+import threading
+import queue
+import time
+import re
+from datetime import datetime
+from termcolor import colored
 
 def get_args():
     parser = argparse.ArgumentParser(description="Calf test launcher")
@@ -38,6 +44,11 @@ def get_args():
         "--build",
         action="store_true",
         help="Build in release mode before running"
+    )
+    parser.add_argument(
+        "--show-all-logs",
+        action="store_true",
+        help="Show all logs instead of just important events"
     )
 
     return parser.parse_args()
@@ -99,9 +110,110 @@ def worker_processes_commands(n_validators, n_workers, base_path, exec_name):
 def primary_processes_commands(n_validators, base_path, exec_name):
     return [run_primary_cmd("validator-keypair.json", "keypair.json", "db", f"{base_path}/validator_{i}/primary/{exec_name}") for i in range(n_validators)]
 
+def strip_ansi(text):
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
+class LogMonitor:
+    def __init__(self, show_all_logs=False):
+        self.log_queue = queue.Queue()
+        self.should_stop = False
+        self.show_all_logs = show_all_logs
+        # Add patterns for important logs
+        self.important_patterns = [
+            "🎉 round",  # Round completion
+            "🔨 Building Header for round",  # New round start
+            "💾 certificate",  # Certificate creation
+            "✨ header accepted",  # Header acceptance
+            "🚫",  # Errors
+            "⚠️",  # Warnings
+            "Error",
+            "Warning",
+            "✅ Quorum reached",  # Quorum reached
+            "🤖 Broadcasting Certificate",  # Certificate broadcast
+        ]
+
+    def is_important_log(self, line):
+        if self.show_all_logs:
+            return True
+        clean_line = strip_ansi(line)
+        return any(pattern.lower() in clean_line.lower() for pattern in self.important_patterns)
+
+    def wait_for_file(self, filepath, timeout=30):
+        start_time = time.time()
+        while not os.path.exists(filepath):
+            if time.time() - start_time > timeout:
+                raise TimeoutError(f"File {filepath} was not created within {timeout} seconds")
+            time.sleep(0.1)
+
+    def monitor_file(self, filepath, process_type, validator_id, worker_id=None):
+        try:
+            # Wait for the file to be created
+            self.wait_for_file(filepath)
+            
+            with open(filepath, 'r') as f:
+                while not self.should_stop:
+                    line = f.readline()
+                    if line:
+                        line = line.strip()
+                        if self.is_important_log(line):
+                            timestamp = datetime.now().strftime('%H:%M:%S')
+                            if process_type == "primary":
+                                prefix = colored(f"[{timestamp} Primary-{validator_id}]", "cyan")
+                            else:
+                                prefix = colored(f"[{timestamp} Worker-{validator_id}.{worker_id}]", "green")
+                            # Clean up the log line by removing ANSI color codes
+                            clean_line = strip_ansi(line)
+                            self.log_queue.put(f"{prefix} {clean_line}")
+                    else:
+                        time.sleep(0.1)
+        except TimeoutError as e:
+            self.log_queue.put(colored(f"Warning: {str(e)}", "yellow"))
+        except Exception as e:
+            self.log_queue.put(colored(f"Error monitoring {filepath}: {str(e)}", "red"))
+
+    def display_logs(self):
+        while not self.should_stop:
+            try:
+                log = self.log_queue.get(timeout=0.1)
+                print(log, flush=True)
+            except queue.Empty:
+                continue
+
+    def start_monitoring(self, n_validators, n_workers, base_path):
+        # Start monitoring threads for primary nodes
+        for i in range(n_validators):
+            primary_log = f"{base_path}/validator_{i}/primary/output.log"
+            thread = threading.Thread(
+                target=self.monitor_file,
+                args=(primary_log, "primary", i),
+                daemon=True
+            )
+            thread.start()
+
+        # Start monitoring threads for worker nodes
+        for i in range(n_validators):
+            for j in range(n_workers):
+                worker_log = f"{base_path}/validator_{i}/worker_{j}/output.log"
+                thread = threading.Thread(
+                    target=self.monitor_file,
+                    args=(worker_log, "worker", i, j),
+                    daemon=True
+                )
+                thread.start()
+
+        # Start display thread
+        display_thread = threading.Thread(target=self.display_logs, daemon=True)
+        display_thread.start()
+
 def run_command(command, output_file):
+    # Create the output file directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    # Create an empty file
+    open(output_file, 'a').close()
+    # Now run the command
     with open(output_file, "w") as outfile:
-        subprocess.run(command, stdout=outfile, stderr=outfile)
+        subprocess.Popen(command, stdout=outfile, stderr=outfile)
 
 def config():
     logging.basicConfig(
@@ -152,6 +264,18 @@ if __name__ == '__main__':
 
     commands[0].append('--txs-producer')
     
-    for command, output_file in zip(commands, output_files):
-        multiprocessing.Process(target=run_command, args=(command, output_file)).start()
-        logging.info(f"Process started with command: {command}")
+    # Initialize and start log monitor with the show_all_logs option
+    log_monitor = LogMonitor(show_all_logs=args.show_all_logs)
+    log_monitor.start_monitoring(n_validators, n_workers, test_id)
+
+    # Start all processes
+    processes = []
+    for cmd, out_file in zip(commands, output_files):
+        run_command(cmd, out_file)
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        log_monitor.should_stop = True
+        print("\nShutting down...")

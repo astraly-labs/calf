@@ -31,3 +31,6 @@ db/*
 .*.json
 key*.json
 *.gif
+
+# Test launcher files
+test/
