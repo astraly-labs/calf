@@ -2,6 +2,7 @@ pub mod batch_broadcaster;
 pub mod batch_maker;
 pub mod batch_receiver;
 pub mod quorum_waiter;
+pub mod sync_relayer;
 pub mod transaction_event_listener;
 
 use anyhow::Context;
@@ -13,7 +14,7 @@ use derive_more::{AsMut, AsRef, Deref, DerefMut};
 use libp2p::identity::ed25519;
 use quorum_waiter::QuorumWaiter;
 use std::{path::PathBuf, sync::Arc};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio_util::sync::CancellationToken;
 use transaction_event_listener::TransactionEventListener;
 
@@ -24,17 +25,20 @@ use crate::{
         Network, WorkerNetwork,
     },
     settings::parser::{AuthorityInfo, Committee, FileLoader as _},
+    synchronizer::{
+        feeder::Feeder,
+        fetcher::{Fetcher, MAX_CONCURENT_FETCH_TASKS},
+    },
     types::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         traits::Random,
         transaction::Transaction,
     },
-    utils,
+    utils, CHANNEL_SIZE,
 };
 
-const QUORUM_TRESHOLD: u32 = 1;
 const TIMEOUT: u64 = 1000;
-const BATCH_SIZE: usize = 100;
+const BATCH_SIZE: usize = 1024 * 100;
 const QUORUM_TIMEOUT: u128 = 1000;
 
 // Wrapper
@@ -133,11 +137,13 @@ impl BaseAgent for Worker {
     }
 
     async fn run(mut self) {
-        let (batches_tx, batches_rx) = broadcast::channel(100);
-        let (transactions_tx, transactions_rx) = mpsc::channel(100);
+        let (batches_tx, batches_rx) = broadcast::channel(CHANNEL_SIZE);
+        let (transactions_tx, transactions_rx) = mpsc::channel(CHANNEL_SIZE);
         let quorum_waiter_batches_rx = batches_tx.subscribe();
-        let (network_tx, network_rx) = mpsc::channel(100);
-        let (p2p_connector, acks_rx, received_batches_rx) = WorkerConnector::new(100);
+        let (network_tx, network_rx) = mpsc::channel(CHANNEL_SIZE);
+        let (p2p_connector, acks_rx, received_batches_rx, sync_requests_rx, sync_responses_rx) =
+            WorkerConnector::new(CHANNEL_SIZE);
+        let (fetcher_commands_tx, commands_rx) = mpsc::channel(CHANNEL_SIZE);
 
         let cancellation_token = CancellationToken::new();
 
@@ -153,15 +159,15 @@ impl BaseAgent for Worker {
             BatchBroadcaster::spawn(cancellation_token.clone(), batches_rx, network_tx.clone());
 
         let tx_producer_handle =
-            tx_producer_task(transactions_tx.clone(), 100, 100, self.txs_producer);
+            tx_producer_task(transactions_tx.clone(), 1024 * 10, 100, self.txs_producer);
 
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
 
-        let peers = WorkerPeers::new(
+        let peers = Arc::new(RwLock::new(WorkerPeers::new(
             self.id,
             hex::encode(self.validator_keypair.public().to_bytes()),
-        );
+        )));
 
         tracing::info!(
             "launched with validator keypair: {}",
@@ -169,11 +175,11 @@ impl BaseAgent for Worker {
         );
 
         let worker_network_handle = Network::<WorkerNetwork, WorkerConnector, WorkerPeers>::spawn(
-            self.commitee,
-            p2p_connector,
+            self.commitee.clone(),
+            p2p_connector.clone(),
             self.validator_keypair,
             self.keypair,
-            peers,
+            peers.clone(),
             network_rx,
             cancellation_token.clone(),
         );
@@ -182,7 +188,7 @@ impl BaseAgent for Worker {
             cancellation_token.clone(),
             quorum_waiter_batches_rx,
             acks_rx,
-            QUORUM_TRESHOLD,
+            self.commitee.quorum_threshold(),
             network_tx.clone(),
             Arc::clone(&self.db),
             QUORUM_TIMEOUT,
@@ -191,8 +197,31 @@ impl BaseAgent for Worker {
         let batch_acknowledger_handle = BatchReceiver::spawn(
             cancellation_token.clone(),
             received_batches_rx,
-            network_tx,
+            network_tx.clone(),
             Arc::clone(&self.db),
+        );
+
+        let fetcher_handle = Fetcher::spawn(
+            cancellation_token.clone(),
+            network_tx.clone(),
+            commands_rx,
+            sync_responses_rx.resubscribe(),
+            p2p_connector.clone(),
+            MAX_CONCURENT_FETCH_TASKS,
+        );
+
+        let sync_relayer_handle = sync_relayer::SyncRelayer::spawn(
+            cancellation_token.clone(),
+            fetcher_commands_tx,
+            sync_requests_rx.resubscribe(),
+            peers.clone(),
+        );
+
+        let feeder_handle = Feeder::spawn(
+            cancellation_token.clone(),
+            sync_requests_rx.resubscribe(),
+            network_tx.clone(),
+            self.db.clone(),
         );
 
         let res = tokio::try_join!(
@@ -203,6 +232,9 @@ impl BaseAgent for Worker {
             quorum_waiter_handle,
             batch_acknowledger_handle,
             tx_producer_handle,
+            sync_relayer_handle,
+            feeder_handle,
+            fetcher_handle,
         );
 
         match res {
@@ -219,7 +251,7 @@ fn tx_producer_task(
     flag: bool,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        if flag {
+        if true {
             loop {
                 let tx = Transaction::random(size);
                 txs_tx.send(tx).await.unwrap();

@@ -17,10 +17,11 @@ A smol implementation of [narwhal](https://arxiv.org/pdf/2105.11827) - a mempool
 ### System Dependencies
 
 **For macOS:**
+
 ```bash
 brew install gmp
 
-export CFLAGS="-I/opt/homebrew/include"            
+export CFLAGS="-I/opt/homebrew/include"
 export LDFLAGS="-L/opt/homebrew/lib"
 ```
 
@@ -48,9 +49,11 @@ python test_launcher.py --validators <number_of_validators> [optional arguments]
 #### Arguments
 
 **Required:**
+
 - `--validators`: Number of validators to run
 
 **Optional:**
+
 - `--workers`: Number of workers per validator (default: 1)
 - `--test-id`: Test name (default: "test")
 - `--calf`: Path to the executable (default: "target/release/calf")
@@ -59,6 +62,7 @@ python test_launcher.py --validators <number_of_validators> [optional arguments]
 #### File Requirements
 
 Before running, ensure you have:
+
 - ✅ The calf executable at `target/release/calf` (or specify a different path with `--calf`)
 - ✅ A `committee.json` file in your working directory (or specify a different path with `--committee-path`)
 
@@ -71,6 +75,7 @@ Learn more about Narwhal and DAG-based consensus:
 - [Delphi Digital's Narwhal Primer](https://members.delphidigital.io/feed/a-primer-on-narwhal)
 
 ### Video Resources
+
 - [Narwhal & Tusk: A DAG-based Mempool and Efficient BFT Consensus](https://www.youtube.com/watch?v=xKDDuPrYUag)
 - [Deep Dive into Narwhal & Tusk](https://www.youtube.com/watch?v=K5ph4-7vvHk)
 - [Narwhal and Tusk: A DAG-based Mempool and BFT Consensus](https://www.youtube.com/watch?v=NGOXVSFzYdI&t=2018s)

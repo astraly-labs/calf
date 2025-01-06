@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::traits::{AsBytes, Random};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Transaction {
     pub data: Vec<u8>,
 }

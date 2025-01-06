@@ -4,6 +4,7 @@ use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::CancellationToken;
 
 use crate::types::batch::Batch;
+use crate::types::traits::{AsHex, Hash};
 use crate::types::transaction::Transaction;
 
 #[derive(Spawn)]
@@ -24,7 +25,7 @@ impl BatchMaker {
             let sender = self.batches_tx.clone();
             tokio::select! {
                 Some(tx) = self.transactions_rx.recv() => {
-                    tracing::info!("received transaction: {:?}", tx);
+                    tracing::info!("received transaction: {}", tx.digest().as_hex_string());
                     let serialized_tx = match bincode::serialize(&tx) {
                         Ok(serialized) => serialized,
                         Err(e) => {

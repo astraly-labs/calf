@@ -7,6 +7,7 @@ pub mod db;
 pub mod network;
 pub mod primary;
 pub mod settings;
+pub mod synchronizer;
 pub mod types;
 pub mod utils;
 pub mod worker;
@@ -81,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
     // Setup logging based on global options
     let subscriber = tracing_subscriber::fmt()
         .compact()
-        .with_file(false)
+        .with_file(true)
         .with_line_number(false)
         .with_thread_ids(false)
         .with_target(false)
