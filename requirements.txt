@@ -4,3 +4,4 @@ matplotlib
 networkx
 pygraphviz
 pydot
+termcolor
