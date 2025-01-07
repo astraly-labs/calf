@@ -105,10 +105,7 @@ fn process_header(
         .digests
         .iter()
         .filter(
-            |digest| match db.get::<BatchId>(db::Column::Digests, &digest.0.as_hex_string()) {
-                Ok(Some(_)) => false,
-                _ => true,
-            },
+            |digest| !matches!(db.get::<BatchId>(db::Column::Digests, &digest.0.as_hex_string()), Ok(Some(_)))
         )
         .cloned()
         .collect();
@@ -117,11 +114,7 @@ fn process_header(
         .certificates_ids
         .iter()
         .filter(|certificate| {
-            match db.get::<CertificateId>(db::Column::Certificates, &certificate.0.as_hex_string())
-            {
-                Ok(Some(_)) => false,
-                _ => true,
-            }
+            !matches!(db.get::<CertificateId>(db::Column::Certificates, &certificate.0.as_hex_string()), Ok(Some(_)))
         })
         .cloned()
         .collect();

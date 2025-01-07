@@ -213,11 +213,7 @@ where
 }
 
 fn check_header_storage(id: &HeaderId, db: &Db) -> bool {
-    if let Ok(Some(_)) = db.get::<BlockHeader>(db::Column::Headers, &id.0.as_hex_string()) {
-        true
-    } else {
-        false
-    }
+    matches!(db.get::<BlockHeader>(db::Column::Headers, &id.0.as_hex_string()), Ok(Some(_)))
 }
 
 async fn fetch_missing_data_checked<T, S>(
@@ -260,10 +256,7 @@ fn header_missing_data(
         .digests
         .iter()
         .filter(
-            |digest| match db.get::<BatchId>(db::Column::Digests, &digest.0.as_hex_string()) {
-                Ok(Some(_)) => false,
-                _ => true,
-            },
+            |digest| !matches!(db.get::<BatchId>(db::Column::Digests, &digest.0.as_hex_string()), Ok(Some(_)))
         )
         .cloned()
         .collect();
@@ -272,11 +265,7 @@ fn header_missing_data(
         .certificates_ids
         .iter()
         .filter(|certificate| {
-            match db.get::<CertificateId>(db::Column::Certificates, &certificate.0.as_hex_string())
-            {
-                Ok(Some(_)) => false,
-                _ => true,
-            }
+            !matches!(db.get::<CertificateId>(db::Column::Certificates, &certificate.0.as_hex_string()), Ok(Some(_)))
         })
         .cloned()
         .collect();
