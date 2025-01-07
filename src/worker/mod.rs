@@ -152,8 +152,7 @@ impl BaseAgent for Worker {
         let batch_broadcaster_handle =
             BatchBroadcaster::spawn(cancellation_token.clone(), batches_rx, network_tx.clone());
 
-        let tx_producer_handle =
-            tx_producer_task(transactions_tx.clone(), 1024 * 10, 100);
+        let tx_producer_handle = tx_producer_task(transactions_tx.clone(), 1024 * 10, 100);
 
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
@@ -244,10 +243,10 @@ fn tx_producer_task(
     delay: u64,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-            loop {
-                let tx = Transaction::random(size);
-                txs_tx.send(tx).await.unwrap();
-                tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-            }
+        loop {
+            let tx = Transaction::random(size);
+            txs_tx.send(tx).await.unwrap();
+            tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+        }
     })
 }

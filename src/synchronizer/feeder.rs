@@ -109,7 +109,9 @@ impl Feeder {
         let mut datas = vec![];
         let certif_to_retrieve = payload.len();
         for digest in payload {
-            if let Ok(Some(batch)) = self.db.get::<T>(column, &digest.as_hex_string()) { datas.push(batch) };
+            if let Ok(Some(batch)) = self.db.get::<T>(column, &digest.as_hex_string()) {
+                datas.push(batch)
+            };
         }
 
         let response = match datas.len() {
@@ -337,10 +339,7 @@ pub mod test {
             if let NetworkRequest::SendTo(pid, request_payload) = msg {
                 assert_eq!(peer_id, pid);
                 if let RequestPayload::SyncResponse(sync_response) = request_payload {
-                    assert_eq!(
-                        sync_response,
-                        SyncResponse::Failure(sync_request.digest())
-                    );
+                    assert_eq!(sync_response, SyncResponse::Failure(sync_request.digest()));
                 } else {
                     panic!();
                 }

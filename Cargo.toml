@@ -34,3 +34,6 @@ chrono = "0.4"
 
 [dev-dependencies]
 rstest = "0.23.0"
+
+[features]
+dag_log = []

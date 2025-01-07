@@ -104,9 +104,12 @@ fn process_header(
     let missing_batches: HashSet<BatchId> = header
         .digests
         .iter()
-        .filter(
-            |digest| !matches!(db.get::<BatchId>(db::Column::Digests, &digest.0.as_hex_string()), Ok(Some(_)))
-        )
+        .filter(|digest| {
+            !matches!(
+                db.get::<BatchId>(db::Column::Digests, &digest.0.as_hex_string()),
+                Ok(Some(_))
+            )
+        })
         .cloned()
         .collect();
 
@@ -114,7 +117,10 @@ fn process_header(
         .certificates_ids
         .iter()
         .filter(|certificate| {
-            !matches!(db.get::<CertificateId>(db::Column::Certificates, &certificate.0.as_hex_string()), Ok(Some(_)))
+            !matches!(
+                db.get::<CertificateId>(db::Column::Certificates, &certificate.0.as_hex_string()),
+                Ok(Some(_))
+            )
         })
         .cloned()
         .collect();

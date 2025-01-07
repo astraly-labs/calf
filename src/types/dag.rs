@@ -69,7 +69,8 @@ where
                         Err(DagError::MissingParents(
                             vertex
                                 .parents
-                                .difference(potential_parents).cloned()
+                                .difference(potential_parents)
+                                .cloned()
                                 .collect(),
                         ))
                     }
@@ -83,10 +84,7 @@ where
         let id = vertex.id.clone();
         let layer = vertex.layer;
         self.vertices.insert(id.clone(), vertex);
-        self.vertices_by_layers
-            .entry(layer)
-            .or_default()
-            .insert(id);
+        self.vertices_by_layers.entry(layer).or_default().insert(id);
         if layer > self.height {
             self.height = layer;
         }

@@ -58,9 +58,7 @@ where
     T: AsBytes + Hash + Clone + Random,
 {
     fn random(size: usize) -> Self {
-        let data = (0..size)
-            .map(|_| T::random(RANDOM_ITEM_SIZE))
-            .collect();
+        let data = (0..size).map(|_| T::random(RANDOM_ITEM_SIZE)).collect();
         Self(data)
     }
 }

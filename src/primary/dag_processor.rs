@@ -1,4 +1,7 @@
-use std::{collections::HashSet, sync::Arc, fs::OpenOptions, io::Write};
+use std::{collections::HashSet, sync::Arc};
+
+#[cfg(feature = "dag_log")]
+use std::{fs::OpenOptions, io::Write};
 
 use crate::{
     db::{self, Db},
@@ -12,11 +15,15 @@ use crate::{
     },
 };
 use proc_macros::Spawn;
-use tokio::sync::{broadcast, mpsc, watch};
-use tokio_util::sync::CancellationToken;
+
+#[cfg(feature = "dag_log")]
 use serde_json::json;
 
+use tokio::sync::{broadcast, mpsc, watch};
+use tokio_util::sync::CancellationToken;
+
 const GENESIS_SEED: [u8; 32] = [0; 32];
+#[cfg(feature = "dag_log")]
 const DAG_OUTPUT_FILE: &str = "output.dag";
 
 #[derive(Spawn)]
@@ -40,10 +47,11 @@ impl DagProcessor {
         let mut current_round = dag.height() + 1;
         self.rounds_tx
             .send((current_round, HashSet::from_iter([genesis].into_iter())))?;
-        
+
         // Create/truncate the DAG output file
+        #[cfg(feature = "dag_log")]
         let _ = std::fs::File::create(DAG_OUTPUT_FILE)?;
-        
+
         loop {
             tokio::select! {
                 Some(certificate) = self.certificates_rx.recv() => {
@@ -51,6 +59,7 @@ impl DagProcessor {
                         Ok(()) => {
                             tracing::info!("💾 current header certificate inserted in the DAG");
                             self.db.insert(db::Column::Certificates, &certificate.id_as_hex(), &certificate)?;
+                            #[cfg(feature = "dag_log")]
                             self.write_dag_state(&dag, current_round)?;
                         },
                         Err(error) => {
@@ -74,6 +83,7 @@ impl DagProcessor {
                             tracing::info!("💾 certificate from {} inserted in the DAG", certificate.sender);
                             let _ = dag.insert(certificate.object.clone().into());
                             self.db.insert(db::Column::Certificates, &certificate.object.id_as_hex(), &certificate.object)?;
+                            #[cfg(feature = "dag_log")]
                             self.write_dag_state(&dag, current_round)?;
                         },
                         Err(error) => {
@@ -105,13 +115,20 @@ impl DagProcessor {
                 );
                 current_round += 1;
                 self.rounds_tx.send((current_round, certificates))?;
+
+                #[cfg(feature = "dag_log")]
                 self.write_dag_state(&dag, current_round)?;
             }
         }
         Ok(())
     }
 
-    fn write_dag_state(&self, dag: &Dag<Certificate>, current_round: Round) -> Result<(), anyhow::Error> {
+    #[cfg(feature = "dag_log")]
+    fn write_dag_state(
+        &self,
+        dag: &Dag<Certificate>,
+        current_round: Round,
+    ) -> Result<(), anyhow::Error> {
         let mut vertices = Vec::new();
         let mut edges = Vec::new();
 
