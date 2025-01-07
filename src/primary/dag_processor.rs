@@ -121,7 +121,7 @@ impl DagProcessor {
                 let vertex_data = json!({
                     "id": vertex.id(),
                     "round": vertex.layer(),
-                    "author": hex::encode(&vertex.data().author().unwrap_or([0; 32])),
+                    "author": hex::encode(vertex.data().author().unwrap_or([0; 32])),
                     "timestamp": chrono::Utc::now().timestamp_millis()
                 });
                 vertices.push(vertex_data);
@@ -149,7 +149,7 @@ impl DagProcessor {
             .create(true)
             .open(DAG_OUTPUT_FILE)?;
 
-        writeln!(file, "{}", dag_state.to_string())?;
+        writeln!(file, "{}", dag_state)?;
         Ok(())
     }
 }

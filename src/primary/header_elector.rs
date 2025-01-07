@@ -227,7 +227,7 @@ mod test {
 
     fn set_certificates_in_db(certificates: &[Certificate], db: &Db) {
         for cert in certificates {
-            db.insert(Column::Certificates, &cert.id_as_hex(), &cert)
+            db.insert(Column::Certificates, &cert.id_as_hex(), cert)
                 .unwrap();
         }
     }
@@ -243,7 +243,7 @@ mod test {
         round: Round,
         references: &[Certificate],
     ) {
-        let certificates = references.into_iter().cloned().collect();
+        let certificates = references.iter().cloned().collect();
         tx.send((round, certificates)).unwrap();
     }
 

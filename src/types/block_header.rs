@@ -65,8 +65,7 @@ impl BlockHeader {
         } else {
             let parents = self
                 .certificates_ids
-                .iter()
-                .map(|id| *id)
+                .iter().copied()
                 .collect::<HashSet<CertificateId>>();
             potential_parents
                 .intersection(&parents)

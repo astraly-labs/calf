@@ -69,8 +69,7 @@ where
                         Err(DagError::MissingParents(
                             vertex
                                 .parents
-                                .difference(potential_parents)
-                                .map(|elm| elm.clone())
+                                .difference(potential_parents).cloned()
                                 .collect(),
                         ))
                     }
@@ -82,11 +81,11 @@ where
     pub fn insert(&mut self, vertex: Vertex<T>) -> Result<(), DagError> {
         let res = self.check_parents(&vertex);
         let id = vertex.id.clone();
-        let layer = vertex.layer.clone();
+        let layer = vertex.layer;
         self.vertices.insert(id.clone(), vertex);
         self.vertices_by_layers
             .entry(layer)
-            .or_insert(HashSet::new())
+            .or_default()
             .insert(id);
         if layer > self.height {
             self.height = layer;
@@ -103,7 +102,7 @@ where
         self.vertices_by_layers
             .get(&layer)
             .map(|keys| keys.iter().flat_map(|key| self.vertices.get(key)).collect())
-            .unwrap_or(Vec::new())
+            .unwrap_or_default()
     }
     /// Get the number of vertices belonging to a given layer.
     pub fn layer_size(&self, layer: u64) -> usize {

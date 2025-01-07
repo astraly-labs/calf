@@ -84,7 +84,7 @@ impl SyncTracker {
                     fetch_missing_data_checked(
                         orphan.object.clone().missing_parents.into_iter().collect(),
                         &mut missing_certificates,
-                        orphan.sender.clone(),
+                        orphan.sender,
                         self.fetcher_commands_tx.clone(),
                     ).await?;
                 }
@@ -122,23 +122,19 @@ impl SyncTracker {
                         tracing::info!("📡 Header {} has been retrieved", header.object.id().as_hex_string());
                         missing_headers.retain(|elm| elm != &header.object.id().into());
                     }
-                    match header_missing_data(&header.object, header.sender, self.db.clone()) {
-                        Some(incomplete_header) => {
-                            tracing::info!("📡 Header {} is incomplete", header.object.id().as_hex_string());
-                            if !incomplete_header.missing_certificates.is_empty() {
-                                tracing::info!("📡 Requesting missing certificates for header {}", header.object.id().as_hex_string());
-                                fetch_missing_data_checked(incomplete_header.missing_certificates.clone(), &mut missing_certificates, header.sender, self.fetcher_commands_tx.clone()).await?;
-                            }
-                            if !incomplete_header.missing_batches.is_empty() {
-                                missing_batches_digests.extend(incomplete_header.missing_batches.iter().cloned());
-                                tracing::info!("📡 Requesting missing batches for header {}", header.object.id().as_hex_string());
-                                let req = RequestPayload::SyncRequest(SyncRequest::SyncDigests(incomplete_header.missing_batches.iter().map(|elm| elm.0).collect()));
-                                self.network_tx.send(NetworkRequest::BroadcastSameNode(req)).await?;
-                            }
-                            incomplete_headers.push(incomplete_header);
+                    if let Some(incomplete_header) = header_missing_data(&header.object, header.sender, self.db.clone()) {
+                        tracing::info!("📡 Header {} is incomplete", header.object.id().as_hex_string());
+                        if !incomplete_header.missing_certificates.is_empty() {
+                            tracing::info!("📡 Requesting missing certificates for header {}", header.object.id().as_hex_string());
+                            fetch_missing_data_checked(incomplete_header.missing_certificates.clone(), &mut missing_certificates, header.sender, self.fetcher_commands_tx.clone()).await?;
                         }
-                        None => {
+                        if !incomplete_header.missing_batches.is_empty() {
+                            missing_batches_digests.extend(incomplete_header.missing_batches.iter().cloned());
+                            tracing::info!("📡 Requesting missing batches for header {}", header.object.id().as_hex_string());
+                            let req = RequestPayload::SyncRequest(SyncRequest::SyncDigests(incomplete_header.missing_batches.iter().map(|elm| elm.0).collect()));
+                            self.network_tx.send(NetworkRequest::BroadcastSameNode(req)).await?;
                         }
+                        incomplete_headers.push(incomplete_header);
                     }
                 }
                 Some(_) = self.reset_trigger.recv() => {
@@ -335,7 +331,7 @@ async fn process_incomplete_headers(
         .filter(|header| {
             header.missing_certificates.is_empty() && header.missing_batches.is_empty()
         })
-        .map(|header| (header.header.clone(), header.sender.clone()))
+        .map(|header| (header.header.clone(), header.sender))
         .collect();
 
     for (header, sender) in to_dispatch {

@@ -43,7 +43,7 @@ impl HeaderBuilder {
     pub async fn run(mut self) -> anyhow::Result<()> {
         let mut cancellation_token = CancellationToken::new();
         loop {
-            let _trigger = self.header_trigger_rx.changed().await?;
+            self.header_trigger_rx.changed().await?;
 
             if *self.sync_status_rx.borrow() == SyncStatus::Incomplete {
                 tracing::info!("🔨 Syncing, unable t build a header, waiting for sync to finish");

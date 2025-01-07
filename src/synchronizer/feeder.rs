@@ -109,20 +109,17 @@ impl Feeder {
         let mut datas = vec![];
         let certif_to_retrieve = payload.len();
         for digest in payload {
-            match self.db.get::<T>(column, &digest.as_hex_string()) {
-                Ok(Some(batch)) => datas.push(batch),
-                _ => {}
-            };
+            if let Ok(Some(batch)) = self.db.get::<T>(column, &digest.as_hex_string()) { datas.push(batch) };
         }
 
         let response = match datas.len() {
             len if len == certif_to_retrieve => {
-                SyncResponse::Success(req_id.into(), datas.into_sync_data())
+                SyncResponse::Success(req_id, datas.into_sync_data())
             }
             len if len != 0 && len < certif_to_retrieve => {
-                SyncResponse::Partial(req_id.into(), datas.into_sync_data())
+                SyncResponse::Partial(req_id, datas.into_sync_data())
             }
-            len if len == 0 => SyncResponse::Failure(req_id.into()),
+            0 => SyncResponse::Failure(req_id),
             _ => unreachable!(),
         };
 
@@ -175,7 +172,7 @@ pub mod test {
             (0..10).map(|_| Batch::<Transaction>::random(30)).collect();
         let batch_ids: Vec<Digest> = batches
             .iter()
-            .map(|elm: &Batch<Transaction>| elm.digest().into())
+            .map(|elm: &Batch<Transaction>| elm.digest())
             .collect();
 
         // Insert data in database
@@ -244,7 +241,7 @@ pub mod test {
             (0..10).map(|_| Batch::<Transaction>::random(30)).collect();
         let batch_ids: Vec<Digest> = batches
             .iter()
-            .map(|elm: &Batch<Transaction>| elm.digest().into())
+            .map(|elm: &Batch<Transaction>| elm.digest())
             .collect();
 
         // Insert data in database
@@ -313,7 +310,7 @@ pub mod test {
             (0..10).map(|_| Batch::<Transaction>::random(30)).collect();
         let batch_ids: Vec<Digest> = batches
             .iter()
-            .map(|elm: &Batch<Transaction>| elm.digest().into())
+            .map(|elm: &Batch<Transaction>| elm.digest())
             .collect();
 
         //run the feeder
@@ -342,7 +339,7 @@ pub mod test {
                 if let RequestPayload::SyncResponse(sync_response) = request_payload {
                     assert_eq!(
                         sync_response,
-                        SyncResponse::Failure(sync_request.digest().into())
+                        SyncResponse::Failure(sync_request.digest())
                     );
                 } else {
                     panic!();

@@ -28,6 +28,9 @@ where
     pub fn len(&self) -> usize {
         self.0.len()
     }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl TryFrom<RequestPayload> for Batch<Transaction> {
@@ -56,7 +59,6 @@ where
 {
     fn random(size: usize) -> Self {
         let data = (0..size)
-            .into_iter()
             .map(|_| T::random(RANDOM_ITEM_SIZE))
             .collect();
         Self(data)
