@@ -44,7 +44,6 @@ impl BlockHeader {
             certificates_ids,
         }
     }
-    //TODO: rewrite with error details
     pub fn verify_parents(
         &self,
         potential_parents: HashSet<CertificateId>,

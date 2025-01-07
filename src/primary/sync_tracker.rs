@@ -38,8 +38,8 @@ pub struct SyncTracker {
     digests_rx: broadcast::Receiver<ReceivedObject<(BatchId, ObjectSource)>>,
     // --v data to sync v--
     orphans_rx: mpsc::Receiver<ReceivedObject<OrphanCertificate>>,
-    incomplete_headers_rx: mpsc::Receiver<ReceivedObject<IncompleteHeader>>,
-    missing_headers_rx: mpsc::Receiver<ReceivedObject<HeaderId>>,
+    //incomplete_headers_rx: mpsc::Receiver<ReceivedObject<IncompleteHeader>>,
+    //missing_headers_rx: mpsc::Receiver<ReceivedObject<HeaderId>>,
     // to send commands to the fetcher
     fetcher_commands_tx: mpsc::Sender<Box<dyn Fetch + Send + Sync + 'static>>,
     // to expose all orphan certificates

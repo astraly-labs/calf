@@ -21,8 +21,8 @@ class DagVisualizer:
         self.last_read_timestamp = 0
         self.visible_rounds = 5  # Number of rounds to show
         self.max_stored_rounds = 10  # Maximum number of rounds to keep in memory
-        self.node_cache = {}  # Cache for node artists
-        self.edge_cache = {}  # Cache for edge artists
+        self.node_cache = {}  # Cache for node
+        self.edge_cache = {}  # Cache for edge
         self.last_update_time = time.time()
         self.update_interval = 2.0  # Minimum seconds between updates
         
@@ -152,7 +152,6 @@ class DagVisualizer:
         
         # Get min and max rounds for scaling
         min_round = min(self.certificates_by_round.keys()) if self.certificates_by_round else 0
-        max_round = max(self.certificates_by_round.keys()) if self.certificates_by_round else 0
         
         for round_num, certs in self.certificates_by_round.items():
             # Normalize y position to be between 0 and 1
@@ -170,11 +169,10 @@ class DagVisualizer:
         if not self.edge_cache:
             edges = list(self.G.edges())
             if edges:
-                edge_pos = [(self.pos[start], self.pos[end]) for start, end in edges]
                 nx.draw_networkx_edges(self.G, pos=self.pos, ax=self.ax,
                                      edge_color='#404040', arrows=True,
                                      arrowsize=15, arrowstyle='->',
-                                     connectionstyle='arc3,rad=0.1',  # Reduced curve
+                                     connectionstyle='arc3,rad=0',  # Reduced curve
                                      alpha=0.3, width=0.5)  # Thinner lines
 
     def draw_nodes(self):

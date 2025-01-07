@@ -27,7 +27,6 @@ pub(crate) struct DagProcessor {
     certificates_rx: mpsc::Receiver<Certificate>,
     certificates_tx: mpsc::Sender<ReceivedObject<Certificate>>,
     oprhans_tx: mpsc::Sender<ReceivedObject<OrphanCertificate>>,
-    missing_headers_tx: mpsc::Sender<ReceivedObject<HeaderId>>,
     rounds_tx: watch::Sender<(Round, HashSet<Certificate>)>,
     committee: Committee,
     db: Arc<Db>,

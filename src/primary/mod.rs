@@ -132,7 +132,6 @@ impl BaseAgent for Primary {
         let (certificates_tx, certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
         let (orphans_tx, orphans_rx) = mpsc::channel(CHANNEL_SIZE);
-        let (missing_headers_tx, missing_headers_rx) = mpsc::channel(CHANNEL_SIZE);
         let (incomplete_headers_tx, incomplete_headers_rx) = mpsc::channel(CHANNEL_SIZE);
         let (received_certificates_tx, received_certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
@@ -205,7 +204,6 @@ impl BaseAgent for Primary {
             certificates_rx,
             received_certificates_tx,
             orphans_tx,
-            missing_headers_tx,
             round_tx,
             self.commitee.clone(),
             self.db.clone(),
@@ -218,8 +216,8 @@ impl BaseAgent for Primary {
             header_rx.resubscribe(),
             digests_rx.resubscribe(),
             orphans_rx,
-            incomplete_headers_rx,
-            missing_headers_rx,
+            //incomplete_headers_rx,
+            //missing_headers_rx,
             fetcher_commands_tx,
             sync_status_tx,
             sync_reset_trigger_rx,

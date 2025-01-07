@@ -190,7 +190,6 @@ impl HandleEvent<PrimaryPeers, PrimaryConnector> for PrimaryNetwork {
     ) -> anyhow::Result<()> {
         match request {
             NetworkRequest::BroadcastCounterparts(req) => {
-                //TODO: obsolete since there is now to types of broadcast
                 let peers = peers.read().await.get_broadcast_peers_counterparts();
                 swarm_actions::broadcast(swarm, peers, req)?;
             }

@@ -28,7 +28,6 @@ pub(crate) fn send(
 
 /// Broadcasts a message to all connected peers.
 pub(crate) fn broadcast(
-    //TODO: call get_bracast_peers_counterparts etc. in the swarm events instead of here: one broadcast for all cases
     swarm: &mut Swarm<CalfBehavior>,
     peers: HashSet<(PeerId, Multiaddr)>,
     message: RequestPayload,
