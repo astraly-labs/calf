@@ -28,7 +28,7 @@ pub(crate) struct HeaderElector {
     validator_keypair: Keypair,
     db: Arc<Db>,
     committee: Committee,
-    incomplete_headers_tx: mpsc::Sender<ReceivedObject<IncompleteHeader>>,
+    _incomplete_headers_tx: mpsc::Sender<ReceivedObject<IncompleteHeader>>,
 }
 
 //TODO: if authority has already produced a header for this round: reject, retrying broadcast for a header builder: dont re broadcast to nodes that sent a vote: save votes

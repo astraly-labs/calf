@@ -120,7 +120,6 @@ async fn main() -> anyhow::Result<()> {
                 let worker_settings = WorkerSettings {
                     base: base_settings,
                     id: args.id,
-                    txs_producer: args.txs_producer,
                 };
 
                 agent_main::<Worker>(worker_settings).await?;

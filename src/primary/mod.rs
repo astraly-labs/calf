@@ -35,8 +35,7 @@ use crate::{
         agents::{BaseAgent, LoadableFromSettings, Settings},
         batch::BatchId,
         certificate::Certificate,
-        sync::SyncStatus,
-        Digest, Round,
+        sync::SyncStatus, Round,
     },
     utils::{self, CircularBuffer},
     CHANNEL_SIZE,
@@ -132,7 +131,7 @@ impl BaseAgent for Primary {
         let (certificates_tx, certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
         let (orphans_tx, orphans_rx) = mpsc::channel(CHANNEL_SIZE);
-        let (incomplete_headers_tx, incomplete_headers_rx) = mpsc::channel(CHANNEL_SIZE);
+        let (incomplete_headers_tx, _incomplete_headers_rx) = mpsc::channel(CHANNEL_SIZE);
         let (received_certificates_tx, received_certificates_rx) = mpsc::channel(CHANNEL_SIZE);
 
         let (sync_status_tx, sync_status_rx) = watch::channel(SyncStatus::Complete);

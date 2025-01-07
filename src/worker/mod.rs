@@ -63,8 +63,6 @@ pub struct WorkerArgs {
     /// Path to the database directory
     #[arg(short, long)]
     pub id: u32,
-    #[arg(long, default_value = "false")]
-    pub txs_producer: bool,
 }
 
 #[derive(Debug, AsRef, AsMut, Deref, DerefMut)]
@@ -75,7 +73,6 @@ pub struct WorkerSettings {
     #[deref_mut]
     pub base: Settings,
     pub id: u32,
-    pub txs_producer: bool,
 }
 
 impl LoadableFromSettings for WorkerSettings {
@@ -90,7 +87,6 @@ impl LoadableFromSettings for WorkerSettings {
                 validator_keypair_path: cli.validator_keypair_path,
             },
             id: cli.id,
-            txs_producer: cli.txs_producer,
         })
     }
 }
@@ -102,7 +98,6 @@ pub(crate) struct Worker {
     keypair: ed25519::Keypair,
     validator_keypair: ed25519::Keypair,
     db: Arc<db::Db>,
-    txs_producer: bool,
 }
 
 #[async_trait::async_trait]
@@ -132,7 +127,6 @@ impl BaseAgent for Worker {
             db,
             keypair,
             validator_keypair,
-            txs_producer: settings.txs_producer,
         })
     }
 
@@ -159,7 +153,7 @@ impl BaseAgent for Worker {
             BatchBroadcaster::spawn(cancellation_token.clone(), batches_rx, network_tx.clone());
 
         let tx_producer_handle =
-            tx_producer_task(transactions_tx.clone(), 1024 * 10, 100, self.txs_producer);
+            tx_producer_task(transactions_tx.clone(), 1024 * 10, 100);
 
         let transaction_event_listener_handle =
             TransactionEventListener::spawn(transactions_tx, cancellation_token.clone());
@@ -248,15 +242,12 @@ fn tx_producer_task(
     txs_tx: mpsc::Sender<Transaction>,
     size: usize,
     delay: u64,
-    flag: bool,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        if true {
             loop {
                 let tx = Transaction::random(size);
                 txs_tx.send(tx).await.unwrap();
                 tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
             }
-        }
     })
 }

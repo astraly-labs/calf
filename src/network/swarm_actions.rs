@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
 
 use libp2p::{
     swarm::{
@@ -7,11 +7,10 @@ use libp2p::{
     },
     Multiaddr, PeerId, Swarm,
 };
-use tokio::sync::RwLock;
 
 use crate::types::network::RequestPayload;
 
-use super::{CalfBehavior, ManagePeers};
+use super::CalfBehavior;
 
 /// Sends a message to a specific peer.
 pub(crate) fn send(

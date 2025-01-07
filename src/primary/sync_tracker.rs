@@ -7,8 +7,7 @@ use crate::{
         Connect,
     },
     synchronizer::{
-        feeder::IntoSyncData,
-        traits::{DataProvider, Fetch, IntoSyncRequest, Sourced},
+        traits::{DataProvider, Fetch, Sourced},
         RequestedObject,
     },
     types::{

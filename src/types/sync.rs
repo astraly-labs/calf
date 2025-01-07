@@ -1,4 +1,4 @@
-use std::{alloc::System, collections::HashSet};
+use std::collections::HashSet;
 
 use derive_more::derive::Constructor;
 use libp2p::PeerId;
