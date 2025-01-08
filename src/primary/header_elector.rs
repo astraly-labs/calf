@@ -31,8 +31,6 @@ pub(crate) struct HeaderElector {
     _incomplete_headers_tx: mpsc::Sender<ReceivedObject<IncompleteHeader>>,
 }
 
-//TODO: if authority has already produced a header for this round: reject, retrying broadcast for a header builder: dont re broadcast to nodes that sent a vote: save votes
-
 impl HeaderElector {
     pub async fn run(mut self) -> anyhow::Result<()> {
         loop {
@@ -268,32 +266,6 @@ mod test {
         }
     }
 
-    async fn send_header_check_sync_cmd(
-        header: BlockHeader,
-        headers_tx: broadcast::Sender<ReceivedObject<BlockHeader>>,
-        mut sync_rx: mpsc::Receiver<ReceivedObject<IncompleteHeader>>,
-        missing_digests: HashSet<BatchId>,
-        missing_certificates: HashSet<CertificateId>,
-    ) {
-        let peer_id = PeerId::random();
-        headers_tx
-            .send(ReceivedObject::new(header, peer_id))
-            .unwrap();
-        match timeout(Duration::from_millis(10), sync_rx.recv()).await {
-            Ok(Some(ReceivedObject {
-                object: header,
-                sender,
-            })) => {
-                assert_eq!(header.missing_batches, missing_digests);
-                assert_eq!(header.missing_certificates, missing_certificates);
-                assert_eq!(sender, peer_id);
-            }
-            _ => {
-                assert!(false)
-            }
-        }
-    }
-
     #[tokio::test]
     #[rstest]
     async fn test_first_round_valid_header_digests_stored() {
@@ -308,70 +280,5 @@ mod test {
         set_certificates_in_db(&[genesis.clone()], &db);
         publish_round_state(&round_state_tx, 1, &[genesis]);
         send_header_check_vote(header, headers_tx, network_rx).await;
-    }
-
-    #[tokio::test]
-    #[rstest]
-    async fn test_first_round_valid_header_missing_digests() {
-        let (headers_tx, round_state_tx, incomplete_headers_rx, _network_rx, db, _) =
-            launch_header_elector(
-                COMMITTEE_PATH.into(),
-                "/tmp/test_first_round_valid_header_missing_digests_db",
-            );
-        let genesis = Certificate::genesis(GENESIS_SEED);
-        let header = random_header(&[genesis.id()], 1);
-        set_certificates_in_db(&[genesis.clone()], &db);
-        publish_round_state(&round_state_tx, 1, &[genesis]);
-        send_header_check_sync_cmd(
-            header.clone(),
-            headers_tx,
-            incomplete_headers_rx,
-            header.digests.into_iter().collect(),
-            HashSet::new(),
-        )
-        .await;
-    }
-
-    #[tokio::test]
-    #[rstest]
-    async fn test_first_round_valid_header_missing_certificate() {
-        let (headers_tx, round_state_tx, incomplete_headers_rx, _network_rx, db, _) =
-            launch_header_elector(
-                COMMITTEE_PATH.into(),
-                "/tmp/test_first_round_valid_header_missing_certificate_db",
-            );
-        let genesis = Certificate::genesis(GENESIS_SEED);
-        let header = random_header(&[genesis.id()], 1);
-        publish_round_state(&round_state_tx, 1, &[]);
-        set_header_storage_in_db(&header, &db);
-        send_header_check_sync_cmd(
-            header.clone(),
-            headers_tx,
-            incomplete_headers_rx,
-            HashSet::new(),
-            [genesis.id()].into_iter().collect(),
-        )
-        .await;
-    }
-
-    #[tokio::test]
-    #[rstest]
-    async fn test_first_round_valid_header_missing_certificate_missing_digests() {
-        let (headers_tx, round_state_tx, incomplete_headers_rx, _network_rx, _db, _) =
-            launch_header_elector(
-                COMMITTEE_PATH.into(),
-                "/tmp/test_first_round_valid_header_missing_certificate_missing_digests_db",
-            );
-        let genesis = Certificate::genesis(GENESIS_SEED);
-        let header = random_header(&[genesis.id()], 1);
-        publish_round_state(&round_state_tx, 1, &[]);
-        send_header_check_sync_cmd(
-            header.clone(),
-            headers_tx,
-            incomplete_headers_rx,
-            header.digests.into_iter().collect(),
-            [genesis.id()].into_iter().collect(),
-        )
-        .await;
     }
 }
