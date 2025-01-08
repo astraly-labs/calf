@@ -156,7 +156,6 @@ mod test {
             load_committee, random_digests, CHANNEL_CAPACITY, COMMITTEE_PATH, GENESIS_SEED,
         },
         types::{
-            batch::BatchId,
             block_header::BlockHeader,
             certificate::{Certificate, CertificateId},
             network::{NetworkRequest, ReceivedObject, RequestPayload},
