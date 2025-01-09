@@ -55,6 +55,10 @@ impl DagProcessor {
         loop {
             tokio::select! {
                 Some(certificate) = self.certificates_rx.recv() => {
+                    if !self.enough_parents(&certificate) {
+                        tracing::warn!("🔍 not enough parents for certificate from");
+                        continue;
+                    }
                     match dag.insert_checked(certificate.clone().into()) {
                         Ok(()) => {
                             tracing::info!("💾 current header certificate inserted in the DAG");
@@ -68,6 +72,10 @@ impl DagProcessor {
                     }
                 }
                 Ok(certificate) = self.peers_certificates_rx.recv() => {
+                    if !self.enough_parents(&certificate.object) {
+                        tracing::warn!("🔍 not enough parents for certificate from {}", certificate.sender);
+                        continue;
+                    }
                     tracing::info!("📡 received new certificate from {}", certificate.sender);
                     match certificate.object.verify_votes(&self.committee) {
                         Ok(()) => {
@@ -121,6 +129,11 @@ impl DagProcessor {
             }
         }
         Ok(())
+    }
+
+    fn enough_parents(&self, certificate: &Certificate) -> bool {
+        let parents_number = certificate.parents_number();
+        parents_number >= self.committee.quorum_threshold() as usize || certificate.round() == 1
     }
 
     #[cfg(feature = "dag_log")]

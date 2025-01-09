@@ -174,7 +174,7 @@ class DagVisualizer:
                 nx.draw_networkx_edges(self.G, pos=self.pos, ax=self.ax,
                                      edge_color='#404040', arrows=True,
                                      arrowsize=15, arrowstyle='->',
-                                     connectionstyle='arc3,rad=0',  # Reduced curve
+                                     connectionstyle='arc3,rad=0.1',  # Reduced curve
                                      alpha=0.3, width=0.5)  # Thinner lines
 
     def draw_nodes(self):

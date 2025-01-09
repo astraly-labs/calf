@@ -113,6 +113,13 @@ impl Certificate {
             parents,
         )))
     }
+    pub fn parents_number(&self) -> usize {
+        match self {
+            Certificate::Genesis(_) => 0,
+            Certificate::Derived(derived) => derived.parents.len(),
+            Certificate::Dummy => 0,
+        }
+    }
     pub fn verify_votes(&self, committee: &Committee) -> Result<(), CertificateError> {
         match self {
             Certificate::Genesis(_) => Ok(()),
