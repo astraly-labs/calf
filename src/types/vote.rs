@@ -13,7 +13,7 @@ pub struct Vote {
 // Vote: Signed Hash of the BlockHeader + PublicKey of the authority
 impl Vote {
     pub fn from_header(header: BlockHeader, keypair: &Keypair) -> anyhow::Result<Self> {
-        let signature = header.sign_with(&keypair)?;
+        let signature = header.sign_with(keypair)?;
         Ok(Self {
             authority: keypair.public().to_bytes(),
             signature,

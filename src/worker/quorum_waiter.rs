@@ -289,7 +289,6 @@ mod test {
             lauch_quorum_waiter("/tmp/test_db_5");
 
         let batches = (0..10)
-            .into_iter()
             .map(|_| Batch::random(10))
             .collect::<Vec<Batch<Transaction>>>();
         for batch in &batches {

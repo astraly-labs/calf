@@ -111,7 +111,6 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
     ) -> anyhow::Result<()> {
         match request {
             NetworkRequest::BroadcastCounterparts(req) => {
-                //TODO: same here
                 let peers = peers.read().await.get_broadcast_peers_counterparts();
                 swarm_actions::broadcast(swarm, peers, req)?;
             }
@@ -131,7 +130,6 @@ impl HandleEvent<WorkerPeers, WorkerConnector> for WorkerNetwork {
                 let peers = peers.read().await.get_broadcast_peers_same_node();
                 swarm_actions::broadcast(swarm, peers, req)?;
             }
-            //TODO: impl lucky broadcast here
             _ => {}
         };
         Ok(())

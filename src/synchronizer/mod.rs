@@ -152,7 +152,7 @@ where
                     request.remove_reached(reached_data_ids);
                     responses.extend(payloads.into_iter().map(|payload| ReceivedObject {
                         object: payload,
-                        sender: source.clone(),
+                        sender: source,
                     }));
                 }
                 SyncResponse::Failure(peer) => {

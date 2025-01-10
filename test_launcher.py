@@ -73,7 +73,6 @@ def create_validator_env(path, workers_number, executable_path, committee_path):
         shutil.copy(f"{committee_path}", f"{path}/worker_{i}/committee.json")
         generate_keypair(f"{path}/worker_{i}/keypair.json")
     os.makedirs(f"{path}/primary", exist_ok=True)
-    os.makedirs(f"{path}/primary/dag_log", exist_ok=True)
     shutil.copy(f"{path}/validator-keypair.json", f"{path}/primary")
     shutil.copy(f"{executable_path}", f"{path}/primary")
     shutil.copy(f"{committee_path}", f"{path}/primary/committee.json")
@@ -124,13 +123,13 @@ class LogMonitor:
             "🎉 round",  # Round completion
             "🔨 Building Header for round",  # New round start
             "💾 certificate",  # Certificate creation
-            "✨ header accepted",  # Header acceptance
+            # "✨ header accepted",  # Header acceptance
             "🚫",  # Errors
             "⚠️",  # Warnings
             "Error",
             "Warning",
             "✅ Quorum reached",  # Quorum reached
-            "🤖 Broadcasting Certificate",  # Certificate broadcast
+            # "🤖 Broadcasting Certificate",  # Certificate broadcast
         ]
 
     def is_important_log(self, line):
@@ -252,7 +251,7 @@ if __name__ == '__main__':
 
     if args.build:
         logging.info("Building in release mode...")
-        subprocess.run(["cargo", "build", "--release"], check=True)
+        subprocess.run(["cargo", "build", "--release", "--features", "dag_log"], check=True)
 
     exec_name = os.path.basename(calf)
 
@@ -261,8 +260,6 @@ if __name__ == '__main__':
 
     commands = worker_processes_commands(n_validators, n_workers, test_id, exec_name) + primary_processes_commands(n_validators, test_id, exec_name)
     output_files = workers_processes_output(n_validators, n_workers, test_id) + primaries_processes_output(n_validators, test_id)
-
-    commands[0].append('--txs-producer')
     
     # Initialize and start log monitor with the show_all_logs option
     log_monitor = LogMonitor(show_all_logs=args.show_all_logs)

@@ -1,5 +1,5 @@
 use derive_more::derive::Constructor;
-use getset::CopyGetters;
+use getset::{CopyGetters, Getters};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -20,15 +20,19 @@ where
     base_layer: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Constructor)]
+#[derive(Serialize, Deserialize, Debug, Clone, Constructor, Getters)]
 /// A particular type of vertex for a particular type of DAG.
 pub struct Vertex<T>
 where
     T: Hash + AsBytes + Clone,
 {
+    #[getset(get = "pub")]
     data: T,
+    #[getset(get = "pub")]
     layer: u64,
+    #[getset(get = "pub")]
     parents: HashSet<String>,
+    #[getset(get = "pub")]
     id: String,
 }
 
@@ -66,7 +70,7 @@ where
                             vertex
                                 .parents
                                 .difference(potential_parents)
-                                .map(|elm| elm.clone())
+                                .cloned()
                                 .collect(),
                         ))
                     }
@@ -78,12 +82,9 @@ where
     pub fn insert(&mut self, vertex: Vertex<T>) -> Result<(), DagError> {
         let res = self.check_parents(&vertex);
         let id = vertex.id.clone();
-        let layer = vertex.layer.clone();
+        let layer = vertex.layer;
         self.vertices.insert(id.clone(), vertex);
-        self.vertices_by_layers
-            .entry(layer)
-            .or_insert(HashSet::new())
-            .insert(id);
+        self.vertices_by_layers.entry(layer).or_default().insert(id);
         if layer > self.height {
             self.height = layer;
         }
@@ -99,7 +100,7 @@ where
         self.vertices_by_layers
             .get(&layer)
             .map(|keys| keys.iter().flat_map(|key| self.vertices.get(key)).collect())
-            .unwrap_or(Vec::new())
+            .unwrap_or_default()
     }
     /// Get the number of vertices belonging to a given layer.
     pub fn layer_size(&self, layer: u64) -> usize {

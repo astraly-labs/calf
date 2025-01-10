@@ -34,3 +34,6 @@ key*.json
 
 # Test launcher files
 test/
+committee.json
+
+.vscode/

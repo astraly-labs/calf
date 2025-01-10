@@ -25,7 +25,7 @@ impl AsBytes for Transaction {
 
 impl Random for Transaction {
     fn random(size: usize) -> Self {
-        let data = (0..size).into_iter().map(|_| random()).collect();
+        let data = (0..size).map(|_| random()).collect();
         Self::new(data)
     }
 }

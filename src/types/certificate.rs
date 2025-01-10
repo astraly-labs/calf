@@ -113,6 +113,13 @@ impl Certificate {
             parents,
         )))
     }
+    pub fn parents_number(&self) -> usize {
+        match self {
+            Certificate::Genesis(_) => 0,
+            Certificate::Derived(derived) => derived.parents.len(),
+            Certificate::Dummy => 0,
+        }
+    }
     pub fn verify_votes(&self, committee: &Committee) -> Result<(), CertificateError> {
         match self {
             Certificate::Genesis(_) => Ok(()),
@@ -137,6 +144,13 @@ impl Certificate {
     }
     pub fn genesis(seed: Seed) -> Self {
         Certificate::Genesis(seed)
+    }
+    pub fn author(&self) -> Option<PublicKey> {
+        match self {
+            Certificate::Genesis(_) => None,
+            Certificate::Derived(derived) => Some(derived.author),
+            Certificate::Dummy => None,
+        }
     }
 }
 

@@ -84,7 +84,7 @@ impl Connect for PrimaryConnector {
         match payload {
             RequestPayload::Digest(digest, node) => {
                 self.digest_tx
-                    .send(ReceivedObject::new((digest.clone().into(), *node), sender))?;
+                    .send(ReceivedObject::new(((*digest).into(), *node), sender))?;
             }
             RequestPayload::Header(header) => {
                 self.headers_tx
@@ -116,8 +116,8 @@ impl ManagePeers for PrimaryPeers {
     fn add_peer(&mut self, id: Peer, authority_pubkey: String) -> bool {
         match id {
             Peer::Primary(id, addr) => {
-                if !self.primaries.contains_key(&id) {
-                    self.primaries.insert(id, addr);
+                if let std::collections::hash_map::Entry::Vacant(e) = self.primaries.entry(id) {
+                    e.insert(addr);
                     tracing::info!("primary {id} added to peers");
                 }
                 true
@@ -190,7 +190,6 @@ impl HandleEvent<PrimaryPeers, PrimaryConnector> for PrimaryNetwork {
     ) -> anyhow::Result<()> {
         match request {
             NetworkRequest::BroadcastCounterparts(req) => {
-                //TODO: obsolete since there is now to types of broadcast
                 let peers = peers.read().await.get_broadcast_peers_counterparts();
                 swarm_actions::broadcast(swarm, peers, req)?;
             }

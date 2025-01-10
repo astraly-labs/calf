@@ -66,7 +66,7 @@ impl<T: Clone> CircularBuffer<T> {
     }
 
     pub fn drain(&mut self) -> Vec<T> {
-        let res = self.buffer.drain(..).into_iter().flatten().collect();
+        let res = self.buffer.drain(..).flatten().collect();
         self.buffer = vec![None; self.size];
         res
     }
