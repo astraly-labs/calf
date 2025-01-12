@@ -324,19 +324,18 @@ async fn test_fetcher_error_response() {
 #[tokio::test]
 async fn test_fetcher_multiple_peers() {
     let (requests_tx, mut requests_rx) = mpsc::channel(100);
-    let (responses_tx, mut responses_rx) = broadcast::channel(100);
+    let (responses_tx, responses_rx) = broadcast::channel(100);
     let (commands_tx, commands_rx) = mpsc::channel(100);
     
     let test_data = TestFetchable {
         data: vec![1, 2, 3],
     };
     
+    let peer1 = PeerId::random();
+    let peer2 = PeerId::random();
+    let peer3 = PeerId::random();
     let provider = Box::new(TestDataProvider {
-        peers: vec![
-            PeerId::random(),
-            PeerId::random(),
-            PeerId::random(),
-        ],
+        peers: vec![peer1, peer2, peer3],
     });
     
     let requested_object = RequestedObject {
@@ -359,32 +358,70 @@ async fn test_fetcher_multiple_peers() {
     // Drop commands_tx to signal no more commands
     drop(commands_tx);
     
-    // verify first request is sent
+    // Verify first request is sent to peer1
     let request = requests_rx.recv().await.unwrap();
-    let peer_id = match request {
+    match request {
         NetworkRequest::SendTo(pid, RequestPayload::SyncRequest(sync_req)) => {
-            // Get first peer from provider
-            let mut peer_ids = provider.sources().await;
-            let expected_peer = peer_ids.next().unwrap();
-            assert_eq!(pid, expected_peer);
+            assert_eq!(pid, peer1, "First request should be sent to peer1");
             let expected_digest = blake3::hash(&test_data.bytes()).into();
             assert_eq!(sync_req, SyncRequest::Batches(vec![expected_digest]));
-            pid
+            
+            // Send failure response from peer1
+            let request_id = test_data.into_sync_request().digest();
+            let response = SyncResponse::Failure(request_id);
+            let received = ReceivedObject {
+                object: response,
+                sender: peer1,
+            };
+            responses_tx.send(received).unwrap();
         }
         _ => panic!("Expected SendTo request with SyncRequest payload"),
     };
     
-    // Send partial response
-    let tx = Transaction::random(32);
-    let batch = Batch::new(vec![tx]);
-    let sync_data = SyncData::Batches(vec![batch]);
-    let request_id = test_data.into_sync_request().digest();
-    let response = SyncResponse::Success(request_id, sync_data);
-    let received = ReceivedObject {
-        object: response,
-        sender: peer_id,
+    // Verify second request is sent to peer2
+    let request = requests_rx.recv().await.unwrap();
+    match request {
+        NetworkRequest::SendTo(pid, RequestPayload::SyncRequest(sync_req)) => {
+            assert_eq!(pid, peer2, "Second request should be sent to peer2");
+            let expected_digest = blake3::hash(&test_data.bytes()).into();
+            assert_eq!(sync_req, SyncRequest::Batches(vec![expected_digest]));
+            
+            // Send failure response from peer2
+            let request_id = test_data.into_sync_request().digest();
+            let response = SyncResponse::Failure(request_id);
+            let received = ReceivedObject {
+                object: response,
+                sender: peer2,
+            };
+            responses_tx.send(received).unwrap();
+        }
+        _ => panic!("Expected SendTo request with SyncRequest payload"),
     };
-    responses_tx.send(received).unwrap();
     
+    // Verify third request is sent to peer3
+    let request = requests_rx.recv().await.unwrap();
+    match request {
+        NetworkRequest::SendTo(pid, RequestPayload::SyncRequest(sync_req)) => {
+            assert_eq!(pid, peer3, "Third request should be sent to peer3");
+            let expected_digest = blake3::hash(&test_data.bytes()).into();
+            assert_eq!(sync_req, SyncRequest::Batches(vec![expected_digest]));
+            
+            // Send successful response from peer3
+            let tx = Transaction::random(32);
+            let batch = Batch::new(vec![tx]);
+            let sync_data = SyncData::Batches(vec![batch]);
+            let request_id = test_data.into_sync_request().digest();
+            let response = SyncResponse::Success(request_id, sync_data);
+            let received = ReceivedObject {
+                object: response,
+                sender: peer3,
+            };
+            responses_tx.send(received).unwrap();
+        }
+        _ => panic!("Expected SendTo request with SyncRequest payload"),
+    };
+    
+    // Verify no more requests are sent after successful response
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    assert!(requests_rx.try_recv().is_err(), "No more requests should be sent after successful response");
 } 
