@@ -70,4 +70,8 @@ impl<T: Clone> CircularBuffer<T> {
         self.buffer = vec![None; self.size];
         res
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.buffer.iter().filter_map(|x| x.as_ref())
+    }
 }

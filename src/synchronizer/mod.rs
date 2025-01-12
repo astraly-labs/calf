@@ -210,3 +210,9 @@ pub enum FetchError {
     #[error("id error")]
     IdError,
 }
+
+#[cfg(test)]
+mod tests {
+    mod synchronizer_tests;
+    mod fetcher_tests;
+}

@@ -57,25 +57,29 @@ where
     }
     /// Check if a vertex has all its parents in the DAG, returning an error containing the missing parents if not.
     pub fn check_parents(&self, vertex: &Vertex<T>) -> Result<(), DagError> {
-        if vertex.layer == 0 {
+        // Base layer (0) and layer 1 vertices don't require parents
+        if vertex.layer <= self.base_layer || vertex.layer == 1 {
+            if vertex.parents.is_empty() {
+                return Ok(());
+            }
+        }
+
+        // For other layers, check if all parents exist in any previous layer
+        let found_parents: HashSet<_> = (self.base_layer..vertex.layer)
+            .rev()
+            .flat_map(|layer| self.vertices_by_layers.get(&layer).into_iter().flatten())
+            .collect();
+
+        if vertex.parents.iter().all(|p| found_parents.contains(p)) {
             Ok(())
         } else {
-            self.vertices_by_layers
-                .get(&(vertex.layer - 1))
-                .map(|potential_parents| {
-                    if vertex.parents.is_subset(potential_parents) {
-                        Ok(())
-                    } else {
-                        Err(DagError::MissingParents(
-                            vertex
-                                .parents
-                                .difference(potential_parents)
-                                .cloned()
-                                .collect(),
-                        ))
-                    }
-                })
-                .unwrap_or(Err(DagError::MissingParents(vertex.parents.clone())))
+            let missing: HashSet<_> = vertex
+                .parents
+                .iter()
+                .filter(|p| !found_parents.contains(*p))
+                .cloned()
+                .collect();
+            Err(DagError::MissingParents(missing))
         }
     }
     /// Insert a vertex in the DAG, returning an error if its parents are missing but inserting it anyway.
@@ -115,6 +119,10 @@ where
             .iter()
             .map(|vertex| vertex.data.clone())
             .collect()
+    }
+    /// Get a vertex by its ID
+    pub fn get(&self, id: &str) -> Option<&Vertex<T>> {
+        self.vertices.get(id)
     }
 }
 

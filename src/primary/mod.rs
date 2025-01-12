@@ -259,3 +259,8 @@ impl BaseAgent for Primary {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    mod header_tests;
+}

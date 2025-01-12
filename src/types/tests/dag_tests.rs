@@ -3,17 +3,12 @@ use std::collections::HashSet;
 use crate::types::{
     dag::{Dag, DagError, Vertex},
     traits::{AsBytes, Hash},
+    Digest,
 };
 
 #[derive(Clone, Debug)]
 struct TestData {
     value: u64,
-}
-
-impl Hash for TestData {
-    fn hash(&self) -> String {
-        format!("test_data_{}", self.value)
-    }
 }
 
 impl AsBytes for TestData {
@@ -24,7 +19,7 @@ impl AsBytes for TestData {
 
 #[tokio::test]
 async fn test_dag_creation_and_basic_ops() {
-    let base_layer = 0;
+    let base_layer: u64 = 0;
     let mut dag: Dag<TestData> = Dag::new(base_layer);
     
     // Test initial state
@@ -42,9 +37,9 @@ async fn test_dag_creation_and_basic_ops() {
     assert_eq!(dag.layer_size(1), 1);
     
     // Test vertex retrieval
-    let retrieved = dag.get_vertex(&vertex_id).unwrap();
+    let retrieved = dag.get(&vertex_id).unwrap();
     assert_eq!(retrieved.data().value, 1);
-    assert_eq!(retrieved.layer(), 1);
+    assert_eq!(*retrieved.layer(), 1);
 }
 
 #[tokio::test]
