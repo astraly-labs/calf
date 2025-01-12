@@ -143,7 +143,7 @@ mod test {
         identity::ed25519::{self, Keypair},
         PeerId,
     };
-    use rstest::rstest;
+    use tempfile::tempdir;
     use tokio::{
         sync::{broadcast, mpsc, watch},
         time::timeout,
@@ -153,8 +153,9 @@ mod test {
     use crate::{
         db::{Column, Db},
         primary::test_utils::fixtures::{
-            load_committee, random_digests, CHANNEL_CAPACITY, COMMITTEE_PATH, GENESIS_SEED,
+            random_digests, CHANNEL_CAPACITY,
         },
+        settings::parser::Committee,
         types::{
             block_header::BlockHeader,
             certificate::{Certificate, CertificateId},
@@ -178,18 +179,28 @@ mod test {
         mpsc::Receiver<NetworkRequest>,
         Arc<Db>,
         CancellationToken,
+        tempfile::TempDir,
     );
 
-    fn launch_header_elector(committee_path: String, db_path: &str) -> HeaderElectorFixutre {
+    async fn launch_header_elector() -> HeaderElectorFixutre {
         let (headers_tx, headers_rx) = broadcast::channel(CHANNEL_CAPACITY);
         let (round_tx, round_rx) = watch::channel((0, HashSet::new()));
         let (incomplete_headers_tx, incomplete_headers_rx) = mpsc::channel(CHANNEL_CAPACITY);
         let (network_tx, network_rx) = mpsc::channel(CHANNEL_CAPACITY);
-        let db = Arc::new(Db::new(db_path.into()).unwrap());
+        
+        // Create a temporary directory for the test database
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        
+        let db = Arc::new(Db::new(db_path).unwrap());
+        
         let validator_keypair = ed25519::Keypair::generate();
         let token = CancellationToken::new();
         let db_clone = db.clone();
         let token_clone = token.clone();
+        
+        let committee = Committee::new_test();
+        
         tokio::spawn(async move {
             HeaderElector::spawn(
                 token_clone,
@@ -198,12 +209,13 @@ mod test {
                 round_rx,
                 validator_keypair,
                 db_clone,
-                load_committee(&committee_path),
+                committee,
                 incomplete_headers_tx,
             )
             .await
             .unwrap()
         });
+        
         (
             headers_tx,
             round_tx,
@@ -211,6 +223,7 @@ mod test {
             network_rx,
             db,
             token,
+            temp_dir,
         )
     }
 
@@ -259,21 +272,15 @@ mod test {
                 let vote_status = vote.verify(&header_hash);
                 assert!(vote_status.is_ok());
             }
-            _ => {
-                assert!(false);
-            }
+            _ => assert!(false),
         }
     }
 
     #[tokio::test]
-    #[rstest]
     async fn test_first_round_valid_header_digests_stored() {
-        let (headers_tx, round_state_tx, _incomplete_headers_rx, network_rx, db, _) =
-            launch_header_elector(
-                COMMITTEE_PATH.into(),
-                "/tmp/test_first_round_valid_header_digests_stored_db",
-            );
-        let genesis = Certificate::genesis(GENESIS_SEED);
+        let (headers_tx, round_state_tx, _incomplete_headers_rx, network_rx, db, _, _temp_dir) =
+            launch_header_elector().await;
+        let genesis = Certificate::genesis([0; 32]);
         let header = random_header(&[genesis.id()], 1);
         set_header_storage_in_db(&header, &db);
         set_certificates_in_db(&[genesis.clone()], &db);
