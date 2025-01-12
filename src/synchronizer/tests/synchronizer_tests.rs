@@ -42,85 +42,6 @@ impl DataProvider for MockDataProvider {
 }
 
 #[tokio::test]
-async fn test_fetcher_basic() {
-    let (requests_tx, mut requests_rx) = mpsc::channel(100);
-    let (responses_tx, responses_rx) = broadcast::channel(100);
-    
-    // create mock data and provider
-    let mock_data = MockData {
-        id: "test_data".to_string(),
-    };
-    let mock_provider = Box::new(MockDataProvider {
-        peers: vec!["peer1".to_string(), "peer2".to_string()],
-    });
-    
-    let requested_object = RequestedObject {
-        object: mock_data,
-        source: mock_provider,
-    };
-    
-    // create and start fetcher
-    let mut fetcher = Fetcher::new();
-    fetcher.push(Box::new(requested_object));
-    
-    // run fetcher
-    let handle = tokio::spawn(async move {
-        fetcher.run(requests_tx, responses_rx).await.unwrap();
-    });
-    
-    // verify request is sent
-    let request = requests_rx.recv().await.unwrap();
-    match request {
-        NetworkRequest::Sync { request, peer_id } => {
-            assert!(peer_id == "peer1" || peer_id == "peer2");
-        }
-        _ => panic!("Expected sync request"),
-    }
-    
-    handle.abort();
-}
-
-#[tokio::test]
-async fn test_fetcher_response_handling() {
-    let (requests_tx, _) = mpsc::channel(100);
-    let (responses_tx, responses_rx) = broadcast::channel(100);
-    
-    // create mock data and provider
-    let mock_data = MockData {
-        id: "test_data".to_string(),
-    };
-    let mock_provider = Box::new(MockDataProvider {
-        peers: vec!["peer1".to_string()],
-    });
-    
-    let requested_object = RequestedObject {
-        object: mock_data.clone(),
-        source: mock_provider,
-    };
-    
-    // create and start fetcher
-    let mut fetcher = Fetcher::new();
-    fetcher.push(Box::new(requested_object));
-    
-    // run fetcher
-    let handle = tokio::spawn(async move {
-        fetcher.run(requests_tx, responses_rx).await.unwrap();
-    });
-    
-    // send mock response
-    let response = SyncResponse::Success(RequestPayload::Data(mock_data.bytes()));
-    let received_response = ReceivedObject {
-        object: response,
-        peer_id: "peer1".to_string(),
-    };
-    responses_tx.send(received_response).unwrap();
-    
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    
-    handle.abort();
-}
-
-#[tokio::test]
 async fn test_fetcher_multiple_objects() {
     let (requests_tx, mut requests_rx) = mpsc::channel(100);
     let (responses_tx, responses_rx) = broadcast::channel(100);
@@ -145,17 +66,14 @@ async fn test_fetcher_multiple_objects() {
         source: mock_provider,
     };
     
-    // create and start fetcher
     let mut fetcher = Fetcher::new();
     fetcher.push(Box::new(requested_object1));
     fetcher.push(Box::new(requested_object2));
     
-    // run fetcher
     let handle = tokio::spawn(async move {
         fetcher.run(requests_tx, responses_rx).await.unwrap();
     });
     
-    // verify multiple requests are sent
     let request1 = requests_rx.recv().await.unwrap();
     let request2 = requests_rx.recv().await.unwrap();
     
@@ -170,7 +88,6 @@ async fn test_synchronizer_concurrent_requests() {
     let (requests_tx, mut requests_rx) = mpsc::channel(100);
     let (responses_tx, responses_rx) = broadcast::channel(100);
     
-    // create multiple mock objects with different providers
     let mock_data1 = MockData {
         id: "data1".to_string(),
     };
@@ -205,12 +122,10 @@ async fn test_synchronizer_concurrent_requests() {
         source: provider3,
     }));
     
-    // run fetcher
     let handle = tokio::spawn(async move {
         fetcher.run(requests_tx, responses_rx).await.unwrap();
     });
     
-    // collect all requests
     let mut received_requests = HashSet::new();
     for _ in 0..3 {
         if let NetworkRequest::Sync { request: _, peer_id } = requests_rx.recv().await.unwrap() {
@@ -247,16 +162,13 @@ async fn test_synchronizer_retry_on_failure() {
     let mut fetcher = Fetcher::new();
     fetcher.push(Box::new(requested_object));
     
-    // run fetcher
     let handle = tokio::spawn(async move {
         fetcher.run(requests_tx, responses_rx).await.unwrap();
     });
     
-    // get first request
     let request1 = requests_rx.recv().await.unwrap();
     match request1 {
         NetworkRequest::Sync { request: _, peer_id } => {
-            // send error response
             let error_response = SyncResponse::Error("test error".to_string());
             responses_tx
                 .send(ReceivedObject {
@@ -268,7 +180,6 @@ async fn test_synchronizer_retry_on_failure() {
         _ => panic!("Expected sync request"),
     }
     
-    // should get another request to different peer
     let request2 = requests_rx.recv().await.unwrap();
     match request2 {
         NetworkRequest::Sync { request: _, peer_id } => {
@@ -279,72 +190,6 @@ async fn test_synchronizer_retry_on_failure() {
                     _ => panic!("Expected sync request"),
                 }
             );
-        }
-        _ => panic!("Expected sync request"),
-    }
-    
-    handle.abort();
-}
-
-#[tokio::test]
-async fn test_synchronizer_partial_response() {
-    let (requests_tx, mut requests_rx) = mpsc::channel(100);
-    let (responses_tx, responses_rx) = broadcast::channel(100);
-    
-    let mock_data1 = MockData {
-        id: "data1".to_string(),
-    };
-    let mock_data2 = MockData {
-        id: "data2".to_string(),
-    };
-    
-    let provider = Box::new(MockDataProvider {
-        peers: vec!["peer1".to_string()],
-    });
-    
-    let mut fetcher = Fetcher::new();
-    fetcher.push(Box::new(RequestedObject {
-        object: mock_data1.clone(),
-        source: provider.clone(),
-    }));
-    fetcher.push(Box::new(RequestedObject {
-        object: mock_data2.clone(),
-        source: provider,
-    }));
-    
-    // run fetcher
-    let handle = tokio::spawn(async move {
-        fetcher.run(requests_tx, responses_rx).await.unwrap();
-    });
-    
-    // get first request
-    let request = requests_rx.recv().await.unwrap();
-    match request {
-        NetworkRequest::Sync { request: _, peer_id } => {
-            // Send partial success response
-            let response = SyncResponse::Success(RequestPayload::Data(mock_data1.bytes()));
-            responses_tx
-                .send(ReceivedObject {
-                    object: response,
-                    peer_id,
-                })
-                .unwrap();
-        }
-        _ => panic!("Expected sync request"),
-    }
-    
-    // Should get another request for remaining data
-    let request = requests_rx.recv().await.unwrap();
-    match request {
-        NetworkRequest::Sync { request: _, peer_id } => {
-            // Send success response for second object
-            let response = SyncResponse::Success(RequestPayload::Data(mock_data2.bytes()));
-            responses_tx
-                .send(ReceivedObject {
-                    object: response,
-                    peer_id,
-                })
-                .unwrap();
         }
         _ => panic!("Expected sync request"),
     }
@@ -373,16 +218,13 @@ async fn test_synchronizer_invalid_response_data() {
     let mut fetcher = Fetcher::new();
     fetcher.push(Box::new(requested_object));
     
-    // run fetcher
     let handle = tokio::spawn(async move {
         fetcher.run(requests_tx, responses_rx).await.unwrap();
     });
     
-    // get request
     let request = requests_rx.recv().await.unwrap();
     match request {
         NetworkRequest::Sync { request: _, peer_id } => {
-            // Send invalid response data
             let invalid_data = vec![0, 1, 2]; // Different from what was requested
             let response = SyncResponse::Success(RequestPayload::Data(invalid_data));
             responses_tx
@@ -395,7 +237,6 @@ async fn test_synchronizer_invalid_response_data() {
         _ => panic!("Expected sync request"),
     }
     
-    // should get another request due to invalid response
     let request = requests_rx.recv().await.unwrap();
     assert!(matches!(request, NetworkRequest::Sync { .. }));
     

@@ -35,10 +35,16 @@ async fn test_dag_creation_and_basic_ops() {
     let data = TestData { value: 1 };
     let parents = HashSet::new();
     let vertex = Vertex::from_data(data, 1, parents);
+    let vertex_id = vertex.id().clone();
     
-    dag.insert(vertex.clone()).unwrap();
+    dag.insert(vertex).unwrap();
     assert_eq!(dag.height(), 1);
     assert_eq!(dag.layer_size(1), 1);
+    
+    // Test vertex retrieval
+    let retrieved = dag.get_vertex(&vertex_id).unwrap();
+    assert_eq!(retrieved.data().value, 1);
+    assert_eq!(retrieved.layer(), 1);
 }
 
 #[tokio::test]
@@ -122,21 +128,6 @@ async fn test_dag_multiple_parents() {
     
     dag.insert_checked(child_vertex).unwrap();
     assert_eq!(dag.layer_size(2), 1);
-}
-
-#[tokio::test]
-async fn test_dag_vertex_retrieval() {
-    let mut dag: Dag<TestData> = Dag::new(0);
-    
-    let data = TestData { value: 1 };
-    let vertex = Vertex::from_data(data, 1, HashSet::new());
-    let vertex_id = vertex.id().clone();
-    
-    dag.insert(vertex).unwrap();
-    
-    let retrieved = dag.get_vertex(&vertex_id).unwrap();
-    assert_eq!(retrieved.data().value, 1);
-    assert_eq!(retrieved.layer(), 1);
 }
 
 #[tokio::test]

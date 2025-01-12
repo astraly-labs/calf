@@ -77,6 +77,7 @@ async fn test_wait_for_quorum() {
 
 #[tokio::test]
 async fn test_header_builder_sync_status() {
+    // Test initialization
     let (network_tx, _) = mpsc::channel(100);
     let (certificate_tx, _) = mpsc::channel(100);
     let keypair = Keypair::generate();
@@ -87,6 +88,7 @@ async fn test_header_builder_sync_status() {
     let committee = Committee::new_test();
     let (sync_status_tx, sync_status_rx) = watch::channel(SyncStatus::Incomplete);
 
+    // Verify initialization by creating header builder
     let header_builder = HeaderBuilder {
         network_tx,
         certificate_tx,
@@ -99,7 +101,7 @@ async fn test_header_builder_sync_status() {
         sync_status_rx,
     };
 
-    // run header builder
+    // Run header builder in background
     let handle = tokio::spawn(async move {
         header_builder.run().await.unwrap();
     });
@@ -107,7 +109,7 @@ async fn test_header_builder_sync_status() {
     // Test that header builder waits for sync to complete
     sleep(Duration::from_millis(100)).await;
     sync_status_tx.send(SyncStatus::Complete).unwrap();
-
+    
     handle.abort();
 }
 
