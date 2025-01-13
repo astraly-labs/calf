@@ -25,7 +25,7 @@ use crate::{
     utils::CircularBuffer,
 };
 
-// First, let's create test helper functions
+// test helper functions
 impl BlockHeader {
     #[cfg(test)]
     pub fn new_test() -> Self {
