@@ -1,29 +1,27 @@
-use std::{collections::HashSet, sync::Arc, time::Duration};
-
-use libp2p::{identity::ed25519::Keypair, PeerId};
-use tokio::{
-    sync::{broadcast, mpsc, watch},
-    time::sleep,
-};
-use tokio_util::sync::CancellationToken;
-
 use crate::{
     db::Db,
     primary::header_builder::{wait_for_quorum, HeaderBuilder},
     settings::parser::Committee,
     types::{
         batch::BatchId,
-        block_header::BlockHeader,
+        block_header::{BlockHeader, HeaderId},
         certificate::Certificate,
-        network::{NetworkRequest, ReceivedObject},
+        network::{NetworkRequest, ReceivedObject, RequestPayload},
         signing::Signable,
         sync::SyncStatus,
-        traits::AsBytes,
+        traits::{AsBytes, Hash},
         vote::Vote,
         Round,
     },
     utils::CircularBuffer,
 };
+use std::{collections::HashSet, sync::Arc, time::Duration};
+use libp2p::{identity::ed25519::Keypair, PeerId};
+use tokio::{
+    sync::{broadcast, mpsc, watch},
+    time::sleep,
+};
+use tokio_util::sync::CancellationToken;
 
 // test helper functions
 impl BlockHeader {
@@ -214,7 +212,7 @@ async fn test_header_builder_with_empty_digests() {
 
 #[tokio::test]
 async fn test_header_builder_multiple_rounds() {
-    let (network_tx, _) = mpsc::channel(100);
+    let (network_tx, mut network_rx) = mpsc::channel(100);
     let (certificate_tx, mut cert_rx) = mpsc::channel(100);
     let keypair = Keypair::generate();
     let db = Arc::new(Db::new_in_memory().await.unwrap());
@@ -228,24 +226,79 @@ async fn test_header_builder_multiple_rounds() {
         CancellationToken::new(),
         network_tx,
         certificate_tx,
-        keypair,
+        keypair.clone(),
         db,
         header_trigger_rx,
         votes_rx,
         digests_buffer,
-        committee,
+        committee.clone(),
         sync_status_rx,
     );
 
-    // trigger multiple rounds
+    // trigger multiple rounds and verify header building
     for round in 1..=3 {
+        // Create certificates for this round
         let mut certs = HashSet::new();
-        certs.insert(Certificate::genesis([round as u8; 32]));
+        let cert = Certificate::genesis([round as u8; 32]);
+        certs.insert(cert.clone());
+        
+        // Trigger header building
         header_trigger_tx.send((round, certs)).unwrap();
-        sleep(Duration::from_millis(100)).await;
+        
+        // Wait for header broadcast
+        let mut header_received = false;
+        while !header_received {
+            let network_request = tokio::time::timeout(
+                Duration::from_secs(5),
+                network_rx.recv()
+            ).await.expect("Timed out waiting for network request")
+             .expect("Network channel closed unexpectedly");
+
+            match network_request {
+                NetworkRequest::BroadcastCounterparts(RequestPayload::Header(header)) => {
+                    // Verify header round
+                    assert_eq!(header.round, round);
+                    
+                    // Create and send enough votes to reach quorum (3 votes needed)
+                    for _ in 0..3 {
+                        let voting_keypair = Keypair::generate(); // Different keypair for each vote
+                        let vote = Vote::from_header(header.clone(), &voting_keypair).unwrap();
+                        votes_tx.send(ReceivedObject {
+                            object: vote,
+                            sender: PeerId::random(),
+                        }).unwrap();
+                    }
+                    
+                    // Wait for certificate with timeout
+                    let certificate = tokio::time::timeout(
+                        Duration::from_secs(5),
+                        cert_rx.recv()
+                    ).await.expect("Timed out waiting for certificate")
+                     .expect("Certificate channel closed unexpectedly");
+
+                    // Verify certificate
+                    assert_eq!(certificate.round(), round);
+                    assert!(certificate.header().is_some(), "Certificate should have a header");
+                    let header_id: HeaderId = header.id().into();
+                    assert_eq!(certificate.header().unwrap(), header_id);
+                    
+                    header_received = true;
+                }
+                NetworkRequest::BroadcastCounterparts(RequestPayload::Certificate(_)) => {
+                    // Ignore certificate broadcasts, we verify them through the cert_rx channel
+                    continue;
+                }
+                _ => panic!("Unexpected network request: {:?}", network_request),
+            }
+        }
+        
+        // Give some time for cleanup between rounds
+        sleep(Duration::from_millis(50)).await;
     }
 
+    // Clean shutdown
     handle.abort();
+    sleep(Duration::from_millis(50)).await;
 }
 
 #[tokio::test]

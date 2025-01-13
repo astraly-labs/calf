@@ -22,6 +22,7 @@ use crate::{
 use async_trait::async_trait;
 use libp2p::PeerId;
 
+// Mock connector that allows testing network-related logic without real network dependencies
 #[derive(Clone)]
 struct MockConnector;
 
@@ -39,7 +40,7 @@ impl Connect for Arc<MockConnector> {
     }
 }
 
-// Create a mock connector that sleeps to simulate network delay
+// Mock connector that sleeps to simulate network delay
 #[derive(Clone)]
 struct SlowMockConnector;
 
