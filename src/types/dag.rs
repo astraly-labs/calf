@@ -57,14 +57,14 @@ where
     }
     /// Check if a vertex has all its parents in the DAG, returning an error containing the missing parents if not.
     pub fn check_parents(&self, vertex: &Vertex<T>) -> Result<(), DagError> {
-        // Base layer (0) and layer 1 vertices don't require parents
-        if vertex.layer <= self.base_layer || vertex.layer == 1 {
+        // Only base layer vertices can be parentless
+        if vertex.layer == self.base_layer {
             if vertex.parents.is_empty() {
                 return Ok(());
             }
         }
 
-        // For other layers, check if all parents exist in any previous layer
+        // All other vertices must have valid parents in previous layers
         let found_parents: HashSet<_> = (self.base_layer..vertex.layer)
             .rev()
             .flat_map(|layer| self.vertices_by_layers.get(&layer).into_iter().flatten())
