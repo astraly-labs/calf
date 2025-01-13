@@ -1,4 +1,7 @@
-use libp2p::PeerId;
+use libp2p::{
+    identity::{self, ed25519},
+    PeerId,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -37,8 +40,32 @@ impl Committee {
         }
         ((self.authorities.len() / 3) * 2 + 1) as u32
     }
+
     pub fn has_authority_id(&self, peer_id: &PeerId) -> bool {
         self.authorities.iter().any(|a| &a.authority_id == peer_id)
+    }
+
+    #[cfg(test)]
+    pub fn new_test() -> Self {
+        let mut authorities = Vec::new();
+
+        // Add three test authorities
+        for i in 0..3 {
+            let keypair = ed25519::Keypair::generate();
+            let public_key = identity::PublicKey::from(keypair.public());
+            let peer_id = PeerId::from_public_key(&public_key);
+
+            let authority = AuthorityInfo {
+                authority_id: peer_id,
+                authority_pubkey: hex::encode(keypair.public().to_bytes()),
+                primary_address: ("127.0.0.1".to_string(), format!("800{}", i)),
+                stake: 1,
+                workers_addresses: vec![("127.0.0.1".to_string(), format!("900{}", i))],
+            };
+            authorities.push(authority);
+        }
+
+        Committee { authorities }
     }
 }
 

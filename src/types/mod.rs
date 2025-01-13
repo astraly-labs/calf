@@ -43,3 +43,8 @@ impl AsBytes for Acknowledgment {
         self.0.to_vec()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    mod dag_tests;
+}
