@@ -2,12 +2,14 @@ use crate::{
     network::Connect,
     synchronizer::{
         fetcher::Fetcher,
-        traits::{DataProvider, IntoSyncRequest, Fetch},
+        traits::{DataProvider, Fetch, IntoSyncRequest},
         RequestedObject,
     },
     types::{
         batch::{Batch, BatchId},
-        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncData, SyncRequest, SyncResponse},
+        network::{
+            NetworkRequest, ReceivedObject, RequestPayload, SyncData, SyncRequest, SyncResponse,
+        },
         traits::{AsBytes, Hash, Random},
         transaction::Transaction,
         Digest,
@@ -15,10 +17,10 @@ use crate::{
 };
 use async_trait::async_trait;
 use libp2p::PeerId;
+use rstest::*;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
-use rstest::*;
 
 struct MockConnector;
 
@@ -80,9 +82,15 @@ fn test_data() -> MockData {
 #[fixture]
 fn test_data_set() -> Vec<MockData> {
     vec![
-        MockData { data: vec![1, 2, 3] },
-        MockData { data: vec![4, 5, 6] },
-        MockData { data: vec![7, 8, 9] },
+        MockData {
+            data: vec![1, 2, 3],
+        },
+        MockData {
+            data: vec![4, 5, 6],
+        },
+        MockData {
+            data: vec![7, 8, 9],
+        },
     ]
 }
 
@@ -98,7 +106,14 @@ fn channels() -> (
     let (network_tx, network_rx) = mpsc::channel(100);
     let (sync_tx, sync_rx) = broadcast::channel(100);
     let (commands_tx, commands_rx) = mpsc::channel(100);
-    (network_tx, network_rx, sync_tx, sync_rx, commands_tx, commands_rx)
+    (
+        network_tx,
+        network_rx,
+        sync_tx,
+        sync_rx,
+        commands_tx,
+        commands_rx,
+    )
 }
 
 #[fixture]
@@ -166,16 +181,16 @@ async fn test_synchronizer_invalid_response_data(
 ) {
     let (network_tx, mut network_rx, sync_tx, sync_rx, commands_tx, commands_rx) = channels;
     let (peer_id, peer_id2, _) = peers;
-    
+
     let provider = Box::new(MockDataProvider {
         peers: vec![peer_id, peer_id2],
     });
-    
+
     let requested_object = TestRequestedObject {
         object: test_data.clone(),
         source: provider,
     };
-    
+
     let token = CancellationToken::new();
     let handle = Fetcher::spawn(
         token.clone(),
@@ -185,29 +200,34 @@ async fn test_synchronizer_invalid_response_data(
         Arc::new(MockConnector),
         10,
     );
-    
+
     // Send the request through the commands channel
-    commands_tx.send(Box::new(requested_object) as BoxedFetch).await.unwrap();
-    
+    commands_tx
+        .send(Box::new(requested_object) as BoxedFetch)
+        .await
+        .unwrap();
+
     // Verify initial request is sent with timeout
-    let initial_request = tokio::time::timeout(
-        tokio::time::Duration::from_secs(5),
-        network_rx.recv()
-    ).await.expect("Timed out waiting for initial request")
-    .expect("Channel closed unexpectedly");
+    let initial_request =
+        tokio::time::timeout(tokio::time::Duration::from_secs(5), network_rx.recv())
+            .await
+            .expect("Timed out waiting for initial request")
+            .expect("Channel closed unexpectedly");
 
     match initial_request {
         NetworkRequest::SendTo(pid, RequestPayload::SyncRequest(sync_req)) => {
             assert_eq!(pid, peer_id);
             let expected_digest = blake3::hash(&test_data.bytes()).into();
             assert_eq!(sync_req, SyncRequest::Batches(vec![expected_digest]));
-            
+
             // Send invalid response
             let response = create_invalid_response();
-            sync_tx.send(TestReceivedObject {
-                object: response,
-                sender: pid,
-            }).unwrap();
+            sync_tx
+                .send(TestReceivedObject {
+                    object: response,
+                    sender: pid,
+                })
+                .unwrap();
         }
         _ => panic!("Expected initial SendTo request with SyncRequest payload"),
     }
@@ -216,31 +236,36 @@ async fn test_synchronizer_invalid_response_data(
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Verify retry request is sent with timeout
-    let retry_request = tokio::time::timeout(
-        tokio::time::Duration::from_secs(5),
-        network_rx.recv()
-    ).await.expect("Timed out waiting for retry request")
-    .expect("Channel closed unexpectedly");
+    let retry_request =
+        tokio::time::timeout(tokio::time::Duration::from_secs(5), network_rx.recv())
+            .await
+            .expect("Timed out waiting for retry request")
+            .expect("Channel closed unexpectedly");
 
     match retry_request {
         NetworkRequest::SendTo(pid, RequestPayload::SyncRequest(_)) => {
             assert_eq!(pid, peer_id2, "Retry should use the second peer");
-            
+
             // Send valid response from second peer to complete the test
             let request_id = test_data.into_sync_request().digest();
             let response = create_valid_response(request_id);
-            sync_tx.send(TestReceivedObject {
-                object: response,
-                sender: peer_id2,
-            }).unwrap();
+            sync_tx
+                .send(TestReceivedObject {
+                    object: response,
+                    sender: peer_id2,
+                })
+                .unwrap();
         }
         _ => panic!("Expected retry request with SyncRequest payload"),
     }
 
     // Verify no more requests are sent
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    assert!(network_rx.try_recv().is_err(), "No more requests should be sent after successful response");
-    
+    assert!(
+        network_rx.try_recv().is_err(),
+        "No more requests should be sent after successful response"
+    );
+
     // Clean shutdown
     drop(commands_tx);
     token.cancel();
@@ -263,16 +288,16 @@ async fn test_synchronizer_multiple_peers(
 ) {
     let (network_tx, mut network_rx, sync_tx, sync_rx, commands_tx, commands_rx) = channels;
     let (peer1, peer2, peer3) = peers;
-    
+
     let provider = Box::new(MockDataProvider {
         peers: vec![peer1, peer2, peer3],
     });
-    
+
     let requested_object = TestRequestedObject {
         object: test_data.clone(),
         source: provider.clone(),
     };
-    
+
     let token = CancellationToken::new();
     let handle = Fetcher::spawn(
         token.clone(),
@@ -282,10 +307,13 @@ async fn test_synchronizer_multiple_peers(
         Arc::new(MockConnector),
         10,
     );
-    
+
     // Send the request through the commands channel
-    commands_tx.send(Box::new(requested_object) as BoxedFetch).await.unwrap();
-    
+    commands_tx
+        .send(Box::new(requested_object) as BoxedFetch)
+        .await
+        .unwrap();
+
     // Verify first request is sent
     let request = network_rx.recv().await.unwrap();
     match request {
@@ -293,22 +321,27 @@ async fn test_synchronizer_multiple_peers(
             assert_eq!(pid, peer1);
             let expected_digest = blake3::hash(&test_data.bytes()).into();
             assert_eq!(sync_req, SyncRequest::Batches(vec![expected_digest]));
-            
+
             // Send successful response
             let request_id = test_data.into_sync_request().digest();
             let response = create_valid_response(request_id);
-            sync_tx.send(TestReceivedObject {
-                object: response,
-                sender: peer1,
-            }).unwrap();
+            sync_tx
+                .send(TestReceivedObject {
+                    object: response,
+                    sender: peer1,
+                })
+                .unwrap();
         }
         _ => panic!("Expected SendTo request with SyncRequest payload"),
     }
-    
+
     // Verify no more requests are sent
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    assert!(network_rx.try_recv().is_err(), "No more requests should be sent after successful response");
-    
+    assert!(
+        network_rx.try_recv().is_err(),
+        "No more requests should be sent after successful response"
+    );
+
     // Clean shutdown
     drop(commands_tx);
     token.cancel();
@@ -331,7 +364,7 @@ async fn test_synchronizer_concurrent_requests(
 ) {
     let (network_tx, mut network_rx, sync_tx, sync_rx, commands_tx, commands_rx) = channels;
     let (peer1, peer2, peer3) = peers;
-    
+
     let token = CancellationToken::new();
     let handle = Fetcher::spawn(
         token.clone(),
@@ -341,34 +374,40 @@ async fn test_synchronizer_concurrent_requests(
         Arc::new(MockConnector),
         10,
     );
-    
+
     // Send multiple requests concurrently and track their digests
     let mut expected_digests = HashSet::new();
     for test_data in test_data_set.iter() {
         let provider = Box::new(MockDataProvider {
             peers: vec![peer1, peer2, peer3],
         });
-        
+
         let requested_object = TestRequestedObject {
             object: test_data.clone(),
             source: provider,
         };
-        
+
         // Store the expected digest
         let sync_req = test_data.into_sync_request();
         if let SyncRequest::Batches(digests) = sync_req {
             expected_digests.insert(digests[0]);
         }
-        
-        commands_tx.send(Box::new(requested_object) as BoxedFetch).await.unwrap();
+
+        commands_tx
+            .send(Box::new(requested_object) as BoxedFetch)
+            .await
+            .unwrap();
     }
-    
+
     // Verify all requests are processed
     let mut received_digests = HashSet::new();
     for _ in 0..test_data_set.len() {
         let request = network_rx.recv().await.unwrap();
         match request {
-            NetworkRequest::SendTo(pid, RequestPayload::SyncRequest(SyncRequest::Batches(digests))) => {
+            NetworkRequest::SendTo(
+                pid,
+                RequestPayload::SyncRequest(SyncRequest::Batches(digests)),
+            ) => {
                 let digest = digests[0];
                 assert!(
                     expected_digests.contains(&digest),
@@ -377,18 +416,20 @@ async fn test_synchronizer_concurrent_requests(
                     expected_digests
                 );
                 received_digests.insert(digest);
-                
+
                 // Send successful response
                 let response = create_valid_response(digest);
-                sync_tx.send(TestReceivedObject {
-                    object: response,
-                    sender: pid,
-                }).unwrap();
+                sync_tx
+                    .send(TestReceivedObject {
+                        object: response,
+                        sender: pid,
+                    })
+                    .unwrap();
             }
             _ => panic!("Expected SendTo request with SyncRequest payload"),
         }
     }
-    
+
     // Verify we received requests for all expected digests
     assert_eq!(
         received_digests.len(),
@@ -403,11 +444,14 @@ async fn test_synchronizer_concurrent_requests(
         expected_digests.is_subset(&received_digests),
         "All expected digests should be requested"
     );
-    
+
     // Verify no more requests are sent
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    assert!(network_rx.try_recv().is_err(), "No more requests should be sent after all responses");
-    
+    assert!(
+        network_rx.try_recv().is_err(),
+        "No more requests should be sent after all responses"
+    );
+
     // Clean shutdown
     drop(commands_tx);
     token.cancel();
@@ -430,16 +474,16 @@ async fn test_synchronizer_retry_on_failure(
 ) {
     let (network_tx, mut network_rx, sync_tx, sync_rx, commands_tx, commands_rx) = channels;
     let (peer1, peer2, _) = peers;
-    
+
     let provider = Box::new(MockDataProvider {
         peers: vec![peer1, peer2],
     });
-    
+
     let requested_object = TestRequestedObject {
         object: test_data.clone(),
         source: provider,
     };
-    
+
     let token = CancellationToken::new();
     let handle = Fetcher::spawn(
         token.clone(),
@@ -449,51 +493,61 @@ async fn test_synchronizer_retry_on_failure(
         Arc::new(MockConnector),
         10,
     );
-    
+
     // Send the request through the commands channel
-    commands_tx.send(Box::new(requested_object) as BoxedFetch).await.unwrap();
-    
+    commands_tx
+        .send(Box::new(requested_object) as BoxedFetch)
+        .await
+        .unwrap();
+
     // Verify first request is sent
     let request = network_rx.recv().await.unwrap();
     match request {
         NetworkRequest::SendTo(pid, RequestPayload::SyncRequest(_)) => {
             assert_eq!(pid, peer1, "First request should be sent to peer1");
-            
+
             // Send failure response
             let request_id = test_data.into_sync_request().digest();
             let response = SyncResponse::Failure(request_id);
-            sync_tx.send(TestReceivedObject {
-                object: response,
-                sender: peer1,
-            }).unwrap();
+            sync_tx
+                .send(TestReceivedObject {
+                    object: response,
+                    sender: peer1,
+                })
+                .unwrap();
         }
         _ => panic!("Expected SendTo request with SyncRequest payload"),
     }
-    
+
     // Verify retry request is sent to second peer
     let retry_request = network_rx.recv().await.unwrap();
     match retry_request {
         NetworkRequest::SendTo(pid, RequestPayload::SyncRequest(_)) => {
             assert_eq!(pid, peer2, "Retry should be sent to peer2");
             assert_ne!(pid, peer1, "Retry should use a different peer");
-            
+
             // Send successful response from second peer
             let request_id = test_data.into_sync_request().digest();
             let response = create_valid_response(request_id);
-            sync_tx.send(TestReceivedObject {
-                object: response,
-                sender: peer2,
-            }).unwrap();
+            sync_tx
+                .send(TestReceivedObject {
+                    object: response,
+                    sender: peer2,
+                })
+                .unwrap();
         }
         _ => panic!("Expected retry request with SyncRequest payload"),
     }
-    
+
     // Verify no more requests are sent
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    assert!(network_rx.try_recv().is_err(), "No more requests should be sent after successful response");
-    
+    assert!(
+        network_rx.try_recv().is_err(),
+        "No more requests should be sent after successful response"
+    );
+
     // Clean shutdown
     drop(commands_tx);
     token.cancel();
     let _ = handle.await;
-} 
+}

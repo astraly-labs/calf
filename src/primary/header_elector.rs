@@ -152,9 +152,7 @@ mod test {
 
     use crate::{
         db::{Column, Db},
-        primary::test_utils::fixtures::{
-            random_digests, CHANNEL_CAPACITY,
-        },
+        primary::test_utils::fixtures::{random_digests, CHANNEL_CAPACITY},
         settings::parser::Committee,
         types::{
             block_header::BlockHeader,
@@ -187,20 +185,20 @@ mod test {
         let (round_tx, round_rx) = watch::channel((0, HashSet::new()));
         let (incomplete_headers_tx, incomplete_headers_rx) = mpsc::channel(CHANNEL_CAPACITY);
         let (network_tx, network_rx) = mpsc::channel(CHANNEL_CAPACITY);
-        
+
         // Create a temporary directory for the test database
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("test.db");
-        
+
         let db = Arc::new(Db::new(db_path).unwrap());
-        
+
         let validator_keypair = ed25519::Keypair::generate();
         let token = CancellationToken::new();
         let db_clone = db.clone();
         let token_clone = token.clone();
-        
+
         let committee = Committee::new_test();
-        
+
         tokio::spawn(async move {
             HeaderElector::spawn(
                 token_clone,
@@ -215,7 +213,7 @@ mod test {
             .await
             .unwrap()
         });
-        
+
         (
             headers_tx,
             round_tx,

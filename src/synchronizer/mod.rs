@@ -213,6 +213,6 @@ pub enum FetchError {
 
 #[cfg(test)]
 mod tests {
-    mod synchronizer_tests;
     mod fetcher_tests;
+    mod synchronizer_tests;
 }

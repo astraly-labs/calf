@@ -16,9 +16,9 @@ use crate::{
         block_header::BlockHeader,
         certificate::Certificate,
         network::{NetworkRequest, ReceivedObject},
+        signing::Signable,
         sync::SyncStatus,
         traits::AsBytes,
-        signing::Signable,
         vote::Vote,
         Round,
     },
@@ -34,7 +34,7 @@ impl BlockHeader {
         let peer_bytes = peer_id.to_bytes();
         let hash = blake3::hash(&peer_bytes);
         author.copy_from_slice(hash.as_bytes());
-        
+
         Self {
             round: 1,
             author,
@@ -52,7 +52,7 @@ impl Vote {
         let authority = keypair.public().to_bytes();
         let header = BlockHeader::new_test();
         let signature = header.sign(&keypair).unwrap();
-        
+
         Self {
             authority,
             signature,
@@ -63,7 +63,7 @@ impl Vote {
     pub fn new_test_invalid() -> Self {
         let keypair = Keypair::generate();
         let authority = keypair.public().to_bytes();
-        
+
         Self {
             authority,
             signature: vec![0; 32],
@@ -159,7 +159,7 @@ async fn test_header_builder_sync_status() {
     let committee = Committee::new_test();
     let (sync_status_tx, sync_status_rx) = watch::channel(SyncStatus::Incomplete);
 
-    // Spawn header builder - it returns a JoinHandle
+    // Spawn header builder returning a JoinHandle
     let handle = HeaderBuilder::spawn(
         CancellationToken::new(),
         network_tx,
@@ -176,7 +176,7 @@ async fn test_header_builder_sync_status() {
     // Test that header builder waits for sync to complete
     sleep(Duration::from_millis(100)).await;
     sync_status_tx.send(SyncStatus::Complete).unwrap();
-    
+
     handle.abort();
 }
 
@@ -309,10 +309,12 @@ async fn test_header_builder_invalid_votes() {
 
     // send invalid votes
     let invalid_vote = Vote::new_test_invalid();
-    votes_tx.send(ReceivedObject {
-        object: invalid_vote,
-        sender: PeerId::random(),
-    }).unwrap();
+    votes_tx
+        .send(ReceivedObject {
+            object: invalid_vote,
+            sender: PeerId::random(),
+        })
+        .unwrap();
 
     sleep(Duration::from_millis(10)).await;
     handle.abort();
@@ -361,4 +363,4 @@ async fn test_header_builder_digest_buffer() {
     }
 
     handle.abort();
-} 
+}

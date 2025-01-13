@@ -1,4 +1,7 @@
-use libp2p::{identity::{self, ed25519}, PeerId};
+use libp2p::{
+    identity::{self, ed25519},
+    PeerId,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -45,13 +48,13 @@ impl Committee {
     #[cfg(test)]
     pub fn new_test() -> Self {
         let mut authorities = Vec::new();
-        
+
         // Add three test authorities
         for i in 0..3 {
             let keypair = ed25519::Keypair::generate();
             let public_key = identity::PublicKey::from(keypair.public());
             let peer_id = PeerId::from_public_key(&public_key);
-            
+
             let authority = AuthorityInfo {
                 authority_id: peer_id,
                 authority_pubkey: hex::encode(keypair.public().to_bytes()),
@@ -61,7 +64,7 @@ impl Committee {
             };
             authorities.push(authority);
         }
-        
+
         Committee { authorities }
     }
 }

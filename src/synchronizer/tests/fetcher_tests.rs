@@ -1,7 +1,7 @@
+use rand::random;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
-use rand::random;
 
 use crate::{
     network::Connect,
@@ -11,16 +11,18 @@ use crate::{
         RequestedObject,
     },
     types::{
-        network::{NetworkRequest, ReceivedObject, RequestPayload, SyncRequest, SyncResponse, SyncData},
-        traits::{AsBytes, Hash, Random},
-        Digest,
         batch::{Batch, BatchId},
+        network::{
+            NetworkRequest, ReceivedObject, RequestPayload, SyncData, SyncRequest, SyncResponse,
+        },
+        traits::{AsBytes, Hash, Random},
         transaction::Transaction,
+        Digest,
     },
 };
 
-use libp2p::PeerId;
 use async_trait::async_trait;
+use libp2p::PeerId;
 
 #[derive(Clone)]
 struct MockConnector;
@@ -155,7 +157,7 @@ async fn test_fetcher_empty() {
     let (network_tx, _) = mpsc::channel(100);
     let (_, sync_rx) = broadcast::channel(100);
     let (commands_tx, commands_rx) = mpsc::channel(100);
-    
+
     let _handle = Fetcher::spawn(
         CancellationToken::new(),
         network_tx,
@@ -164,7 +166,7 @@ async fn test_fetcher_empty() {
         Arc::new(MockConnector),
         10,
     );
-    
+
     // Drop commands_tx to signal no more commands
     drop(commands_tx);
 }
@@ -174,17 +176,17 @@ async fn test_fetcher_single_request() {
     let (network_tx, mut network_rx) = mpsc::channel(100);
     let (sync_tx, sync_rx) = broadcast::channel(100);
     let (commands_tx, commands_rx) = mpsc::channel(100);
-    
+
     let test_data = TestFetchable {
         data: vec![1, 2, 3],
     };
-    
+
     let peer_id = PeerId::random();
     let request = Box::new(RequestedObject {
         object: test_data.clone(),
         source: Box::new(peer_id),
     });
-    
+
     let _handle = Fetcher::spawn(
         CancellationToken::new(),
         network_tx.clone(),
@@ -193,13 +195,13 @@ async fn test_fetcher_single_request() {
         Arc::new(MockConnector),
         10,
     );
-    
+
     // Send the request through the commands channel
     commands_tx.send(request).await.unwrap();
-    
+
     // Drop commands_tx to signal no more commands
     drop(commands_tx);
-    
+
     // verify request is sent
     let request = network_rx.recv().await.unwrap();
     match request {
@@ -210,7 +212,7 @@ async fn test_fetcher_single_request() {
         }
         _ => panic!("Expected SendTo request"),
     }
-    
+
     // Send successful response
     let tx = Transaction::random(32);
     let batch = Batch::new(vec![tx]);
@@ -222,7 +224,7 @@ async fn test_fetcher_single_request() {
         sender: peer_id,
     };
     sync_tx.send(received).unwrap();
-    
+
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 }
 
@@ -231,22 +233,20 @@ async fn test_fetcher_timeout() {
     let (requests_tx, _) = mpsc::channel(100);
     let (responses_tx, mut responses_rx) = broadcast::channel(100);
     let (commands_tx, commands_rx) = mpsc::channel(100);
-    
+
     let test_data = TestFetchable {
         data: vec![1, 2, 3],
     };
-    
+
     let provider = Box::new(TestDataProvider {
-        peers: vec![
-            PeerId::random()
-        ],
+        peers: vec![PeerId::random()],
     });
-    
+
     let requested_object = RequestedObject {
         object: test_data,
         source: provider,
     };
-    
+
     let handle = Fetcher::spawn(
         CancellationToken::new(),
         requests_tx,
@@ -256,19 +256,16 @@ async fn test_fetcher_timeout() {
         // Set a very short timeout for individual fetch operations
         1,
     );
-    
+
     // Send the request through the commands channel
     commands_tx.send(Box::new(requested_object)).await.unwrap();
-    
+
     // Drop commands_tx to signal no more commands
     drop(commands_tx);
-    
+
     // Run fetcher with a longer timeout to ensure it has time to process
-    let result = tokio::time::timeout(
-        tokio::time::Duration::from_millis(1000),
-        handle
-    ).await;
-    
+    let result = tokio::time::timeout(tokio::time::Duration::from_millis(1000), handle).await;
+
     // The fetcher should complete successfully, but the fetch operation should have timed out
     assert!(result.is_ok(), "Fetcher should complete");
 }
@@ -278,22 +275,20 @@ async fn test_fetcher_error_response() {
     let (requests_tx, _) = mpsc::channel(100);
     let (responses_tx, mut responses_rx) = broadcast::channel(100);
     let (commands_tx, commands_rx) = mpsc::channel(100);
-    
+
     let test_data = TestFetchable {
         data: vec![1, 2, 3],
     };
-    
+
     let provider = Box::new(TestDataProvider {
-        peers: vec![
-            PeerId::random()
-        ],
+        peers: vec![PeerId::random()],
     });
-    
+
     let requested_object = RequestedObject {
         object: test_data.clone(),
         source: provider,
     };
-    
+
     let _handle = Fetcher::spawn(
         CancellationToken::new(),
         requests_tx,
@@ -302,13 +297,13 @@ async fn test_fetcher_error_response() {
         Arc::new(MockConnector),
         10,
     );
-    
+
     // Send the request through the commands channel
     commands_tx.send(Box::new(requested_object)).await.unwrap();
-    
+
     // Drop commands_tx to signal no more commands
     drop(commands_tx);
-    
+
     // Send failure response
     let request_id = test_data.into_sync_request().digest();
     let response = SyncResponse::Failure(request_id);
@@ -317,7 +312,7 @@ async fn test_fetcher_error_response() {
         sender: PeerId::random(),
     };
     responses_tx.send(received).unwrap();
-    
+
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 }
 
@@ -326,23 +321,23 @@ async fn test_fetcher_multiple_peers() {
     let (requests_tx, mut requests_rx) = mpsc::channel(100);
     let (responses_tx, responses_rx) = broadcast::channel(100);
     let (commands_tx, commands_rx) = mpsc::channel(100);
-    
+
     let test_data = TestFetchable {
         data: vec![1, 2, 3],
     };
-    
+
     let peer1 = PeerId::random();
     let peer2 = PeerId::random();
     let peer3 = PeerId::random();
     let provider = Box::new(TestDataProvider {
         peers: vec![peer1, peer2, peer3],
     });
-    
+
     let requested_object = RequestedObject {
         object: test_data.clone(),
         source: provider.clone(),
     };
-    
+
     let _handle = Fetcher::spawn(
         CancellationToken::new(),
         requests_tx,
@@ -351,13 +346,13 @@ async fn test_fetcher_multiple_peers() {
         Arc::new(MockConnector),
         10,
     );
-    
+
     // Send the request through the commands channel
     commands_tx.send(Box::new(requested_object)).await.unwrap();
-    
+
     // Drop commands_tx to signal no more commands
     drop(commands_tx);
-    
+
     // Verify first request is sent to peer1
     let request = requests_rx.recv().await.unwrap();
     match request {
@@ -365,7 +360,7 @@ async fn test_fetcher_multiple_peers() {
             assert_eq!(pid, peer1, "First request should be sent to peer1");
             let expected_digest = blake3::hash(&test_data.bytes()).into();
             assert_eq!(sync_req, SyncRequest::Batches(vec![expected_digest]));
-            
+
             // Send failure response from peer1
             let request_id = test_data.into_sync_request().digest();
             let response = SyncResponse::Failure(request_id);
@@ -377,7 +372,7 @@ async fn test_fetcher_multiple_peers() {
         }
         _ => panic!("Expected SendTo request with SyncRequest payload"),
     };
-    
+
     // Verify second request is sent to peer2
     let request = requests_rx.recv().await.unwrap();
     match request {
@@ -385,7 +380,7 @@ async fn test_fetcher_multiple_peers() {
             assert_eq!(pid, peer2, "Second request should be sent to peer2");
             let expected_digest = blake3::hash(&test_data.bytes()).into();
             assert_eq!(sync_req, SyncRequest::Batches(vec![expected_digest]));
-            
+
             // Send failure response from peer2
             let request_id = test_data.into_sync_request().digest();
             let response = SyncResponse::Failure(request_id);
@@ -397,7 +392,7 @@ async fn test_fetcher_multiple_peers() {
         }
         _ => panic!("Expected SendTo request with SyncRequest payload"),
     };
-    
+
     // Verify third request is sent to peer3
     let request = requests_rx.recv().await.unwrap();
     match request {
@@ -405,7 +400,7 @@ async fn test_fetcher_multiple_peers() {
             assert_eq!(pid, peer3, "Third request should be sent to peer3");
             let expected_digest = blake3::hash(&test_data.bytes()).into();
             assert_eq!(sync_req, SyncRequest::Batches(vec![expected_digest]));
-            
+
             // Send successful response from peer3
             let tx = Transaction::random(32);
             let batch = Batch::new(vec![tx]);
@@ -420,8 +415,11 @@ async fn test_fetcher_multiple_peers() {
         }
         _ => panic!("Expected SendTo request with SyncRequest payload"),
     };
-    
+
     // Verify no more requests are sent after successful response
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    assert!(requests_rx.try_recv().is_err(), "No more requests should be sent after successful response");
-} 
+    assert!(
+        requests_rx.try_recv().is_err(),
+        "No more requests should be sent after successful response"
+    );
+}
