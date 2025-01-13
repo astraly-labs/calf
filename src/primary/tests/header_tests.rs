@@ -15,8 +15,8 @@ use crate::{
     },
     utils::CircularBuffer,
 };
-use std::{collections::HashSet, sync::Arc, time::Duration};
 use libp2p::{identity::ed25519::Keypair, PeerId};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 use tokio::{
     sync::{broadcast, mpsc, watch},
     time::sleep,
@@ -241,47 +241,50 @@ async fn test_header_builder_multiple_rounds() {
         let mut certs = HashSet::new();
         let cert = Certificate::genesis([round as u8; 32]);
         certs.insert(cert.clone());
-        
+
         // Trigger header building
         header_trigger_tx.send((round, certs)).unwrap();
-        
+
         // Wait for header broadcast
         let mut header_received = false;
         while !header_received {
-            let network_request = tokio::time::timeout(
-                Duration::from_secs(5),
-                network_rx.recv()
-            ).await.expect("Timed out waiting for network request")
-             .expect("Network channel closed unexpectedly");
+            let network_request = tokio::time::timeout(Duration::from_secs(5), network_rx.recv())
+                .await
+                .expect("Timed out waiting for network request")
+                .expect("Network channel closed unexpectedly");
 
             match network_request {
                 NetworkRequest::BroadcastCounterparts(RequestPayload::Header(header)) => {
                     // Verify header round
                     assert_eq!(header.round, round);
-                    
+
                     // Create and send enough votes to reach quorum (3 votes needed)
                     for _ in 0..3 {
                         let voting_keypair = Keypair::generate(); // Different keypair for each vote
                         let vote = Vote::from_header(header.clone(), &voting_keypair).unwrap();
-                        votes_tx.send(ReceivedObject {
-                            object: vote,
-                            sender: PeerId::random(),
-                        }).unwrap();
+                        votes_tx
+                            .send(ReceivedObject {
+                                object: vote,
+                                sender: PeerId::random(),
+                            })
+                            .unwrap();
                     }
-                    
+
                     // Wait for certificate with timeout
-                    let certificate = tokio::time::timeout(
-                        Duration::from_secs(5),
-                        cert_rx.recv()
-                    ).await.expect("Timed out waiting for certificate")
-                     .expect("Certificate channel closed unexpectedly");
+                    let certificate = tokio::time::timeout(Duration::from_secs(5), cert_rx.recv())
+                        .await
+                        .expect("Timed out waiting for certificate")
+                        .expect("Certificate channel closed unexpectedly");
 
                     // Verify certificate
                     assert_eq!(certificate.round(), round);
-                    assert!(certificate.header().is_some(), "Certificate should have a header");
+                    assert!(
+                        certificate.header().is_some(),
+                        "Certificate should have a header"
+                    );
                     let header_id: HeaderId = header.id().into();
                     assert_eq!(certificate.header().unwrap(), header_id);
-                    
+
                     header_received = true;
                 }
                 NetworkRequest::BroadcastCounterparts(RequestPayload::Certificate(_)) => {
@@ -291,7 +294,7 @@ async fn test_header_builder_multiple_rounds() {
                 _ => panic!("Unexpected network request: {:?}", network_request),
             }
         }
-        
+
         // Give some time for cleanup between rounds
         sleep(Duration::from_millis(50)).await;
     }
