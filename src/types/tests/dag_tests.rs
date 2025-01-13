@@ -2,8 +2,7 @@ use std::collections::HashSet;
 
 use crate::types::{
     dag::{Dag, DagError, Vertex},
-    traits::{AsBytes, Hash},
-    Digest,
+    traits::AsBytes,
 };
 
 #[derive(Clone, Debug)]

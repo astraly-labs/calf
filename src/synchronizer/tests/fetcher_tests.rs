@@ -1,5 +1,4 @@
-use rand::random;
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 
@@ -7,7 +6,7 @@ use crate::{
     network::Connect,
     synchronizer::{
         fetcher::Fetcher,
-        traits::{DataProvider, Fetch, IntoSyncRequest},
+        traits::{DataProvider, IntoSyncRequest},
         RequestedObject,
     },
     types::{
@@ -17,7 +16,6 @@ use crate::{
         },
         traits::{AsBytes, Hash, Random},
         transaction::Transaction,
-        Digest,
     },
 };
 
@@ -231,7 +229,7 @@ async fn test_fetcher_single_request() {
 #[tokio::test]
 async fn test_fetcher_timeout() {
     let (requests_tx, _) = mpsc::channel(100);
-    let (responses_tx, mut responses_rx) = broadcast::channel(100);
+    let (responses_tx, responses_rx) = broadcast::channel(100);
     let (commands_tx, commands_rx) = mpsc::channel(100);
 
     let test_data = TestFetchable {
@@ -264,7 +262,7 @@ async fn test_fetcher_timeout() {
     drop(commands_tx);
 
     // Run fetcher with a longer timeout to ensure it has time to process
-    let result = tokio::time::timeout(tokio::time::Duration::from_millis(1000), handle).await;
+    let result = tokio::time::timeout(tokio::time::Duration::from_millis(100), handle).await;
 
     // The fetcher should complete successfully, but the fetch operation should have timed out
     assert!(result.is_ok(), "Fetcher should complete");
@@ -273,7 +271,7 @@ async fn test_fetcher_timeout() {
 #[tokio::test]
 async fn test_fetcher_error_response() {
     let (requests_tx, _) = mpsc::channel(100);
-    let (responses_tx, mut responses_rx) = broadcast::channel(100);
+    let (responses_tx, responses_rx) = broadcast::channel(100);
     let (commands_tx, commands_rx) = mpsc::channel(100);
 
     let test_data = TestFetchable {
